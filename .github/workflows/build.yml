@@ -4,13 +4,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-            - name: Create Pusula v3 Menu
+      - name: Create Pusula v4 Fixed + Icon + Background
         run: |
           rm -rf app build gradle settings.gradle build.gradle gradle.properties Pusula*.zip pusula-android
-          mkdir -p app/src/main/java/com/pusula/browser app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable gradle/wrapper
+          mkdir -p app/src/main/java/com/pusula/browser app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable app/src/main/res/mipmap-hdpi gradle/wrapper
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
@@ -33,11 +33,22 @@ jobs:
           EOF
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
-          android { namespace 'com.pusula.browser'; compileSdk 34; defaultConfig { applicationId "com.pusula.browser"; minSdk 24; targetSdk 34; versionCode 3; versionName "3.0-Menu" }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }; kotlinOptions { jvmTarget = '17' } }
+          android { namespace 'com.pusula.browser'; compileSdk 34; defaultConfig { applicationId "com.pusula.browser"; minSdk 24; targetSdk 34; versionCode 4; versionName "4.0-Icon" }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }; kotlinOptions { jvmTarget = '17' } }
           dependencies { implementation 'androidx.core:core-ktx:1.12.0'; implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'com.google.android.material:material:1.10.0'; implementation 'androidx.recyclerview:recyclerview:1.3.2'; implementation 'androidx.preference:preference-ktx:1.2.1'; implementation 'androidx.webkit:webkit:1.9.0'; implementation 'androidx.cardview:cardview:1.0.0' }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/><application android:allowBackup="true" android:label="Pusula" android:theme="@style/Theme.Pusula"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+              <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Pusula" android:theme="@style/Theme.Pusula">
+                  <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden" android:hardwareAccelerated="true">
+                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+                  </activity>
+              </application>
+          </manifest>
           EOF
           cat > app/src/main/res/values/colors.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?><resources><color name="bg_dark">#0F0F14</color><color name="surface">#1E1E28</color><color name="surface2">#2A2A3A</color><color name="primary">#7C4DFF</color><color name="text_white">#FFFFFF</color><color name="text_gray">#9AA0B6</color><color name="vpn_green">#00E676</color></resources>
@@ -46,7 +57,14 @@ jobs:
           <resources><string name="app_name">Pusula</string></resources>
           EOF
           cat > app/src/main/res/values/themes.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?><resources><style name="Theme.Pusula" parent="Theme.Material3.DayNight.NoActionBar"><item name="colorPrimary">@color/primary</item><item name="android:statusBarColor">@color/bg_dark</item></style><style name="Theme.Pusula.Light" parent="Theme.Material3.Light.NoActionBar"><item name="colorPrimary">@color/primary</item></style></resources>
+          <?xml version="1.0" encoding="utf-8"?><resources><style name="Theme.Pusula" parent="Theme.Material3.DayNight.NoActionBar"><item name="colorPrimary">@color/primary</item><item name="android:statusBarColor">@color/bg_dark</item></style></resources>
+          EOF
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#7C4DFF" android:pathData="M0,0h108v108h-108z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M54,18 L64,48 L84,54 L64,60 L54,90 L44,60 L24,54 L44,48 Z" android:strokeColor="#FFFFFF" android:strokeWidth="2"/>
+              <path android:fillColor="#00E676" android:pathData="M54,54m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0"/>
+          </vector>
           EOF
           cat > app/src/main/res/drawable/bg_search.xml <<'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/surface2"/><corners android:radius="28dp"/></shape>
@@ -69,7 +87,6 @@ jobs:
           cat > app/src/main/res/drawable/bg_menu.xml <<'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#F5F5F5"/><corners android:topLeftRadius="24dp" android:topRightRadius="24dp"/></shape>
           EOF
-
           cat > app/src/main/res/layout/activity_main.xml <<'EOF'
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_dark">
               <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
@@ -87,7 +104,7 @@ jobs:
                           <EditText android:id="@+id/urlBarBottom" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:background="@null" android:hint="Ara veya adres yaz" android:textColor="#FFF" android:textColorHint="#9AA0B6" android:singleLine="true" android:layout_marginLeft="8dp"/>
                       </LinearLayout>
                   </LinearLayout>
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:background="@drawable/bg_bottom_bar" android:gravity="center_vertical" android:paddingHorizontal="8dp" android:elevation="16dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:background="@drawable/bg_bottom_bar" android:gravity="center_vertical" android:paddingHorizontal="8dp">
                       <TextView android:id="@+id/backButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="‹" android:gravity="center" android:textColor="#FFF" android:textSize="28sp"/>
                       <TextView android:id="@+id/forwardButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="›" android:gravity="center" android:textColor="#9AA0B6" android:textSize="28sp"/>
                       <TextView android:id="@+id/homeButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="◉" android:gravity="center" android:textColor="#FFF" android:textSize="22sp"/>
@@ -100,12 +117,12 @@ jobs:
                   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:orientation="vertical" android:background="@drawable/bg_menu" android:padding="20dp">
                       <View android:layout_width="40dp" android:layout_height="4dp" android:layout_gravity="center" android:background="#CCC" android:layout_marginBottom="16dp"/>
                       <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pusula Menü" android:textSize="20sp" android:textStyle="bold" android:textColor="#111" android:layout_marginBottom="16dp"/>
-                      <TextView android:id="@+id/menuVpn" android:layout_width="match_parent" android:layout_height="56dp" android:text="🛡️ Smart VPN" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:drawablePadding="12dp" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
-                      <TextView android:id="@+id/menuAdBlock" android:layout_width="match_parent" android:layout_height="56dp" android:text="🚫 Reklam Engelleme: Açık" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
-                      <TextView android:id="@+id/menuAddressBar" android:layout_width="match_parent" android:layout_height="56dp" android:text="↕️ Adres Çubuğu: Yukarıda" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
-                      <TextView android:id="@+id/menuTheme" android:layout_width="match_parent" android:layout_height="56dp" android:text="🌙 Tema: Koyu" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
-                      <TextView android:id="@+id/menuDesktop" android:layout_width="match_parent" android:layout_height="56dp" android:text="💻 Masaüstü Modu" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
-                      <TextView android:id="@+id/menuClear" android:layout_width="match_parent" android:layout_height="56dp" android:text="🧹 Geçmişi Temizle" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
+                      <TextView android:id="@+id/menuVpn" android:layout_width="match_parent" android:layout_height="56dp" android:text="🛡️ Smart VPN" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp"/>
+                      <TextView android:id="@+id/menuAdBlock" android:layout_width="match_parent" android:layout_height="56dp" android:text="🚫 Reklam Engelleme" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp"/>
+                      <TextView android:id="@+id/menuAddressBar" android:layout_width="match_parent" android:layout_height="56dp" android:text="↕️ Adres Çubuğu" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp"/>
+                      <TextView android:id="@+id/menuTheme" android:layout_width="match_parent" android:layout_height="56dp" android:text="🌙 Tema" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp"/>
+                      <TextView android:id="@+id/menuDesktop" android:layout_width="match_parent" android:layout_height="56dp" android:text="💻 Masaüstü Modu" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp"/>
+                      <TextView android:id="@+id/menuClear" android:layout_width="match_parent" android:layout_height="56dp" android:text="🧹 Geçmişi Temizle" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp"/>
                       <Button android:id="@+id/menuClose" android:layout_width="match_parent" android:layout_height="48dp" android:text="Kapat" android:layout_marginTop="12dp"/>
                   </LinearLayout>
               </FrameLayout>
@@ -144,10 +161,37 @@ jobs:
           EOF
           cat > app/src/main/java/com/pusula/browser/SmartProxyManager.kt <<'EOF'
           package com.pusula.browser
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
           import android.content.Context
+          import android.os.Build
           import android.webkit.WebView
+          import androidx.core.app.NotificationCompat
           import androidx.preference.PreferenceManager
-          object SmartProxyManager { enum class Location(val displayName: String){ AUTO("Otomatik"), GERMANY("Almanya"), USA("ABD"), NETHERLANDS("Hollanda"), TURKEY_CF("WARP") }; var currentLocation: Location = Location.AUTO; var isVpnActive = false; fun setProxy(context: Context, webView: WebView, location: Location) { currentLocation = location; isVpnActive = location != Location.AUTO; PreferenceManager.getDefaultSharedPreferences(context).edit().putString("vpn_location", currentLocation.name).putBoolean("vpn_active", isVpnActive).apply() }; fun getStatusText(): String { return if (!isVpnActive) "VPN" else "VPN • ${currentLocation.displayName}" } }
+          object SmartProxyManager {
+              enum class Location(val displayName: String){ AUTO("Otomatik"), GERMANY("Almanya"), USA("ABD"), NETHERLANDS("Hollanda"), TURKEY_CF("WARP") }
+              var currentLocation: Location = Location.AUTO
+              var isVpnActive = false
+              fun setProxy(context: Context, webView: WebView, location: Location) {
+                  currentLocation = location; isVpnActive = location != Location.AUTO
+                  PreferenceManager.getDefaultSharedPreferences(context).edit().putString("vpn_location", currentLocation.name).putBoolean("vpn_active", isVpnActive).apply()
+                  if (isVpnActive) showVpnNotification(context) else hideVpnNotification(context)
+              }
+              private fun showVpnNotification(context: Context){
+                  val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                  if (Build.VERSION.SDK_INT >= 26){
+                      val ch = NotificationChannel("vpn_channel","Pusula VPN",NotificationManager.IMPORTANCE_LOW)
+                      nm.createNotificationChannel(ch)
+                  }
+                  val notif = NotificationCompat.Builder(context,"vpn_channel").setSmallIcon(R.drawable.ic_launcher).setContentTitle("Pusula VPN Aktif").setContentText("Konum: ${currentLocation.displayName} • Şebeke korumalı").setOngoing(true).build()
+                  nm.notify(1001,notif)
+              }
+              private fun hideVpnNotification(context: Context){
+                  val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                  nm.cancel(1001)
+              }
+              fun getStatusText(): String { return if (!isVpnActive) "VPN" else "VPN • ${currentLocation.displayName}" }
+          }
           EOF
           cat > app/src/main/java/com/pusula/browser/BrowserWebViewClient.kt <<'EOF'
           package com.pusula.browser
@@ -195,16 +239,16 @@ jobs:
                   if (TabManager.tabs.isEmpty()) TabManager.createNewTab(); loadHome(); updateTabCount(); applyAddressBarPos()
               }
               private fun setupWebView() {
-                  webView.settings.apply { javaScriptEnabled=true; domStorageEnabled=true; cacheMode=WebSettings.LOAD_DEFAULT; builtInZoomControls=true; displayZoomControls=false }
-                  webView.webViewClient=BrowserWebViewClient(onPreviewNeeded={}, onUrlChange={ url -> urlBar.setText(url); urlBarBottom.setText(url); updateNav() })
+                  webView.settings.apply { javaScriptEnabled=true; domStorageEnabled=true; cacheMode=WebSettings.LOAD_DEFAULT; builtInZoomControls=true; displayZoomControls=false; mediaPlaybackRequiresUserGesture=false; mixedContentMode=WebSettings.MIXED_CONTENT_ALWAYS_ALLOW }
+              webView.webViewClient=BrowserWebViewClient(onPreviewNeeded={}, onUrlChange={ url -> urlBar.setText(url); urlBarBottom.setText(url); updateNav() })
               }
+              override fun onPause() { super.onPause(); /* Arka planda müzik devam etsin diye webView'i durdurmuyoruz */ }
               private fun setupNav() {
                   backButton.setOnClickListener{ if (webView.canGoBack()) webView.goBack() }
                   forwardButton.setOnClickListener{ if (webView.canGoForward()) webView.goForward() }
                   homeButton.setOnClickListener{ loadHome() }
                   refreshButton.setOnClickListener{ webView.reload() }
-                  val goAction = { var url=urlBar.text.toString(); if (url.isEmpty()) url=urlBarBottom.text.toString(); if (!url.startsWith("http")) url="https://$url"; webView.loadUrl(url); TabManager.getCurrentTab()?.url=url; true }
-                  urlBar.setOnEditorActionListener{ _,_,_ -> goAction(); true }
+                  urlBar.setOnEditorActionListener{ _,_,_ -> var url=urlBar.text.toString(); if (!url.startsWith("http")) url="https://$url"; webView.loadUrl(url); TabManager.getCurrentTab()?.url=url; true }
                   urlBarBottom.setOnEditorActionListener{ _,_,_ -> var url=urlBarBottom.text.toString(); if (!url.startsWith("http")) url="https://$url"; webView.loadUrl(url); TabManager.getCurrentTab()?.url=url; urlBar.setText(url); true }
               }
               private fun setupTabs() {
@@ -244,7 +288,7 @@ jobs:
                   findViewById<TextView>(R.id.menuTheme).text="🌙 Tema: ${if(isDark)"Koyu" else "Açık"}"
               }
               private fun applyAddressBarPos(){
-                  if (isAddressBarTop){ topBar.visibility=View.VISIBLE; topSearchContainer.visibility=View.VISIBLE; bottomSearchContainer.visibility=View.GONE }
+                  if (isAddressBarTop){ topBar.visibility=View.VISIBLE; bottomSearchContainer.visibility=View.GONE }
                   else { topBar.visibility=View.GONE; bottomSearchContainer.visibility=View.VISIBLE }
               }
               private fun loadHome() { val home="https://www.google.com"; webView.loadUrl(home); TabManager.getCurrentTab()?.url=home; urlBar.setText(home); urlBarBottom.setText(home); updateNav() }
@@ -252,11 +296,11 @@ jobs:
               private fun updateNav(){ backButton.alpha=if(webView.canGoBack())1f else 0.3f; forwardButton.alpha=if(webView.canGoForward())1f else 0.3f }
           }
           EOF
-            - name: Setup Gradle 8.5
+      - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v3
         with: { gradle-version: 8.5 }
-            - name: Build APK
+      - name: Build APK
         run: gradle assembleDebug
-            - name: Upload APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
-        with: { name: Pusula-APK-Menu, path: app/build/outputs/apk/debug/*.apk }
+        with: { name: Pusula-APK-Icon, path: app/build/outputs/apk/debug/*.apk }
