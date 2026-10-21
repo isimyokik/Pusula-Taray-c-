@@ -40,7 +40,6 @@ jobs:
           android.useAndroidX=true
           android.enableJetifier=true
           EOF
-          mkdir -p app/src/main
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -48,8 +47,7 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET" />
               <application
                   android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
-                  android:label="Pusula Tarayıcı"
+                  android:label="Pusula Tarayici"
                   android:theme="@android:style/Theme.Black.NoTitleBar">
                   <activity
                       android:name=".MainActivity"
