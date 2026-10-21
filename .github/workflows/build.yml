@@ -35,7 +35,11 @@ jobs:
               id 'org.jetbrains.kotlin.android' version '1.9.10' apply false
           }
           EOF
-          ls -R
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
       - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v3
         with:
