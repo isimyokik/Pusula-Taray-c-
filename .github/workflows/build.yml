@@ -4,14 +4,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+            - uses: actions/checkout@v4
+            - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      - name: Create BEAUTIFUL Pusula
+            - name: Create Pusula v3 Menu
         run: |
           rm -rf app build gradle settings.gradle build.gradle gradle.properties Pusula*.zip pusula-android
           mkdir -p app/src/main/java/com/pusula/browser app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable gradle/wrapper
-
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
@@ -34,23 +33,23 @@ jobs:
           EOF
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
-          android { namespace 'com.pusula.browser'; compileSdk 34; defaultConfig { applicationId "com.pusula.browser"; minSdk 24; targetSdk 34; versionCode 2; versionName "2.0-Beautiful" }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }; kotlinOptions { jvmTarget = '17' } }
+          android { namespace 'com.pusula.browser'; compileSdk 34; defaultConfig { applicationId "com.pusula.browser"; minSdk 24; targetSdk 34; versionCode 3; versionName "3.0-Menu" }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }; kotlinOptions { jvmTarget = '17' } }
           dependencies { implementation 'androidx.core:core-ktx:1.12.0'; implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'com.google.android.material:material:1.10.0'; implementation 'androidx.recyclerview:recyclerview:1.3.2'; implementation 'androidx.preference:preference-ktx:1.2.1'; implementation 'androidx.webkit:webkit:1.9.0'; implementation 'androidx.cardview:cardview:1.0.0' }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/><application android:allowBackup="true" android:label="Pusula" android:theme="@style/Theme.Pusula"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
           EOF
           cat > app/src/main/res/values/colors.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?><resources><color name="bg_dark">#0F0F14</color><color name="surface">#1E1E28</color><color name="surface2">#2A2A3A</color><color name="primary">#7C4DFF</color><color name="primary_dark">#651FFF</color><color name="text_white">#FFFFFF</color><color name="text_gray">#9AA0B6</color><color name="vpn_green">#00E676</color></resources>
+          <?xml version="1.0" encoding="utf-8"?><resources><color name="bg_dark">#0F0F14</color><color name="surface">#1E1E28</color><color name="surface2">#2A2A3A</color><color name="primary">#7C4DFF</color><color name="text_white">#FFFFFF</color><color name="text_gray">#9AA0B6</color><color name="vpn_green">#00E676</color></resources>
           EOF
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Pusula</string></resources>
           EOF
           cat > app/src/main/res/values/themes.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?><resources><style name="Theme.Pusula" parent="Theme.Material3.DayNight.NoActionBar"><item name="colorPrimary">@color/primary</item><item name="android:statusBarColor">@color/bg_dark</item><item name="android:navigationBarColor">@color/bg_dark</item></style></resources>
+          <?xml version="1.0" encoding="utf-8"?><resources><style name="Theme.Pusula" parent="Theme.Material3.DayNight.NoActionBar"><item name="colorPrimary">@color/primary</item><item name="android:statusBarColor">@color/bg_dark</item></style><style name="Theme.Pusula.Light" parent="Theme.Material3.Light.NoActionBar"><item name="colorPrimary">@color/primary</item></style></resources>
           EOF
           cat > app/src/main/res/drawable/bg_search.xml <<'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/surface2"/><corners android:radius="28dp"/><stroke android:width="1dp" android:color="#2F2F42"/></shape>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/surface2"/><corners android:radius="28dp"/></shape>
           EOF
           cat > app/src/main/res/drawable/bg_bottom_bar.xml <<'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/surface"/><corners android:topLeftRadius="24dp" android:topRightRadius="24dp"/></shape>
@@ -62,63 +61,67 @@ jobs:
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/vpn_green"/><corners android:radius="20dp"/></shape>
           EOF
           cat > app/src/main/res/drawable/bg_vpn_inactive.xml <<'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/surface2"/><corners android:radius="20dp"/><stroke android:width="1dp" android:color="#3A3A4E"/></shape>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/surface2"/><corners android:radius="20dp"/></shape>
           EOF
           cat > app/src/main/res/drawable/bg_badge.xml <<'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/primary"/><corners android:radius="12dp"/></shape>
           EOF
+          cat > app/src/main/res/drawable/bg_menu.xml <<'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#F5F5F5"/><corners android:topLeftRadius="24dp" android:topRightRadius="24dp"/></shape>
+          EOF
 
           cat > app/src/main/res/layout/activity_main.xml <<'EOF'
-          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_dark">
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_dark">
               <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:gravity="center_vertical" android:padding="12dp">
-                      <TextView android:id="@+id/vpnButton" android:layout_width="wrap_content" android:layout_height="36dp" android:text="VPN" android:textColor="@color/text_gray" android:textStyle="bold" android:gravity="center" android:paddingHorizontal="14dp" android:background="@drawable/bg_vpn_inactive" android:textSize="12sp"/>
-                      <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:layout_marginHorizontal="10dp" android:background="@drawable/bg_search" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:elevation="2dp">
+                  <LinearLayout android:id="@+id/topBar" android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:gravity="center_vertical" android:padding="12dp">
+                      <LinearLayout android:id="@+id/topSearchContainer" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:background="@drawable/bg_search" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="16dp">
                           <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔒" android:textSize="14sp"/>
-                          <EditText android:id="@+id/urlBar" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:background="@null" android:hint="Ara veya adres yaz" android:textColor="@color/text_white" android:textColorHint="@color/text_gray" android:singleLine="true" android:layout_marginLeft="8dp"/>
-                          <TextView android:id="@+id/refreshButton" android:layout_width="24dp" android:layout_height="24dp" android:text="↻" android:gravity="center" android:textColor="@color/text_gray" android:textSize="18sp"/>
+                          <EditText android:id="@+id/urlBar" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:background="@null" android:hint="Ara veya adres yaz" android:textColor="#FFF" android:textColorHint="#9AA0B6" android:singleLine="true" android:layout_marginLeft="8dp"/>
+                          <TextView android:id="@+id/refreshButton" android:layout_width="24dp" android:layout_height="24dp" android:text="↻" android:gravity="center" android:textColor="#9AA0B6" android:textSize="18sp"/>
                       </LinearLayout>
-                      <TextView android:id="@+id/adBlockButton" android:layout_width="36dp" android:layout_height="36dp" android:text="AD" android:gravity="center" android:textColor="#FFF" android:textStyle="bold" android:textSize="10sp" android:background="@drawable/bg_badge"/>
                   </LinearLayout>
-                  <WebView android:id="@+id/webView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_margin="4dp"/>
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="78dp" android:orientation="horizontal" android:background="@drawable/bg_bottom_bar" android:gravity="center_vertical" android:paddingHorizontal="8dp" android:elevation="16dp">
-                      <TextView android:id="@+id/backButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="‹" android:gravity="center" android:textColor="@color/text_white" android:textSize="28sp"/>
-                      <TextView android:id="@+id/forwardButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="›" android:gravity="center" android:textColor="@color/text_gray" android:textSize="28sp"/>
-                      <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center">
-                          <TextView android:id="@+id/homeButton" android:layout_width="48dp" android:layout_height="32dp" android:text="◉" android:gravity="center" android:textColor="@color/text_white" android:textSize="22sp" android:background="@drawable/bg_search"/>
-                          <View android:layout_width="24dp" android:layout_height="4dp" android:layout_marginTop="4dp" android:background="@drawable/bg_badge"/>
+                  <WebView android:id="@+id/webView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
+                  <LinearLayout android:id="@+id/bottomSearchContainer" android:layout_width="match_parent" android:layout_height="56dp" android:orientation="horizontal" android:gravity="center_vertical" android:padding="8dp" android:background="@color/bg_dark" android:visibility="gone">
+                      <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:background="@drawable/bg_search" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="16dp">
+                          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔒" android:textSize="14sp"/>
+                          <EditText android:id="@+id/urlBarBottom" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:background="@null" android:hint="Ara veya adres yaz" android:textColor="#FFF" android:textColorHint="#9AA0B6" android:singleLine="true" android:layout_marginLeft="8dp"/>
                       </LinearLayout>
-                      <TextView android:id="@+id/newTabButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="+" android:gravity="center" android:textColor="@color/text_white" android:textSize="26sp"/>
-                      <FrameLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp">
-                          <TextView android:id="@+id/tabCountButton" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" android:text="1" android:gravity="center" android:textColor="@color/text_white" android:textStyle="bold" android:background="@drawable/bg_search"/>
-                      </FrameLayout>
-                      <TextView android:id="@+id/menuButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="⋮" android:gravity="center" android:textColor="@color/text_white" android:textSize="22sp"/>
+                  </LinearLayout>
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:background="@drawable/bg_bottom_bar" android:gravity="center_vertical" android:paddingHorizontal="8dp" android:elevation="16dp">
+                      <TextView android:id="@+id/backButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="‹" android:gravity="center" android:textColor="#FFF" android:textSize="28sp"/>
+                      <TextView android:id="@+id/forwardButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="›" android:gravity="center" android:textColor="#9AA0B6" android:textSize="28sp"/>
+                      <TextView android:id="@+id/homeButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="◉" android:gravity="center" android:textColor="#FFF" android:textSize="22sp"/>
+                      <TextView android:id="@+id/newTabButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="+" android:gravity="center" android:textColor="#FFF" android:textSize="26sp"/>
+                      <FrameLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp"><TextView android:id="@+id/tabCountButton" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" android:text="1" android:gravity="center" android:textColor="#FFF" android:textStyle="bold" android:background="@drawable/bg_search"/></FrameLayout>
+                      <TextView android:id="@+id/menuButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="⋮" android:gravity="center" android:textColor="#FFF" android:textSize="22sp"/>
                   </LinearLayout>
               </LinearLayout>
-              <LinearLayout android:id="@+id/tabPreviewOverlay" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#F0F0F5F5" android:visibility="gone" android:padding="16dp" android:elevation="24dp">
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="16dp">
-                      <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Sekmeler" android:textSize="26sp" android:textStyle="bold" android:textColor="@color/bg_dark"/>
-                      <TextView android:id="@+id/closeTabsButton" android:layout_width="36dp" android:layout_height="36dp" android:text="✕" android:gravity="center" android:textSize="18sp" android:background="@drawable/bg_search"/>
-                      <Button android:id="@+id/newPrivateTabButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Gizli +" android:layout_marginLeft="12dp"/>
+              <FrameLayout android:id="@+id/menuOverlay" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" android:background="#88000000">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:orientation="vertical" android:background="@drawable/bg_menu" android:padding="20dp">
+                      <View android:layout_width="40dp" android:layout_height="4dp" android:layout_gravity="center" android:background="#CCC" android:layout_marginBottom="16dp"/>
+                      <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pusula Menü" android:textSize="20sp" android:textStyle="bold" android:textColor="#111" android:layout_marginBottom="16dp"/>
+                      <TextView android:id="@+id/menuVpn" android:layout_width="match_parent" android:layout_height="56dp" android:text="🛡️ Smart VPN" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:drawablePadding="12dp" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
+                      <TextView android:id="@+id/menuAdBlock" android:layout_width="match_parent" android:layout_height="56dp" android:text="🚫 Reklam Engelleme: Açık" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
+                      <TextView android:id="@+id/menuAddressBar" android:layout_width="match_parent" android:layout_height="56dp" android:text="↕️ Adres Çubuğu: Yukarıda" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
+                      <TextView android:id="@+id/menuTheme" android:layout_width="match_parent" android:layout_height="56dp" android:text="🌙 Tema: Koyu" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
+                      <TextView android:id="@+id/menuDesktop" android:layout_width="match_parent" android:layout_height="56dp" android:text="💻 Masaüstü Modu" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
+                      <TextView android:id="@+id/menuClear" android:layout_width="match_parent" android:layout_height="56dp" android:text="🧹 Geçmişi Temizle" android:gravity="center_vertical" android:textSize="16sp" android:textColor="#222" android:paddingHorizontal="12dp" android:background="?android:attr/selectableItemBackground"/>
+                      <Button android:id="@+id/menuClose" android:layout_width="match_parent" android:layout_height="48dp" android:text="Kapat" android:layout_marginTop="12dp"/>
                   </LinearLayout>
-                  <androidx.recyclerview.widget.RecyclerView android:id="@+id/tabRecycler" android:layout_width="match_parent" android:layout_height="match_parent"/>
+              </FrameLayout>
+              <LinearLayout android:id="@+id/tabPreviewOverlay" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#FFF5F5F7" android:visibility="gone" android:padding="16dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                      <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Sekmeler" android:textSize="24sp" android:textStyle="bold" android:textColor="#111"/>
+                      <Button android:id="@+id/newPrivateTabButton" android:layout_width="wrap_content" android:layout_height="36dp" android:text="Gizli Sekme"/>
+                      <TextView android:id="@+id/closeTabsButton" android:layout_width="40dp" android:layout_height="40dp" android:text="✕" android:gravity="center" android:textSize="18sp" android:layout_marginLeft="8dp" android:background="@drawable/bg_search"/>
+                  </LinearLayout>
+                  <androidx.recyclerview.widget.RecyclerView android:id="@+id/tabRecycler" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_marginTop="16dp"/>
               </LinearLayout>
           </FrameLayout>
           EOF
           cat > app/src/main/res/layout/tab_preview_item.xml <<'EOF'
-          <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="200dp" android:layout_margin="8dp" app:cardCornerRadius="20dp" app:cardElevation="8dp">
-              <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@color/surface2">
-                  <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-                      <ImageView android:id="@+id/tabPreviewImage" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop"/>
-                      <TextView android:id="@+id/privateBadge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=" GIZLI " android:background="#AA7C4DFF" android:textColor="#FFF" android:textSize="10sp" android:textStyle="bold" android:padding="6dp" android:layout_margin="8dp" android:visibility="gone"/>
-                      <TextView android:id="@+id/tabClose" android:layout_width="32dp" android:layout_height="32dp" android:layout_gravity="top|end" android:text="✕" android:gravity="center" android:background="@color/bg_dark" android:textColor="#FFF" android:layout_margin="8dp"/>
-                  </FrameLayout>
-                  <TextView android:id="@+id/tabTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Google" android:padding="12dp" android:textColor="@color/text_white" android:maxLines="1" android:textStyle="bold"/>
-              </LinearLayout>
-          </androidx.cardview.widget.CardView>
+          <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="200dp" android:layout_margin="8dp" app:cardCornerRadius="20dp" app:cardElevation="8dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#2A2A3A"><FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"><ImageView android:id="@+id/tabPreviewImage" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop"/><TextView android:id="@+id/privateBadge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=" GIZLI " android:background="#AA7C4DFF" android:textColor="#FFF" android:textSize="10sp" android:textStyle="bold" android:padding="6dp" android:layout_margin="8dp" android:visibility="gone"/><TextView android:id="@+id/tabClose" android:layout_width="32dp" android:layout_height="32dp" android:layout_gravity="top|end" android:text="✕" android:gravity="center" android:background="#0F0F14" android:textColor="#FFF" android:layout_margin="8dp"/></FrameLayout><TextView android:id="@+id/tabTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Google" android:padding="12dp" android:textColor="#FFF" android:maxLines="1" android:textStyle="bold"/></LinearLayout></androidx.cardview.widget.CardView>
           EOF
-
-          # Kotlin files - with real working functions
           cat > app/src/main/java/com/pusula/browser/AdBlocker.kt <<'EOF'
           package com.pusula.browser
           import android.webkit.WebResourceRequest
@@ -169,54 +172,91 @@ jobs:
           import android.webkit.WebSettings
           import android.webkit.WebView
           import android.widget.EditText
+          import android.widget.LinearLayout
           import android.widget.TextView
           import android.widget.Toast
           import androidx.appcompat.app.AppCompatActivity
+          import androidx.appcompat.app.AppCompatDelegate
+          import androidx.preference.PreferenceManager
           import androidx.recyclerview.widget.GridLayoutManager
           import androidx.recyclerview.widget.RecyclerView
           class MainActivity : AppCompatActivity() {
-              private lateinit var webView: WebView; private lateinit var tabPreviewOverlay: View; private lateinit var tabRecycler: RecyclerView; private lateinit var vpnButton: TextView; private lateinit var adBlockButton: TextView; private lateinit var urlBar: EditText; private lateinit var backButton: TextView; private lateinit var forwardButton: TextView; private lateinit var homeButton: TextView; private lateinit var newTabButton: TextView; private lateinit var tabCountButton: TextView; private lateinit var refreshButton: TextView
+              private lateinit var webView: WebView; private lateinit var tabPreviewOverlay: View; private lateinit var tabRecycler: RecyclerView; private lateinit var urlBar: EditText; private lateinit var urlBarBottom: EditText; private lateinit var backButton: TextView; private lateinit var forwardButton: TextView; private lateinit var homeButton: TextView; private lateinit var newTabButton: TextView; private lateinit var tabCountButton: TextView; private lateinit var refreshButton: TextView; private lateinit var menuButton: TextView; private lateinit var menuOverlay: View; private lateinit var topBar: LinearLayout; private lateinit var bottomSearchContainer: LinearLayout; private lateinit var topSearchContainer: LinearLayout
+              private var isDark = true; private var isAddressBarTop = true
               override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState); setContentView(R.layout.activity_main)
-                  webView=findViewById(R.id.webView); tabPreviewOverlay=findViewById(R.id.tabPreviewOverlay); tabRecycler=findViewById(R.id.tabRecycler); vpnButton=findViewById(R.id.vpnButton); adBlockButton=findViewById(R.id.adBlockButton); urlBar=findViewById(R.id.urlBar); backButton=findViewById(R.id.backButton); forwardButton=findViewById(R.id.forwardButton); homeButton=findViewById(R.id.homeButton); newTabButton=findViewById(R.id.newTabButton); tabCountButton=findViewById(R.id.tabCountButton); refreshButton=findViewById(R.id.refreshButton)
-                  setupWebView(); setupTabs(); setupVpn(); setupAdBlock(); setupNav()
-                  if (TabManager.tabs.isEmpty()) TabManager.createNewTab(); loadHome(); updateTabCount()
+                  super.onCreate(savedInstanceState)
+                  val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+                  isDark = prefs.getBoolean("dark_theme", true)
+                  isAddressBarTop = prefs.getBoolean("address_top", true)
+                  AppCompatDelegate.setDefaultNightMode(if (isDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
+                  setContentView(R.layout.activity_main)
+                  webView=findViewById(R.id.webView); tabPreviewOverlay=findViewById(R.id.tabPreviewOverlay); tabRecycler=findViewById(R.id.tabRecycler); urlBar=findViewById(R.id.urlBar); urlBarBottom=findViewById(R.id.urlBarBottom); backButton=findViewById(R.id.backButton); forwardButton=findViewById(R.id.forwardButton); homeButton=findViewById(R.id.homeButton); newTabButton=findViewById(R.id.newTabButton); tabCountButton=findViewById(R.id.tabCountButton); refreshButton=findViewById(R.id.refreshButton); menuButton=findViewById(R.id.menuButton); menuOverlay=findViewById(R.id.menuOverlay); topBar=findViewById(R.id.topBar); bottomSearchContainer=findViewById(R.id.bottomSearchContainer); topSearchContainer=findViewById(R.id.topSearchContainer)
+                  setupWebView(); setupTabs(); setupNav(); setupMenu()
+                  if (TabManager.tabs.isEmpty()) TabManager.createNewTab(); loadHome(); updateTabCount(); applyAddressBarPos()
               }
               private fun setupWebView() {
                   webView.settings.apply { javaScriptEnabled=true; domStorageEnabled=true; cacheMode=WebSettings.LOAD_DEFAULT; builtInZoomControls=true; displayZoomControls=false }
-                  webView.webViewClient=BrowserWebViewClient(onPreviewNeeded={}, onUrlChange={ url -> urlBar.setText(url); updateNav() })
+                  webView.webViewClient=BrowserWebViewClient(onPreviewNeeded={}, onUrlChange={ url -> urlBar.setText(url); urlBarBottom.setText(url); updateNav() })
               }
               private fun setupNav() {
-                  backButton.setOnClickListener{ if (webView.canGoBack()) webView.goBack() else Toast.makeText(this,"Geri gidecek sayfa yok",Toast.LENGTH_SHORT).show() }
-                  forwardButton.setOnClickListener{ if (webView.canGoForward()) webView.goForward() else Toast.makeText(this,"Ileri yok",Toast.LENGTH_SHORT).show() }
+                  backButton.setOnClickListener{ if (webView.canGoBack()) webView.goBack() }
+                  forwardButton.setOnClickListener{ if (webView.canGoForward()) webView.goForward() }
                   homeButton.setOnClickListener{ loadHome() }
                   refreshButton.setOnClickListener{ webView.reload() }
-                  urlBar.setOnEditorActionListener{ _,_,_ -> var url=urlBar.text.toString(); if (!url.startsWith("http")) url="https://$url"; webView.loadUrl(url); TabManager.getCurrentTab()?.url=url; updateNav(); true }
+                  val goAction = { var url=urlBar.text.toString(); if (url.isEmpty()) url=urlBarBottom.text.toString(); if (!url.startsWith("http")) url="https://$url"; webView.loadUrl(url); TabManager.getCurrentTab()?.url=url; true }
+                  urlBar.setOnEditorActionListener{ _,_,_ -> goAction(); true }
+                  urlBarBottom.setOnEditorActionListener{ _,_,_ -> var url=urlBarBottom.text.toString(); if (!url.startsWith("http")) url="https://$url"; webView.loadUrl(url); TabManager.getCurrentTab()?.url=url; urlBar.setText(url); true }
               }
               private fun setupTabs() {
                   tabRecycler.layoutManager=GridLayoutManager(this,2)
-                  tabRecycler.adapter=TabPreviewAdapter(TabManager.tabs, onTabClick={ tab -> TabManager.currentTabId=tab.id; tabPreviewOverlay.visibility=View.GONE; webView.loadUrl(tab.url.ifEmpty{"https://www.google.com"}); urlBar.setText(tab.url); updateNav() }, onTabClose={ tab -> TabManager.tabs.remove(tab); tabRecycler.adapter?.notifyDataSetChanged(); updateTabCount(); if (TabManager.tabs.isEmpty()) { TabManager.createNewTab(); loadHome() } })
-                  tabCountButton.setOnClickListener{
-                      TabManager.getCurrentTab()?.let{ val bmp=TabManager.capturePreview(webView); TabManager.updatePreview(it.id,bmp) }
-                      tabRecycler.adapter?.notifyDataSetChanged(); tabPreviewOverlay.visibility=View.VISIBLE
-                  }
+                  tabRecycler.adapter=TabPreviewAdapter(TabManager.tabs, onTabClick={ tab -> TabManager.currentTabId=tab.id; tabPreviewOverlay.visibility=View.GONE; webView.loadUrl(tab.url.ifEmpty{"https://www.google.com"}); urlBar.setText(tab.url); urlBarBottom.setText(tab.url); updateNav() }, onTabClose={ tab -> TabManager.tabs.remove(tab); tabRecycler.adapter?.notifyDataSetChanged(); updateTabCount(); if (TabManager.tabs.isEmpty()) { TabManager.createNewTab(); loadHome() } })
+                  tabCountButton.setOnClickListener{ TabManager.getCurrentTab()?.let{ val bmp=TabManager.capturePreview(webView); TabManager.updatePreview(it.id,bmp) }; tabRecycler.adapter?.notifyDataSetChanged(); tabPreviewOverlay.visibility=View.VISIBLE }
                   findViewById<View>(R.id.closeTabsButton).setOnClickListener{ tabPreviewOverlay.visibility=View.GONE }
                   newTabButton.setOnClickListener{ TabManager.createNewTab(); tabRecycler.adapter?.notifyDataSetChanged(); updateTabCount(); loadHome(); tabPreviewOverlay.visibility=View.GONE }
-                  findViewById<View>(R.id.newPrivateTabButton).setOnClickListener{ TabManager.createNewTab(isPrivate=true); tabRecycler.adapter?.notifyDataSetChanged(); updateTabCount(); Toast.makeText(this,"Gizli sekme",Toast.LENGTH_SHORT).show(); loadHome(); tabPreviewOverlay.visibility=View.GONE }
+                  findViewById<View>(R.id.newPrivateTabButton).setOnClickListener{ TabManager.createNewTab(isPrivate=true); tabRecycler.adapter?.notifyDataSetChanged(); updateTabCount(); Toast.makeText(this,"Gizli sekme açıldı",Toast.LENGTH_SHORT).show(); loadHome(); tabPreviewOverlay.visibility=View.GONE }
               }
-              private fun setupVpn() { updateVpnUi(); vpnButton.setOnClickListener{ val locs=SmartProxyManager.Location.values(); val names=locs.map{it.displayName}.toTypedArray(); android.app.AlertDialog.Builder(this).setTitle("Konum Sec").setItems(names){_,which-> val loc=locs[which]; SmartProxyManager.setProxy(this,webView,loc); updateVpnUi(); Toast.makeText(this,SmartProxyManager.getStatusText(),Toast.LENGTH_SHORT).show() }.show() } }
-              private fun setupAdBlock() { adBlockButton.setOnClickListener{ AdBlocker.isEnabled=!AdBlocker.isEnabled; adBlockButton.text=if(AdBlocker.isEnabled)"AD" else "OFF"; adBlockButton.setBackgroundResource(if(AdBlocker.isEnabled) R.drawable.bg_badge else R.drawable.bg_vpn_inactive); Toast.makeText(this,if(AdBlocker.isEnabled)"Reklam engelleme acik" else "Kapali",Toast.LENGTH_SHORT).show() } }
-              private fun loadHome() { val home="https://www.google.com"; webView.loadUrl(home); TabManager.getCurrentTab()?.url=home; urlBar.setText(home); updateNav() }
+              private fun setupMenu() {
+                  menuButton.setOnClickListener{ menuOverlay.visibility=View.VISIBLE }
+                  findViewById<View>(R.id.menuClose).setOnClickListener{ menuOverlay.visibility=View.GONE }
+                  menuOverlay.setOnClickListener{ menuOverlay.visibility=View.GONE }
+                  findViewById<TextView>(R.id.menuVpn).setOnClickListener{
+                      val locs=SmartProxyManager.Location.values(); val names=locs.map{it.displayName}.toTypedArray()
+                      android.app.AlertDialog.Builder(this).setTitle("VPN Konum").setItems(names){_,which-> val loc=locs[which]; SmartProxyManager.setProxy(this,webView,loc); Toast.makeText(this,SmartProxyManager.getStatusText(),Toast.LENGTH_SHORT).show() }.show()
+                  }
+                  findViewById<TextView>(R.id.menuAdBlock).setOnClickListener{
+                      AdBlocker.isEnabled=!AdBlocker.isEnabled; (it as TextView).text="🚫 Reklam Engelleme: ${if(AdBlocker.isEnabled)"Açık" else "Kapalı"}"; Toast.makeText(this,if(AdBlocker.isEnabled)"Reklam engelleme açık" else "Kapalı",Toast.LENGTH_SHORT).show()
+                  }
+                  findViewById<TextView>(R.id.menuAddressBar).setOnClickListener{
+                      isAddressBarTop=!isAddressBarTop; PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("address_top",isAddressBarTop).apply(); applyAddressBarPos(); (it as TextView).text="↕️ Adres Çubuğu: ${if(isAddressBarTop)"Yukarıda" else "Aşağıda"}"
+                  }
+                  findViewById<TextView>(R.id.menuTheme).setOnClickListener{
+                      isDark=!isDark; PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("dark_theme",isDark).apply(); AppCompatDelegate.setDefaultNightMode(if(isDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO); (it as TextView).text="🌙 Tema: ${if(isDark)"Koyu" else "Açık"}"; recreate()
+                  }
+                  findViewById<TextView>(R.id.menuDesktop).setOnClickListener{
+                      val ua = webView.settings.userAgentString; webView.settings.userAgentString = if (ua.contains("Mobile")) ua.replace("Mobile","Desktop") else "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"; webView.reload(); menuOverlay.visibility=View.GONE; Toast.makeText(this,"Masaüstü modu",Toast.LENGTH_SHORT).show()
+                  }
+                  findViewById<TextView>(R.id.menuClear).setOnClickListener{ webView.clearHistory(); webView.clearCache(true); Toast.makeText(this,"Geçmiş temizlendi",Toast.LENGTH_SHORT).show(); menuOverlay.visibility=View.GONE }
+                  updateMenuTexts()
+              }
+              private fun updateMenuTexts(){
+                  findViewById<TextView>(R.id.menuAdBlock).text="🚫 Reklam Engelleme: ${if(AdBlocker.isEnabled)"Açık" else "Kapalı"}"
+                  findViewById<TextView>(R.id.menuAddressBar).text="↕️ Adres Çubuğu: ${if(isAddressBarTop)"Yukarıda" else "Aşağıda"}"
+                  findViewById<TextView>(R.id.menuTheme).text="🌙 Tema: ${if(isDark)"Koyu" else "Açık"}"
+              }
+              private fun applyAddressBarPos(){
+                  if (isAddressBarTop){ topBar.visibility=View.VISIBLE; topSearchContainer.visibility=View.VISIBLE; bottomSearchContainer.visibility=View.GONE }
+                  else { topBar.visibility=View.GONE; bottomSearchContainer.visibility=View.VISIBLE }
+              }
+              private fun loadHome() { val home="https://www.google.com"; webView.loadUrl(home); TabManager.getCurrentTab()?.url=home; urlBar.setText(home); urlBarBottom.setText(home); updateNav() }
               private fun updateTabCount(){ tabCountButton.text=TabManager.tabs.size.toString() }
               private fun updateNav(){ backButton.alpha=if(webView.canGoBack())1f else 0.3f; forwardButton.alpha=if(webView.canGoForward())1f else 0.3f }
-              private fun updateVpnUi(){ vpnButton.text=SmartProxyManager.getStatusText(); vpnButton.setBackgroundResource(if(SmartProxyManager.isVpnActive) R.drawable.bg_vpn_active else R.drawable.bg_vpn_inactive); vpnButton.setTextColor(if(SmartProxyManager.isVpnActive) getColor(android.R.color.black) else getColor(R.color.text_gray)) }
           }
           EOF
-      - name: Setup Gradle 8.5
+            - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v3
         with: { gradle-version: 8.5 }
-      - name: Build APK
+            - name: Build APK
         run: gradle assembleDebug
-      - name: Upload APK
+            - name: Upload APK
         uses: actions/upload-artifact@v4
-        with: { name: Pusula-APK-Guzel, path: app/build/outputs/apk/debug/*.apk }
+        with: { name: Pusula-APK-Menu, path: app/build/outputs/apk/debug/*.apk }
