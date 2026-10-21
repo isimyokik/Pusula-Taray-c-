@@ -1,360 +1,66 @@
-name: Build Pusula COUNTRY VPN FIXED
-on: [push]
+name: Pusula Browser Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: '17' }
-      - name: Create Pusula FIXED ICON
-        run: |
-          rm -rf app build gradle settings.gradle build.gradle gradle.properties
-          mkdir -p app/src/main/java/com/pusula/browser app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable gradle/wrapper
-          cat > settings.gradle <<'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          include ':app'
-          EOF
-          cat > build.gradle <<'EOF'
-          plugins { id 'com.android.application' version '8.1.2' apply false; id 'org.jetbrains.kotlin.android' version '1.9.10' apply false }
-          EOF
-          cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2048m
-          android.useAndroidX=true
-          android.enableJetifier=true
-          EOF
-          cat > gradle/wrapper/gradle-wrapper.properties <<'EOF'
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          EOF
-          cat > app/build.gradle <<'EOF'
-          plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
-          android {
-            namespace 'com.pusula.browser'
-            compileSdk 34
-            defaultConfig { applicationId "com.pusula.browser"; minSdk 24; targetSdk 33; versionCode 101; versionName "10.1-FIXED" }
-            compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-            kotlinOptions { jvmTarget = '17' }
-          }
-          dependencies {
-            implementation 'androidx.core:core-ktx:1.12.0'
-            implementation 'androidx.appcompat:appcompat:1.6.1'
-            implementation 'com.google.android.material:material:1.10.0'
-            implementation 'androidx.preference:preference-ktx:1.2.1'
-          }
-          EOF
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET"/>
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
-              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-              <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Pusula VPN Ülke" android:theme="@style/Theme.Pusula">
-                  <activity android:name=".MainActivity" android:exported="true" android:hardwareAccelerated="true">
-                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-                  </activity>
-                  <service android:name=".PusulaVpnService" android:permission="android.permission.BIND_VPN_SERVICE" android:exported="false">
-                      <intent-filter><action android:name="android.net.VpnService"/></intent-filter>
-                  </service>
-              </application>
-          </manifest>
-          EOF
-          cat > app/src/main/res/values/colors.xml <<'EOF'
-          <resources><color name="primary">#7C4DFF</color></resources>
-          EOF
-          cat > app/src/main/res/values/strings.xml <<'EOF'
-          <resources><string name="app_name">Pusula VPN Ülke</string></resources>
-          EOF
-          cat > app/src/main/res/values/themes.xml <<'EOF'
-          <resources><style name="Theme.Pusula" parent="Theme.Material3.DayNight.NoActionBar"><item name="colorPrimary">@color/primary</item></style></resources>
-          EOF
-          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#7C4DFF" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#FFFFFF" android:pathData="M54,18 L64,48 L84,54 L64,60 L54,90 L44,60 L24,54 L44,48 Z"/></vector>
-          EOF
-          cat > app/src/main/res/drawable/bg_search.xml <<'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="28dp"/><solid android:color="#2A2A3A"/></shape>
-          EOF
-          cat > app/src/main/res/drawable/bg_bottom.xml <<'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:topLeftRadius="28dp" android:topRightRadius="28dp"/><solid android:color="#1E1E28"/></shape>
-          EOF
-          cat > app/src/main/res/drawable/bg_vpn_on.xml <<'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="20dp"/><solid android:color="#00E676"/></shape>
-          EOF
-          cat > app/src/main/res/drawable/bg_vpn_off.xml <<'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="20dp"/><solid android:color="#3A3A4E"/></shape>
-          EOF
-          cat > app/src/main/res/drawable/bg_country.xml <<'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="12dp"/><solid android:color="#2A2A4E"/><stroke android:width="1dp" android:color="#7C4DFF"/></shape>
-          EOF
-          cat > app/src/main/res/layout/activity_main.xml <<'EOF'
-          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#0F0F14">
-              <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:gravity="center_vertical" android:padding="12dp">
-                      <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:background="@drawable/bg_search" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="16dp">
-                          <EditText android:id="@+id/urlBar" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:background="@null" android:hint="Ara veya site yaz" android:textColor="#FFFFFF" android:textColorHint="#9AA0B6" android:singleLine="true"/>
-                          <TextView android:id="@+id/refreshButton" android:layout_width="32dp" android:layout_height="32dp" android:text="↻" android:gravity="center" android:textSize="20sp" android:textColor="#AAA"/>
-                      </LinearLayout>
-                  </LinearLayout>
-                  <LinearLayout android:id="@+id/ipBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="12dp" android:background="#1A1A2E">
-                      <TextView android:id="@+id/currentIpText" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="IP: Kontrol ediliyor..." android:textColor="#9AA0B6" android:textSize="12sp"/>
-                      <TextView android:id="@+id/countryFlag" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🇹🇷" android:textSize="18sp" android:layout_marginLeft="8dp"/>
-                  </LinearLayout>
-                  <WebView android:id="@+id/webView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/bg_bottom" android:padding="12dp">
-                      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:layout_marginBottom="8dp">
-                          <TextView android:id="@+id/btnGermany" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:layout_margin="4dp" android:background="@drawable/bg_country" android:text="🇩🇪 Almanya" android:gravity="center" android:textColor="#FFF" android:textSize="11sp" android:textStyle="bold"/>
-                          <TextView android:id="@+id/btnNetherlands" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:layout_margin="4dp" android:background="@drawable/bg_country" android:text="🇳🇱 Hollanda" android:gravity="center" android:textColor="#FFF" android:textSize="11sp" android:textStyle="bold"/>
-                          <TextView android:id="@+id/btnFrance" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:layout_margin="4dp" android:background="@drawable/bg_country" android:text="🇫🇷 Fransa" android:gravity="center" android:textColor="#FFF" android:textSize="11sp" android:textStyle="bold"/>
-                      </LinearLayout>
-                      <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:orientation="horizontal" android:gravity="center_vertical">
-                          <TextView android:id="@+id/backButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="‹" android:gravity="center" android:textColor="#FFF" android:textSize="32sp"/>
-                          <TextView android:id="@+id/vpnButton" android:layout_width="0dp" android:layout_weight="2" android:layout_height="44dp" android:layout_marginHorizontal="8dp" android:background="@drawable/bg_vpn_off" android:text="VPN: KAPALI" android:gravity="center" android:textColor="#FFF" android:textSize="12sp" android:textStyle="bold"/>
-                          <TextView android:id="@+id/homeButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="⌂" android:gravity="center" android:textColor="#FFF" android:textSize="28sp"/>
-                      </LinearLayout>
-                  </LinearLayout>
-              </LinearLayout>
-          </FrameLayout>
-          EOF
-          cat > app/src/main/java/com/pusula/browser/PusulaVpnService.kt <<'EOF'
-          package com.pusula.browser
-          import android.app.NotificationChannel
-          import android.app.NotificationManager
-          import android.content.Intent
-          import android.net.VpnService
-          import android.os.Build
-          import android.os.ParcelFileDescriptor
-          import androidx.core.app.NotificationCompat
-          class PusulaVpnService : VpnService() {
-              private var vpnInterface: ParcelFileDescriptor? = null
-              companion object { var isRunning = false; var currentCountry = "TR" }
-              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  if (intent?.getStringExtra("action") == "STOP"){ stopVpn(); return START_NOT_STICKY }
-                  currentCountry = intent?.getStringExtra("country") ?: "DE"
-                  startVpn(); return START_STICKY
-              }
-              private fun startVpn(){
-                  try {
-                      val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                      if (Build.VERSION.SDK_INT >= 26){
-                          val ch = NotificationChannel("vpn_ch","Pusula VPN",NotificationManager.IMPORTANCE_LOW)
-                          nm.createNotificationChannel(ch)
-                      }
-                      val flag = when(currentCountry){ "DE"->"🇩🇪"; "NL"->"🇳🇱"; "FR"->"🇫🇷"; else->"🌍" }
-                      val name = when(currentCountry){ "DE"->"Almanya"; "NL"->"Hollanda"; "FR"->"Fransa"; else->"TR" }
-                      val notif = NotificationCompat.Builder(this,"vpn_ch")
-                          .setSmallIcon(android.R.drawable.ic_secure)
-                          .setContentTitle("Pusula VPN $flag $name Aktif")
-                          .setContentText("IP: $name üzerinden - VPN ikonu aktif")
-                          .setOngoing(true)
-                          .build()
-                      startForeground(1001, notif)
-                      val builder = Builder().addAddress("10.0.0.2", 32).addDnsServer("1.1.1.1").addRoute("1.1.1.1", 32).setSession("Pusula $name VPN").setMtu(1500)
-                      vpnInterface = builder.establish()
-                      isRunning = true
-                  } catch (e: Exception){ isRunning = false }
-              }
-              private fun stopVpn(){
-                  try { vpnInterface?.close() } catch (e: Exception){}
-                  try { stopForeground(true) } catch (e: Exception){}
-                  isRunning = false; stopSelf()
-              }
-              override fun onDestroy() { stopVpn(); super.onDestroy() }
-          }
-          EOF
-          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
-          package com.pusula.browser
-          import android.content.Intent
-          import android.net.VpnService
-          import android.os.Build
-          import android.os.Bundle
-          import android.webkit.WebChromeClient
-          import android.webkit.WebSettings
-          import android.webkit.WebView
-          import android.webkit.WebViewClient
-          import android.widget.EditText
-          import android.widget.TextView
-          import android.widget.Toast
-          import androidx.appcompat.app.AppCompatActivity
-          import java.io.BufferedReader
-          import java.io.InputStreamReader
-          import java.net.*
-          class MainActivity : AppCompatActivity() {
-              private lateinit var webView: WebView
-              private lateinit var vpnButton: TextView
-              private lateinit var currentIpText: TextView
-              private lateinit var countryFlag: TextView
-              private var currentProxy: Proxy? = null
-              private var currentCountry = "TR"
-              private var isVpnOn = false
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContentView(R.layout.activity_main)
-                  webView = findViewById(R.id.webView)
-                  vpnButton = findViewById(R.id.vpnButton)
-                  currentIpText = findViewById(R.id.currentIpText)
-                  countryFlag = findViewById(R.id.countryFlag)
-                  val backButton = findViewById<TextView>(R.id.backButton)
-                  val homeButton = findViewById<TextView>(R.id.homeButton)
-                  val urlBar = findViewById<EditText>(R.id.urlBar)
-                  val refreshButton = findViewById<TextView>(R.id.refreshButton)
-                  val btnGermany = findViewById<TextView>(R.id.btnGermany)
-                  val btnNetherlands = findViewById<TextView>(R.id.btnNetherlands)
-                  val btnFrance = findViewById<TextView>(R.id.btnFrance)
-                  webView.settings.javaScriptEnabled = true
-                  webView.settings.domStorageEnabled = true
-                  webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-                  webView.webChromeClient = WebChromeClient()
-                  webView.webViewClient = WebViewClient()
-                  webView.loadUrl("https://www.google.com")
-                  backButton.setOnClickListener{ if (webView.canGoBack()) webView.goBack() }
-                  homeButton.setOnClickListener{ webView.loadUrl("https://www.google.com") }
-                  refreshButton.setOnClickListener{ webView.reload() }
-                  vpnButton.setOnClickListener{ toggleVpn() }
-                  btnGermany.setOnClickListener{ connectCountry("DE", "🇩🇪", "Almanya") }
-                  btnNetherlands.setOnClickListener{ connectCountry("NL", "🇳🇱", "Hollanda") }
-                  btnFrance.setOnClickListener{ connectCountry("FR", "🇫🇷", "Fransa") }
-                  urlBar.setOnEditorActionListener{ _,_,_ ->
-                      var u = urlBar.text.toString().trim()
-                      if (u.isNotEmpty()){
-                          if (!u.startsWith("http")) u = if (u.contains(".")) "https://$u" else "https://www.google.com/search?q=$u"
-                          webView.loadUrl(u)
-                      }
-                      true
-                  }
-                  checkRealIp()
-              }
-              private fun connectCountry(code: String, flag: String, name: String){
-                  currentCountry = code
-                  countryFlag.text = flag
-                  currentIpText.text = "$flag $name proxy aranıyor..."
-                  Toast.makeText(this,"$flag $name için proxy aranıyor...",Toast.LENGTH_SHORT).show()
-                  Thread {
-                      try {
-                          val proxyListUrl = when(code){
-                              "DE" -> "https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list@main/by-country/de/http.txt"
-                              "NL" -> "https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list@main/by-country/nl/http.txt"
-                              "FR" -> "https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list@main/by-country/fr/http.txt"
-                              else -> "https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list@main/by-country/de/http.txt"
-                          }
-                          val proxies = fetchProxyList(proxyListUrl)
-                          if (proxies.isEmpty()){
-                              runOnUiThread{ currentIpText.text = "$flag $name proxy bulunamadı" }
-                              return@Thread
-                          }
-                          var workingProxy: Proxy? = null
-                          var workingIp = ""
-                          var workingHost = ""
-                          for (line in proxies.take(10)){
-                              try {
-                                  val parts = line.trim().split(":")
-                                  if (parts.size != 2) continue
-                                  val host = parts[0]; val port = parts[1].toInt()
-                                  val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(host, port))
-                                  val ip = getIpViaProxy(proxy)
-                                  if (ip.isNotEmpty()){
-                                      workingProxy = proxy; workingIp = ip; workingHost = "$host:$port"; break
-                                  }
-                              } catch (e: Exception){ continue }
-                          }
-                          if (workingProxy != null){
-                              currentProxy = workingProxy
-                              System.setProperty("http.proxyHost", workingHost.split(":")[0])
-                              System.setProperty("http.proxyPort", workingHost.split(":")[1])
-                              System.setProperty("https.proxyHost", workingHost.split(":")[0])
-                              System.setProperty("https.proxyPort", workingHost.split(":")[1])
-                              runOnUiThread{
-                                  currentIpText.text = "$flag $name IP: $workingIp"
-                                  Toast.makeText(this,"$flag $name bağlandı! IP: $workingIp",Toast.LENGTH_LONG).show()
-                                  startVpnService(code)
-                                  webView.loadUrl("https://whatismyipaddress.com/")
-                              }
-                          } else {
-                              runOnUiThread{ currentIpText.text = "$flag $name çalışan proxy yok" }
-                          }
-                      } catch (e: Exception){
-                          runOnUiThread{ currentIpText.text = "Hata: ${e.message}" }
-                      }
-                  }.start()
-              }
-              private fun fetchProxyList(urlStr: String): List<String>{
-                  return try {
-                      val url = URL(urlStr)
-                      val conn = url.openConnection() as HttpURLConnection
-                      conn.connectTimeout = 5000; conn.readTimeout = 5000
-                      val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                      reader.readLines().filter{ it.contains(":") }
-                  } catch (e: Exception){ emptyList() }
-              }
-              private fun getIpViaProxy(proxy: Proxy): String{
-                  return try {
-                      val url = URL("https://api.ipify.org?format=text")
-                      val conn = url.openConnection(proxy) as HttpURLConnection
-                      conn.connectTimeout = 4000; conn.readTimeout = 4000
-                      val ip = BufferedReader(InputStreamReader(conn.inputStream)).readLine()?.trim() ?: ""
-                      if (ip.matches(Regex("\\d+\\.\\d+\\.\\d+\\.\\d+"))) ip else ""
-                  } catch (e: Exception){ "" }
-              }
-              private fun checkRealIp(){
-                  Thread {
-                      try {
-                          val url = URL("https://api.ipify.org?format=text")
-                          val conn = url.openConnection() as HttpURLConnection
-                          conn.connectTimeout = 3000
-                          val ip = BufferedReader(InputStreamReader(conn.inputStream)).readLine() ?: "Bilinmiyor"
-                          runOnUiThread{ if (!isVpnOn) currentIpText.text = "🇹🇷 Gerçek IP: $ip" }
-                      } catch (e: Exception){}
-                  }.start()
-              }
-              private fun startVpnService(country: String){
-                  try {
-                      val intent = VpnService.prepare(this)
-                      if (intent != null){ startActivityForResult(intent, 100); return }
-                      val vpnIntent = Intent(this, PusulaVpnService::class.java)
-                      vpnIntent.putExtra("country", country)
-                      if (Build.VERSION.SDK_INT >= 26) startForegroundService(vpnIntent) else startService(vpnIntent)
-                      isVpnOn = true; updateVpnUI()
-                  } catch (e: Exception){ Toast.makeText(this,"VPN Hatası: ${e.message}",Toast.LENGTH_SHORT).show() }
-              }
-              private fun toggleVpn(){
-                  if (PusulaVpnService.isRunning || isVpnOn){
-                      try { val i = Intent(this, PusulaVpnService::class.java); i.putExtra("action","STOP"); startService(i) } catch (e: Exception){}
-                      System.clearProperty("http.proxyHost"); System.clearProperty("http.proxyPort")
-                      System.clearProperty("https.proxyHost"); System.clearProperty("https.proxyPort")
-                      isVpnOn = false; currentProxy = null
-                      updateVpnUI(); currentIpText.text = "VPN Kapalı"; checkRealIp()
-                  } else {
-                      Toast.makeText(this,"Önce ülke seç",Toast.LENGTH_SHORT).show()
-                  }
-              }
-              private fun updateVpnUI(){
-                  val running = PusulaVpnService.isRunning || isVpnOn
-                  if (running){
-                      val flag = when(currentCountry){ "DE"->"🇩🇪"; "NL"->"🇳🇱"; "FR"->"🇫🇷"; else->"🌍" }
-                      vpnButton.text = "VPN: $flag AÇIK"
-                      vpnButton.setBackgroundResource(R.drawable.bg_vpn_on)
-                  } else {
-                      vpnButton.text = "VPN: KAPALI"
-                      vpnButton.setBackgroundResource(R.drawable.bg_vpn_off)
-                  }
-              }
-              override fun onActivityResult(rc: Int, res: Int, data: Intent?){
-                  super.onActivityResult(rc, res, data)
-                  if (rc==100 && res==RESULT_OK){ startVpnService(currentCountry) }
-              }
-              override fun onResume() { super.onResume(); updateVpnUI() }
-          }
-          EOF
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with: { gradle-version: 8.5 }
-      - name: Build APK
-        run: gradle assembleDebug
-      - name: Upload
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Build Release Bundle (AAB)
+        run: ./gradlew bundleRelease --stacktrace
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
-        with: { name: Pusula-COUNTRY-IP-FIXED, path: app/build/outputs/apk/debug/*.apk }
+        with:
+          name: pusula-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pusula-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload Release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: pusula-release-aab
+          path: app/build/outputs/bundle/release/app-release.aab
