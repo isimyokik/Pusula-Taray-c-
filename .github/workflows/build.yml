@@ -36,8 +36,10 @@ jobs:
           }
           EOF
           ls -R
-      - name: Setup Gradle
+      - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.5
       - name: Build APK
         run: gradle assembleDebug
       - name: Upload APK
