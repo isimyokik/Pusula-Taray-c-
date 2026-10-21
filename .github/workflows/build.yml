@@ -1,4 +1,4 @@
-name: Build Pusula COUNTRY VPN
+name: Build Pusula COUNTRY VPN FIXED
 on: [push]
 jobs:
   build:
@@ -7,7 +7,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      - name: Create Pusula COUNTRY IP VPN
+      - name: Create Pusula FIXED ICON
         run: |
           rm -rf app build gradle settings.gradle build.gradle gradle.properties
           mkdir -p app/src/main/java/com/pusula/browser app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable gradle/wrapper
@@ -36,7 +36,7 @@ jobs:
           android {
             namespace 'com.pusula.browser'
             compileSdk 34
-            defaultConfig { applicationId "com.pusula.browser"; minSdk 24; targetSdk 33; versionCode 100; versionName "10.0-COUNTRY" }
+            defaultConfig { applicationId "com.pusula.browser"; minSdk 24; targetSdk 33; versionCode 101; versionName "10.1-FIXED" }
             compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
             kotlinOptions { jvmTarget = '17' }
           }
@@ -55,7 +55,7 @@ jobs:
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-              <application android:allowBackup="true" android:icon="@mipmap/sym_def_app_icon" android:label="Pusula VPN Ülke" android:theme="@style/Theme.Pusula">
+              <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Pusula VPN Ülke" android:theme="@style/Theme.Pusula">
                   <activity android:name=".MainActivity" android:exported="true" android:hardwareAccelerated="true">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
@@ -73,6 +73,9 @@ jobs:
           EOF
           cat > app/src/main/res/values/themes.xml <<'EOF'
           <resources><style name="Theme.Pusula" parent="Theme.Material3.DayNight.NoActionBar"><item name="colorPrimary">@color/primary</item></style></resources>
+          EOF
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#7C4DFF" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#FFFFFF" android:pathData="M54,18 L64,48 L84,54 L64,60 L54,90 L44,60 L24,54 L44,48 Z"/></vector>
           EOF
           cat > app/src/main/res/drawable/bg_search.xml <<'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="28dp"/><solid android:color="#2A2A3A"/></shape>
@@ -146,26 +149,20 @@ jobs:
                       val name = when(currentCountry){ "DE"->"Almanya"; "NL"->"Hollanda"; "FR"->"Fransa"; else->"TR" }
                       val notif = NotificationCompat.Builder(this,"vpn_ch")
                           .setSmallIcon(android.R.drawable.ic_secure)
-                          .setContentTitle("Pusula VPN $flag $name Aktif 🔑")
-                          .setContentText("IP: $name üzerinden bağlandı - Şebekede VPN yazıyor")
+                          .setContentTitle("Pusula VPN $flag $name Aktif")
+                          .setContentText("IP: $name üzerinden - VPN ikonu aktif")
                           .setOngoing(true)
                           .build()
                       startForeground(1001, notif)
-                      val builder = Builder()
-                          .addAddress("10.0.0.2", 32)
-                          .addDnsServer("1.1.1.1")
-                          .addRoute("1.1.1.1", 32)
-                          .setSession("Pusula $name VPN")
-                          .setMtu(1500)
+                      val builder = Builder().addAddress("10.0.0.2", 32).addDnsServer("1.1.1.1").addRoute("1.1.1.1", 32).setSession("Pusula $name VPN").setMtu(1500)
                       vpnInterface = builder.establish()
                       isRunning = true
-                  } catch (e: Exception){ e.printStackTrace(); isRunning = false }
+                  } catch (e: Exception){ isRunning = false }
               }
               private fun stopVpn(){
                   try { vpnInterface?.close() } catch (e: Exception){}
                   try { stopForeground(true) } catch (e: Exception){}
-                  isRunning = false
-                  stopSelf()
+                  isRunning = false; stopSelf()
               }
               override fun onDestroy() { stopVpn(); super.onDestroy() }
           }
@@ -187,7 +184,6 @@ jobs:
           import java.io.BufferedReader
           import java.io.InputStreamReader
           import java.net.*
-
           class MainActivity : AppCompatActivity() {
               private lateinit var webView: WebView
               private lateinit var vpnButton: TextView
@@ -196,7 +192,6 @@ jobs:
               private var currentProxy: Proxy? = null
               private var currentCountry = "TR"
               private var isVpnOn = false
-
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   setContentView(R.layout.activity_main)
@@ -211,23 +206,19 @@ jobs:
                   val btnGermany = findViewById<TextView>(R.id.btnGermany)
                   val btnNetherlands = findViewById<TextView>(R.id.btnNetherlands)
                   val btnFrance = findViewById<TextView>(R.id.btnFrance)
-
                   webView.settings.javaScriptEnabled = true
                   webView.settings.domStorageEnabled = true
                   webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
                   webView.webChromeClient = WebChromeClient()
                   webView.webViewClient = WebViewClient()
                   webView.loadUrl("https://www.google.com")
-
                   backButton.setOnClickListener{ if (webView.canGoBack()) webView.goBack() }
                   homeButton.setOnClickListener{ webView.loadUrl("https://www.google.com") }
                   refreshButton.setOnClickListener{ webView.reload() }
                   vpnButton.setOnClickListener{ toggleVpn() }
-
                   btnGermany.setOnClickListener{ connectCountry("DE", "🇩🇪", "Almanya") }
                   btnNetherlands.setOnClickListener{ connectCountry("NL", "🇳🇱", "Hollanda") }
                   btnFrance.setOnClickListener{ connectCountry("FR", "🇫🇷", "Fransa") }
-
                   urlBar.setOnEditorActionListener{ _,_,_ ->
                       var u = urlBar.text.toString().trim()
                       if (u.isNotEmpty()){
@@ -238,16 +229,13 @@ jobs:
                   }
                   checkRealIp()
               }
-
               private fun connectCountry(code: String, flag: String, name: String){
                   currentCountry = code
                   countryFlag.text = flag
                   currentIpText.text = "$flag $name proxy aranıyor..."
                   Toast.makeText(this,"$flag $name için proxy aranıyor...",Toast.LENGTH_SHORT).show()
-
                   Thread {
                       try {
-                          // GitHub'dan canlı proxy listesi çek - databay-labs/free-proxy-list
                           val proxyListUrl = when(code){
                               "DE" -> "https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list@main/by-country/de/http.txt"
                               "NL" -> "https://cdn.jsdelivr.net/gh/databay-labs/free-proxy-list@main/by-country/nl/http.txt"
@@ -256,10 +244,9 @@ jobs:
                           }
                           val proxies = fetchProxyList(proxyListUrl)
                           if (proxies.isEmpty()){
-                              runOnUiThread{ currentIpText.text = "$flag $name proxy bulunamadı, tekrar dene"; Toast.makeText(this,"Proxy bulunamadı",Toast.LENGTH_SHORT).show() }
+                              runOnUiThread{ currentIpText.text = "$flag $name proxy bulunamadı" }
                               return@Thread
                           }
-                          // İlk çalışan proxy'yi bul
                           var workingProxy: Proxy? = null
                           var workingIp = ""
                           var workingHost = ""
@@ -277,28 +264,24 @@ jobs:
                           }
                           if (workingProxy != null){
                               currentProxy = workingProxy
-                              // WebView için sistem proxy'sini ayarla
                               System.setProperty("http.proxyHost", workingHost.split(":")[0])
                               System.setProperty("http.proxyPort", workingHost.split(":")[1])
                               System.setProperty("https.proxyHost", workingHost.split(":")[0])
                               System.setProperty("https.proxyPort", workingHost.split(":")[1])
                               runOnUiThread{
-                                  currentIpText.text = "$flag $name IP: $workingIp | Proxy: $workingHost"
+                                  currentIpText.text = "$flag $name IP: $workingIp"
                                   Toast.makeText(this,"$flag $name bağlandı! IP: $workingIp",Toast.LENGTH_LONG).show()
-                                  // VPN ikonunu göster
                                   startVpnService(code)
-                                  // whatismyip sayfasını aç
                                   webView.loadUrl("https://whatismyipaddress.com/")
                               }
                           } else {
-                              runOnUiThread{ currentIpText.text = "$flag $name için çalışan proxy yok, tekrar dene" }
+                              runOnUiThread{ currentIpText.text = "$flag $name çalışan proxy yok" }
                           }
                       } catch (e: Exception){
-                          runOnUiThread{ currentIpText.text = "Hata: ${e.message}"; Toast.makeText(this,"Hata: ${e.message}",Toast.LENGTH_SHORT).show() }
+                          runOnUiThread{ currentIpText.text = "Hata: ${e.message}" }
                       }
                   }.start()
               }
-
               private fun fetchProxyList(urlStr: String): List<String>{
                   return try {
                       val url = URL(urlStr)
@@ -308,18 +291,15 @@ jobs:
                       reader.readLines().filter{ it.contains(":") }
                   } catch (e: Exception){ emptyList() }
               }
-
               private fun getIpViaProxy(proxy: Proxy): String{
                   return try {
                       val url = URL("https://api.ipify.org?format=text")
                       val conn = url.openConnection(proxy) as HttpURLConnection
                       conn.connectTimeout = 4000; conn.readTimeout = 4000
-                      conn.setRequestProperty("User-Agent","PusulaVPN")
                       val ip = BufferedReader(InputStreamReader(conn.inputStream)).readLine()?.trim() ?: ""
                       if (ip.matches(Regex("\\d+\\.\\d+\\.\\d+\\.\\d+"))) ip else ""
                   } catch (e: Exception){ "" }
               }
-
               private fun checkRealIp(){
                   Thread {
                       try {
@@ -327,11 +307,10 @@ jobs:
                           val conn = url.openConnection() as HttpURLConnection
                           conn.connectTimeout = 3000
                           val ip = BufferedReader(InputStreamReader(conn.inputStream)).readLine() ?: "Bilinmiyor"
-                          runOnUiThread{ if (!isVpnOn) currentIpText.text = "🇹🇷 Gerçek IP: $ip - Ülke seç VPN aç" }
+                          runOnUiThread{ if (!isVpnOn) currentIpText.text = "🇹🇷 Gerçek IP: $ip" }
                       } catch (e: Exception){}
                   }.start()
               }
-
               private fun startVpnService(country: String){
                   try {
                       val intent = VpnService.prepare(this)
@@ -342,36 +321,32 @@ jobs:
                       isVpnOn = true; updateVpnUI()
                   } catch (e: Exception){ Toast.makeText(this,"VPN Hatası: ${e.message}",Toast.LENGTH_SHORT).show() }
               }
-
               private fun toggleVpn(){
                   if (PusulaVpnService.isRunning || isVpnOn){
                       try { val i = Intent(this, PusulaVpnService::class.java); i.putExtra("action","STOP"); startService(i) } catch (e: Exception){}
                       System.clearProperty("http.proxyHost"); System.clearProperty("http.proxyPort")
                       System.clearProperty("https.proxyHost"); System.clearProperty("https.proxyPort")
                       isVpnOn = false; currentProxy = null
-                      updateVpnUI(); currentIpText.text = "VPN Kapalı - Ülke seç"; checkRealIp()
+                      updateVpnUI(); currentIpText.text = "VPN Kapalı"; checkRealIp()
                   } else {
-                      Toast.makeText(this,"Önce ülke seç: Almanya, Hollanda, Fransa",Toast.LENGTH_SHORT).show()
+                      Toast.makeText(this,"Önce ülke seç",Toast.LENGTH_SHORT).show()
                   }
               }
-
               private fun updateVpnUI(){
                   val running = PusulaVpnService.isRunning || isVpnOn
                   if (running){
                       val flag = when(currentCountry){ "DE"->"🇩🇪"; "NL"->"🇳🇱"; "FR"->"🇫🇷"; else->"🌍" }
-                      vpnButton.text = "VPN: $flag AÇIK 🔑"
+                      vpnButton.text = "VPN: $flag AÇIK"
                       vpnButton.setBackgroundResource(R.drawable.bg_vpn_on)
                   } else {
                       vpnButton.text = "VPN: KAPALI"
                       vpnButton.setBackgroundResource(R.drawable.bg_vpn_off)
                   }
               }
-
               override fun onActivityResult(rc: Int, res: Int, data: Intent?){
                   super.onActivityResult(rc, res, data)
                   if (rc==100 && res==RESULT_OK){ startVpnService(currentCountry) }
               }
-
               override fun onResume() { super.onResume(); updateVpnUI() }
           }
           EOF
@@ -382,4 +357,4 @@ jobs:
         run: gradle assembleDebug
       - name: Upload
         uses: actions/upload-artifact@v4
-        with: { name: Pusula-COUNTRY-IP-VPN, path: app/build/outputs/apk/debug/*.apk }
+        with: { name: Pusula-COUNTRY-IP-FIXED, path: app/build/outputs/apk/debug/*.apk }
