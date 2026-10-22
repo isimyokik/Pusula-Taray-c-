@@ -1,0 +1,449 @@
+name: Pusula VIP APK
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Create Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf app build.gradle.kts settings.gradle.kts gradle.properties
+          mkdir -p app/src/main/java/com/pusula/player app/src/main/res/values
+
+          cat > build.gradle.kts <<'GRADLE'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          GRADLE
+
+          cat > settings.gradle.kts <<'GRADLE'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "PusulaVIP"
+          include(":app")
+          GRADLE
+
+          cat > gradle.properties <<'PROPS'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          PROPS
+
+          cat > app/build.gradle.kts <<'GRADLE'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.pusula.player"
+              compileSdk = 35
+              defaultConfig {
+                  applicationId = "com.pusula.player"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 41
+                  versionName = "4.1"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
+          }
+          GRADLE
+
+          cat > app/src/main/AndroidManifest.xml <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:allowBackup="false"
+                  android:label="Pusula VIP"
+                  android:theme="@style/Theme.Pusula"
+                  android:usesCleartextTraffic="false">
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|uiMode|keyboardHidden"
+                      android:supportsPictureInPicture="true"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          XML
+
+          cat > app/src/main/res/values/styles.xml <<'XML'
+          <resources>
+              <style name="Theme.Pusula" parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#5C8DFF</item>
+                  <item name="android:statusBarColor">#0D1016</item>
+                  <item name="android:navigationBarColor">#0D1016</item>
+                  <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+              </style>
+          </resources>
+          XML
+
+          cat > app/src/main/java/com/pusula/player/MainActivity.kt <<'KOTLIN'
+          package com.pusula.player
+          
+          import android.annotation.SuppressLint
+          import android.app.Activity
+          import android.app.PictureInPictureParams
+          import android.content.pm.ActivityInfo
+          import android.graphics.Color
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.util.Rational
+          import android.view.Gravity
+          import android.view.View
+          import android.view.ViewGroup
+          import android.view.WindowManager
+          import android.view.inputmethod.EditorInfo
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.HorizontalScrollView
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.Toast
+          
+          class MainActivity : Activity() {
+              private lateinit var root: LinearLayout
+              private lateinit var tabStrip: LinearLayout
+              private lateinit var webHost: FrameLayout
+              private lateinit var address: EditText
+              private val tabs = mutableListOf<WebView>()
+              private var active = 0
+              private var fullscreenView: View? = null
+              private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
+              private var inPip = false
+          
+              private val bg = Color.rgb(10, 14, 23)
+              private val panel = Color.rgb(22, 29, 43)
+              private val panel2 = Color.rgb(31, 40, 58)
+              private val blue = Color.rgb(75, 125, 255)
+              private val white = Color.rgb(245, 247, 255)
+              private val muted = Color.rgb(157, 169, 192)
+          
+              @SuppressLint("SetJavaScriptEnabled")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.statusBarColor = bg
+                  window.navigationBarColor = bg
+                  window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+          
+                  root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(dp(12), dp(4), dp(12), dp(6))
+                      setBackgroundColor(bg)
+                  }
+          
+                  val brandRow = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                  }
+                  val logo = TextView(this).apply {
+                      text = "◈"
+                      textSize = 27f
+                      setTextColor(blue)
+                      gravity = Gravity.CENTER
+                  }
+                  brandRow.addView(logo, LinearLayout.LayoutParams(dp(38), dp(48)))
+                  val brandStack = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+                  brandStack.addView(TextView(this).apply {
+                      text = "PUSULA VIP"; textSize = 16f; setTextColor(white); setTypeface(null, android.graphics.Typeface.BOLD)
+                  })
+                  brandStack.addView(TextView(this).apply {
+                      text = "İzle · Keşfet · Devam et"; textSize = 11f; setTextColor(muted)
+                  })
+                  brandRow.addView(brandStack, LinearLayout.LayoutParams(0, -2, 1f))
+                  brandRow.addView(makeButton("＋", panel2, 42) { addTab(HOME_URL) }, LinearLayout.LayoutParams(dp(42), dp(40)))
+                  root.addView(brandRow, LinearLayout.LayoutParams(-1, dp(48)))
+          
+                  val addressRow = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(10), 0, dp(4), 0)
+                      background = rounded(panel, dp(16))
+                  }
+                  address = EditText(this).apply {
+                      isSingleLine = true
+                      textSize = 14f
+                      setTextColor(white)
+                      setHintTextColor(muted)
+                      hint = "Ara veya adres yaz…"
+                      setPadding(dp(6), 0, dp(4), 0)
+                      setBackgroundColor(Color.TRANSPARENT)
+                      imeOptions = EditorInfo.IME_ACTION_GO
+                      setSelectAllOnFocus(false)
+                      setOnEditorActionListener { _, actionId, _ ->
+                          if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_NULL) {
+                              loadAddress(); true
+                          } else false
+                      }
+                  }
+                  addressRow.addView(TextView(this).apply { text = "⌕"; textSize = 23f; setTextColor(muted); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(28), dp(44)))
+                  addressRow.addView(address, LinearLayout.LayoutParams(0, dp(44), 1f))
+                  addressRow.addView(makeButton("Git", blue, 54) { loadAddress() }, LinearLayout.LayoutParams(dp(54), dp(36)))
+                  root.addView(addressRow, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(5); bottomMargin = dp(5) })
+          
+                  val tabScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false }
+                  tabStrip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(3), 0, dp(6)) }
+                  tabScroll.addView(tabStrip)
+                  root.addView(tabScroll, LinearLayout.LayoutParams(-1, dp(44)))
+          
+                  webHost = FrameLayout(this).apply { background = rounded(panel, dp(14)) }
+                  root.addView(webHost, LinearLayout.LayoutParams(-1, 0, 1f))
+          
+                  val controls = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER
+                      setPadding(0, dp(7), 0, 0)
+                  }
+                  controls.addView(makeButton("‹", panel, 42) { current()?.let { if (it.canGoBack()) it.goBack() else showHome() } }, weightedButton())
+                  controls.addView(makeButton("›", panel, 42) { current()?.let { if (it.canGoForward()) it.goForward() } }, weightedButton())
+                  controls.addView(makeButton("⌂", panel, 42) { showHome() }, weightedButton())
+                  controls.addView(makeButton("↻", panel, 42) { current()?.reload() }, weightedButton())
+                  controls.addView(makeButton("▦ ${tabs.size}", blue, 42) { addTab(HOME_URL) }, weightedButton())
+                  root.addView(controls)
+                  setContentView(root)
+                  addTab(HOME_URL)
+              }
+          
+              private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+              private fun rounded(color: Int, radius: Int) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat() }
+              private fun weightedButton() = LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(3), 0, dp(3), 0) }
+          
+              private fun makeButton(label: String, color: Int, height: Int, action: () -> Unit): Button = Button(this).apply {
+                  text = label
+                  textSize = if (label.length > 3) 12f else 16f
+                  setTextColor(white)
+                  background = rounded(color, dp(12))
+                  isAllCaps = false
+                  minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
+                  setPadding(dp(4), 0, dp(4), 0)
+                  stateListAnimator = null
+                  setOnClickListener { action() }
+              }
+          
+              @SuppressLint("SetJavaScriptEnabled")
+              private fun addTab(url: String) {
+                  val web = WebView(this)
+                  web.settings.javaScriptEnabled = true
+                  web.settings.domStorageEnabled = true
+                  web.settings.loadsImagesAutomatically = true
+                  web.settings.mediaPlaybackRequiresUserGesture = true
+                  web.settings.javaScriptCanOpenWindowsAutomatically = false
+                  web.settings.setSupportMultipleWindows(false)
+                  web.settings.allowFileAccess = false
+                  web.settings.allowContentAccess = false
+                  web.setBackgroundColor(Color.BLACK)
+                  web.webViewClient = object : WebViewClient() {
+                      override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                          val uri = request.url
+                          // Keep web links inside Pusula. Never launch the separate YouTube app or other external apps.
+                          return if (uri.scheme == "http" || uri.scheme == "https") {
+                              false
+                          } else {
+                              // Handle intent:// links only via a safe web fallback; do not invoke external apps.
+                              val fallback = uri.getQueryParameter("browser_fallback_url")
+                              if (uri.scheme == "intent" && !fallback.isNullOrBlank() &&
+                                  (fallback.startsWith("https://") || fallback.startsWith("http://"))) {
+                                  view.loadUrl(fallback)
+                              }
+                              true
+                          }
+                      }
+                      override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                          if (tabs.getOrNull(active) === view && url != null && !url.startsWith("data:")) address.setText(url)
+                          refreshTabs()
+                      }
+                      override fun onPageFinished(view: WebView, url: String?) {
+                          if (tabs.getOrNull(active) === view && url != null && !url.startsWith("data:")) address.setText(url)
+                          refreshTabs()
+                      }
+                  }
+                  web.webChromeClient = object : WebChromeClient() {
+                      override fun onReceivedTitle(view: WebView, title: String?) { refreshTabs() }
+                      override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                          if (fullscreenView != null) { callback.onCustomViewHidden(); return }
+                          fullscreenView = view
+                          fullscreenCallback = callback
+                          (view.parent as? ViewGroup)?.removeView(view)
+                          addContentView(view, ViewGroup.LayoutParams(-1, -1))
+                          requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                          window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE)
+                      }
+                      override fun onHideCustomView() { exitFullscreen() }
+                  }
+                  tabs.add(web)
+                  active = tabs.lastIndex
+                  webHost.removeAllViews()
+                  webHost.addView(web, FrameLayout.LayoutParams(-1, -1))
+                  if (url == HOME_URL) loadHome(web) else web.loadUrl(url)
+                  refreshTabs()
+              }
+          
+              private fun loadHome(web: WebView) {
+                  address.setText("")
+                  web.loadDataWithBaseURL("https://m.youtube.com/", HOME_HTML, "text/html", "UTF-8", null)
+              }
+          
+              private fun current(): WebView? = tabs.getOrNull(active)
+              private fun showHome() { current()?.let { loadHome(it) } }
+          
+              private fun loadAddress() {
+                  val text = address.text.toString().trim()
+                  if (text.isBlank()) return
+                  val url = when {
+                      text.startsWith("https://") || text.startsWith("http://") -> text
+                      text.contains('.') && !text.contains(' ') -> "https://$text"
+                      else -> "https://m.youtube.com/results?search_query=" + Uri.encode(text)
+                  }
+                  current()?.loadUrl(url)
+                  address.clearFocus()
+              }
+          
+              private fun refreshTabs() {
+                  if (!::tabStrip.isInitialized) return
+                  tabStrip.removeAllViews()
+                  tabs.forEachIndexed { index, web ->
+                      val title = web.title?.take(16)?.ifBlank { null } ?: if (web.url == "about:blank") "Yeni sekme" else "Sekme ${index + 1}"
+                      val tab = TextView(this).apply {
+                          text = "  $title   ×  "
+                          textSize = 12f
+                          setTextColor(white)
+                          gravity = Gravity.CENTER
+                          setPadding(dp(8), 0, dp(8), 0)
+                          background = rounded(if (index == active) blue else panel2, dp(11))
+                          setOnClickListener {
+                              if (tabs.getOrNull(index) === web) switchTab(index)
+                          }
+                          setOnLongClickListener { closeTab(index); true }
+                      }
+                      tabStrip.addView(tab, LinearLayout.LayoutParams(-2, dp(34)).apply { setMargins(0, 0, dp(6), 0) })
+                  }
+              }
+          
+              private fun switchTab(index: Int) {
+                  if (index !in tabs.indices) return
+                  active = index
+                  webHost.removeAllViews()
+                  (tabs[index].parent as? ViewGroup)?.removeView(tabs[index])
+                  webHost.addView(tabs[index], FrameLayout.LayoutParams(-1, -1))
+                  val url = tabs[index].url ?: ""
+                  if (!url.startsWith("data:")) address.setText(if (url == "about:blank") "" else url)
+                  refreshTabs()
+              }
+          
+              private fun closeTab(index: Int) {
+                  if (tabs.size <= 1) { loadHome(tabs[0]); return }
+                  val removed = tabs.removeAt(index)
+                  (removed.parent as? ViewGroup)?.removeView(removed)
+                  removed.stopLoading(); removed.destroy()
+                  if (active >= tabs.size) active = tabs.lastIndex else if (index < active) active--
+                  switchTab(active)
+              }
+          
+              private fun exitFullscreen() {
+                  val view = fullscreenView ?: return
+                  (view.parent as? ViewGroup)?.removeView(view)
+                  fullscreenView = null
+                  fullscreenCallback?.onCustomViewHidden()
+                  fullscreenCallback = null
+                  requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                  window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                  webHost.removeAllViews()
+                  current()?.let { (it.parent as? ViewGroup)?.removeView(it); webHost.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+              }
+          
+              override fun onUserLeaveHint() {
+                  super.onUserLeaveHint()
+                  // Best-effort floating video while the user leaves a fullscreen video. WebView/site support varies.
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && fullscreenView != null) {
+                      try { enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()) }
+                      catch (_: Exception) { }
+                  }
+              }
+          
+              override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+                  super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+                  inPip = isInPictureInPictureMode
+                  if (inPip) root.visibility = View.GONE else root.visibility = View.VISIBLE
+              }
+          
+              @Deprecated("Deprecated in Android")
+              override fun onBackPressed() {
+                  if (fullscreenView != null) { exitFullscreen(); return }
+                  val web = current()
+                  if (web?.canGoBack() == true) web.goBack() else showHome()
+              }
+          
+              override fun onDestroy() {
+                  tabs.forEach { it.stopLoading(); it.destroy() }
+                  tabs.clear()
+                  super.onDestroy()
+              }
+          
+              companion object {
+                  private const val HOME_URL = "pusula://home"
+                  private val HOME_HTML = """
+          <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+          *{box-sizing:border-box}body{margin:0;background:#0a0e17;color:#f5f7ff;font-family:Arial,sans-serif;padding:22px 17px 30px}.eyebrow{color:#8caeff;font-size:12px;letter-spacing:2px;font-weight:bold}.hero{font-size:28px;line-height:1.15;font-weight:800;margin:10px 0}.sub{font-size:14px;color:#9da9c0;line-height:1.5;margin-bottom:22px}.search{display:block;background:#161d2b;border:1px solid #2a3851;border-radius:14px;padding:15px;color:#9da9c0;text-decoration:none;margin-bottom:22px}.section{font-size:16px;font-weight:bold;margin:22px 0 12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.card{display:block;min-height:100px;padding:15px;border-radius:16px;background:linear-gradient(145deg,#1f2a40,#151c2b);color:#f5f7ff;text-decoration:none;border:1px solid #2a3851}.emoji{font-size:23px;display:block;margin-bottom:12px}.label{font-weight:bold;font-size:14px}.desc{font-size:12px;color:#9da9c0;margin-top:5px;line-height:1.35}.wide{display:block;padding:15px;border-radius:14px;background:#161d2b;border:1px solid #2a3851;color:#f5f7ff;text-decoration:none;margin-top:9px;font-size:14px}.foot{font-size:11px;color:#75829b;margin-top:25px;line-height:1.5}
+          </style></head><body>
+          <div class="eyebrow">PUSULA VIP · KEŞFET</div><div class="hero">Bugün ne<br>izlemek istersin?</div><div class="sub">Ara, keşfet ve videoları Pusula'nın içinden aç.</div>
+          <a class="search" href="https://m.youtube.com/">⌕ &nbsp; YouTube'da video ara…</a>
+          <div class="section">Hızlı keşfet</div><div class="grid">
+          <a class="card" href="https://m.youtube.com/results?search_query=teknoloji+inceleme"><span class="emoji">✦</span><div class="label">Teknoloji</div><div class="desc">Yeni ürünler ve incelemeler</div></a>
+          <a class="card" href="https://m.youtube.com/results?search_query=muzik+klipleri"><span class="emoji">♫</span><div class="label">Müzik</div><div class="desc">Klipler ve yeni parçalar</div></a>
+          <a class="card" href="https://m.youtube.com/results?search_query=belgesel"><span class="emoji">◉</span><div class="label">Belgesel</div><div class="desc">Dünya, bilim ve doğa</div></a>
+          <a class="card" href="https://m.youtube.com/results?search_query=oyun+videolari"><span class="emoji">⌘</span><div class="label">Oyun</div><div class="desc">Oyunlar ve yayınlar</div></a>
+          </div><div class="section">Popüler aramalar</div>
+          <a class="wide" href="https://m.youtube.com/results?search_query=son+teknoloji+haberleri">↗ &nbsp; Son teknoloji haberleri</a>
+          <a class="wide" href="https://m.youtube.com/results?search_query=egitici+videolar">↗ &nbsp; Öğretici videolar</a>
+          <a class="wide" href="https://m.youtube.com/results?search_query=komik+videolar">↗ &nbsp; Eğlence ve komedi</a>
+          <div class="foot">Not: YouTube videoları YouTube'un kendi web oynatıcısıyla açılır. Reklamlar ve arka planda oynatma, YouTube'un davranışına göre değişebilir.</div>
+          </body></html>
+          """.trimIndent()
+              }
+          }
+          KOTLIN
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pusula-VIP-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
