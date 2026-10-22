@@ -705,6 +705,7 @@ jobs:
 
                   if (prefs.bgPlay && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                       WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
+                      WebViewCompat.addDocumentStartJavaScript(web, AD_SKIPPER_JS, setOf("*"))
                   }
 
                   web.setFindListener { active, total, _ ->
@@ -727,7 +728,6 @@ jobs:
                       toast("En fazla $MAX_TABS sekme açılabilir")
                       return null
                   }
-                  // Yeni sekme açmadan önce aktif (eski) sekmedeki medyanın sesini/durumunu duraklatmadan bırakıyoruz ki arka planda çalmaya devam edebilsin, ama yenisi açılınca sesler karışmasın.
                   val t = createTab(incognito)
                   switchTo(tabs.size - 1)
                   if (load) t.web.loadUrl(url ?: NEWTAB_URL)
@@ -736,18 +736,10 @@ jobs:
 
               private fun switchTo(i: Int) {
                   if (i !in tabs.indices) return
-                  
-                  // Önceki sekmeden çıkarken, oradaki medyanın sesini kesmemek için sadece görünümü kaldırıyoruz ama durdurmuyoruz (arkada çalmaya devam etsin diye).
-                  // Ancak yeni bir sekme seçtiğimizde seslerin karışmaması için:
-                  // 1. Yeni geçilen sekmede daha önce çalan bir müzik varsa devam ettirilir.
-                  // 2. Diğer sekmeler arka planda bağımsız kalır.
-                  
                   shown?.let {
                       tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }
                       content.removeView(it)
                   }
-                  
-                  // Diğer tüm sekmelerin medyasını sessize al/duraklat ki sesler karışmasın
                   for (idx in tabs.indices) {
                       if (idx != i) {
                           try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {}
@@ -761,7 +753,6 @@ jobs:
                       ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                   t.web.onResume()
                   
-                  // Seçilen sekmeye geri dönüldüğünde varsa medyasını canlandır / devam ettir
                   try {
                       t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null)
                   } catch (_: Exception) {}
@@ -906,11 +897,12 @@ jobs:
                       "doubleclick.net", "googlesyndication.com", "googleadservices.com",
                       "adservice.google.com", "adnxs.com", "adsrvr.org", "adform.net",
                       "adcolony.com", "taboola.com", "outbrain.com", "scorecardresearch.com",
-                      "amazon-adsystem.com", "criteo.com", "hotjar.com"
+                      "amazon-adsystem.com", "criteo.com", "hotjar.com", "pagead2.googlesyndication.com"
                   )
                   if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true
                   return path.contains("/ads/") || path.contains("/adserver/") ||
-                      path.contains("/pagead/") || path.contains("/advertisement/")
+                      path.contains("/pagead/") || path.contains("/advertisement/") ||
+                      path.contains("/api/stats/ads")
               }
 
               private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
@@ -1455,6 +1447,28 @@ jobs:
                           "document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation()},true);" +
                           "document.addEventListener('freeze',function(e){e.stopImmediatePropagation()},true);" +
                           "}catch(e){}})();"
+
+                  const val AD_SKIPPER_JS =
+                      "(function(){" +
+                          "setInterval(function(){" +
+                              "try{" +
+                                  "var adShowing = document.querySelector('.ad-showing, .video-ads, ytd-player-legacy-desktop-watch-ads-renderer');" +
+                                  "var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .videoAdUiSkipButton');" +
+                                  "var videos = document.querySelectorAll('video');" +
+                                  "if (adShowing || skipBtn) {" +
+                                      "videos.forEach(function(v){" +
+                                          "v.muted = true;" +
+                                          "if (!isNaN(v.duration) && v.duration > 0) {" +
+                                              "v.currentTime = v.duration;" +
+                                          "} else {" +
+                                              "v.playbackRate = 16;" +
+                                          "}" +
+                                      "});" +
+                                      "if (skipBtn) { skipBtn.click(); }" +
+                                  "}" +
+                              "}catch(e){}" +
+                          "}, 100);" +
+                      "})();"
 
                   const val BACKGROUND_MEDIA_JS =
                       "(function(){try{" +
