@@ -176,7 +176,7 @@ jobs:
           <main id="main">
             <div id="home">
               <p class="hello" id="hello"></p>
-              <h1>Pusula</h1>
+              <h1>Rota</h1>
               <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">→</button></form>
               <h2>Hızlı erişim</h2>
               <div class="grid" id="pins"></div>
@@ -337,6 +337,8 @@ jobs:
           import androidx.core.view.WindowInsetsCompat
           import androidx.core.view.WindowInsetsControllerCompat
           import androidx.core.widget.doAfterTextChanged
+          import androidx.appcompat.widget.SwitchCompat
+          import androidx.webkit.ScriptHandler
           import androidx.webkit.WebViewAssetLoader
           import androidx.webkit.WebViewCompat
           import androidx.webkit.WebViewFeature
@@ -354,6 +356,8 @@ jobs:
                   var mobileUa: String = ""
                   var progress: Int = 100
                   var preview: Bitmap? = null
+                  var adScript: ScriptHandler? = null
+                  var keepScript: ScriptHandler? = null
               }
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
@@ -632,17 +636,19 @@ jobs:
                   pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f))
                   pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
                   topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
-                  root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
 
                   progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
                   progress.max = 100
                   progress.progressTintList = ColorStateList.valueOf(cAccent)
                   progress.progressBackgroundTintList = ColorStateList.valueOf(cBg)
                   progress.visibility = View.INVISIBLE
-                  root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
 
                   content = FrameLayout(this)
                   content.setBackgroundColor(cBg)
+                  if (!prefs.barBottom) {
+                      root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
+                      root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
+                  }
                   root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
 
                   findBar = LinearLayout(this)
@@ -675,6 +681,10 @@ jobs:
                   findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40)))
                   findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
                   root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
+                  if (prefs.barBottom) {
+                      root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
+                      root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
+                  }
 
                   val dock = LinearLayout(this)
                   dock.orientation = LinearLayout.VERTICAL
@@ -788,10 +798,7 @@ jobs:
                   tab.mobileUa = ua
                   web.addJavascriptInterface(bridge, "Pusula")
 
-                  if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                      if (prefs.bgPlay) WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
-                      if (prefs.adBlock) WebViewCompat.addDocumentStartJavaScript(web, STABLE_AD_BLOCKER_JS, setOf("*"))
-                  }
+                  syncScripts(tab)
 
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
@@ -806,6 +813,23 @@ jobs:
                   tabs.add(tab)
                   updateTabCount()
                   return tab
+              }
+
+              private fun syncScripts(t: BTab) {
+                  if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+                  try {
+                      if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
+                      else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
+                      if (prefs.bgPlay && t.keepScript == null) t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS, setOf("*"))
+                      else if (!prefs.bgPlay && t.keepScript != null) { t.keepScript?.remove(); t.keepScript = null }
+                  } catch (_: Exception) { }
+              }
+
+              /** Ayar değişince betikleri günceller ve açık sayfayı yeniler. */
+              private fun settingsChanged() {
+                  for (t in tabs) syncScripts(t)
+                  val c = tabs.getOrNull(cur) ?: return
+                  if (c.url.startsWith("http")) c.web.reload()
               }
 
               private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? {
@@ -1131,7 +1155,7 @@ jobs:
                       SheetItem("🔍", "Sayfada bul", false) { openFind() },
                       SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() },
                       SheetItem("📤", "Paylaş", false) { shareCurrent() },
-                      SheetItem("🎨", "Tema", false) { chooseTheme() },
+                      SheetItem("🎨", "Tema", false) { chooseTheme { } },
                       SheetItem("⚙️", "Ayarlar", false) { showSettings() }
                   )
                   val col = LinearLayout(this)
@@ -1350,41 +1374,165 @@ jobs:
                   return card
               }
 
+              private fun settingsRow(icon: String, title: String, sub: String?, trailing: View?, onClick: () -> Unit): View {
+                  val row = LinearLayout(this)
+                  row.orientation = LinearLayout.HORIZONTAL
+                  row.gravity = Gravity.CENTER_VERTICAL
+                  row.setPadding(dp(12), dp(10), dp(14), dp(10))
+                  row.background = ripple(shape(cSurface, 18))
+                  row.setOnClickListener { onClick() }
+                  val ic = TextView(this)
+                  ic.text = icon; ic.textSize = 19f; ic.gravity = Gravity.CENTER
+                  val g = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
+                  g.cornerRadius = dp(13).toFloat()
+                  ic.background = g
+                  row.addView(ic, LinearLayout.LayoutParams(dp(42), dp(42)))
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(12), 0, dp(8), 0)
+                  val tt = TextView(this)
+                  tt.text = title; tt.textSize = 15.5f; tt.setTextColor(cText); tt.setTypeface(null, Typeface.BOLD)
+                  col.addView(tt)
+                  if (sub != null) {
+                      val st = TextView(this)
+                      st.text = sub; st.textSize = 12.5f; st.setTextColor(cSub)
+                      col.addView(st)
+                  }
+                  row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  if (trailing != null) row.addView(trailing, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                  return row
+              }
+
+              private fun chevron(): TextView {
+                  val c = TextView(this)
+                  c.text = "›"; c.textSize = 24f; c.setTextColor(cSub)
+                  return c
+              }
+
+              private fun switchRow(icon: String, title: String, sub: String, value: Boolean, onChange: (Boolean) -> Unit): View {
+                  val sw = SwitchCompat(this)
+                  sw.isChecked = value
+                  val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+                  sw.thumbTintList = ColorStateList(states, intArrayOf(Color.WHITE, cSub))
+                  sw.trackTintList = ColorStateList(states, intArrayOf(cAccent, cField))
+                  sw.setOnCheckedChangeListener { _, v -> onChange(v) }
+                  return settingsRow(icon, title, sub, sw) { sw.toggle() }
+              }
+
               private fun showSettings() {
-                  val items = arrayOf(
-                      "Tema: " + Themes.get(prefs.theme).name,
-                      "Arama Motoru: " + Engines.get(prefs.engine).name,
-                      "Arka Planda Çalma: " + (if (prefs.bgPlay) "Açık" else "Kapalı"),
-                      "Reklam Engelleyici: " + (if (prefs.adBlock) "Açık" else "Kapalı"),
-                      "Geçmişi Temizle", "Önbelleği Temizle"
-                  )
-                  AlertDialog.Builder(this).setTitle("Ayarlar").setItems(items) { _, which ->
-                      when (which) {
-                          0 -> chooseTheme()
-                          1 -> chooseEngine()
-                          2 -> { prefs.bgPlay = !prefs.bgPlay; toast("Arka plan ayarı değişti (yeni sekmelerde geçerli)") }
-                          3 -> { prefs.adBlock = !prefs.adBlock; toast("Reklam engelleyici değişti (yeni sekmelerde geçerli)") }
-                          4 -> { prefs.clearHistory(); toast("Geçmiş temizlendi") }
-                          5 -> { clearBrowsingData(); toast("Önbellek temizlendi") }
+                  val d = Dialog(this)
+                  val rootV = LinearLayout(this)
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  head.setPadding(dp(6), 0, dp(6), dp(10))
+                  val title = TextView(this)
+                  title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
+                  head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  val done = textBtn("Bitti") { d.dismiss() }
+                  done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
+                  head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
+                  rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  val list = LinearLayout(this)
+                  list.orientation = LinearLayout.VERTICAL
+                  fun add(v: View) {
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      lp.bottomMargin = dp(8)
+                      list.addView(v, lp)
+                  }
+                  fun label(t: String) {
+                      val l = TextView(this)
+                      l.text = t.uppercase(); l.textSize = 11.5f; l.setTextColor(cSub); l.setTypeface(null, Typeface.BOLD)
+                      l.letterSpacing = 0.1f
+                      l.setPadding(dp(6), dp(10), 0, dp(6))
+                      list.addView(l)
+                  }
+                  label("Gezinme")
+                  add(switchRow("🛡️", "Reklam engelleyici", "YouTube reklamlarını atlar", prefs.adBlock) { v ->
+                      prefs.adBlock = v; settingsChanged()
+                  })
+                  add(switchRow("🎧", "Arka planda çalma", "Uygulamadan çıkınca müzik sürer", prefs.bgPlay) { v ->
+                      prefs.bgPlay = v; settingsChanged()
+                  })
+                  add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
+                      prefs.barBottom = v; applyTheme()
+                  })
+                  label("Görünüm ve arama")
+                  add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
+                  add(settingsRow("🔎", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
+                  label("Gizlilik")
+                  add(settingsRow("🕘", "Geçmişi temizle", null, null) { prefs.clearHistory(); toast("Geçmiş temizlendi") })
+                  add(settingsRow("🧹", "Önbelleği ve çerezleri temizle", null, null) { clearBrowsingData(); toast("Temizlendi") })
+
+                  val scroll = ScrollView(this)
+                  scroll.addView(list)
+                  rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+                  sheetWindow(d, rootV, true)
+                  d.show()
+              }
+
+              private fun chooseTheme(onDone: () -> Unit) {
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(14), dp(12), dp(14), dp(22))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val tt = TextView(this)
+                  tt.text = "Tema seç"; tt.textSize = 18f; tt.setTypeface(null, Typeface.BOLD); tt.setTextColor(cText)
+                  tt.setPadding(dp(6), 0, 0, dp(10))
+                  col.addView(tt)
+                  for (p in Themes.all) {
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.HORIZONTAL
+                      row.gravity = Gravity.CENTER_VERTICAL
+                      row.setPadding(dp(14), dp(10), dp(14), dp(10))
+                      val rb = GradientDrawable()
+                      rb.setColor(p.bg); rb.cornerRadius = dp(18).toFloat()
+                      if (p.id == prefs.theme) rb.setStroke(dp(2), p.accent) else rb.setStroke(dp(1), p.field)
+                      row.background = rb
+                      val dot = View(this)
+                      val dg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(p.accent, p.accent2))
+                      dg.shape = GradientDrawable.OVAL
+                      dot.background = dg
+                      row.addView(dot, LinearLayout.LayoutParams(dp(30), dp(30)))
+                      val nm = TextView(this)
+                      nm.text = p.name; nm.textSize = 15.5f; nm.setTextColor(p.text); nm.setTypeface(null, Typeface.BOLD)
+                      nm.setPadding(dp(14), 0, 0, 0)
+                      row.addView(nm, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                      if (p.id == prefs.theme) {
+                          val ck = TextView(this)
+                          ck.text = "✓"; ck.textSize = 18f; ck.setTextColor(p.accent); ck.setTypeface(null, Typeface.BOLD)
+                          row.addView(ck)
                       }
-                  }.setNegativeButton("Kapat", null).show()
+                      row.setOnClickListener {
+                          d.dismiss()
+                          prefs.theme = p.id
+                          applyTheme()
+                          onDone()
+                      }
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      lp.bottomMargin = dp(8)
+                      col.addView(row, lp)
+                  }
+                  val sc = ScrollView(this)
+                  sc.addView(col)
+                  sheetWindow(d, sc, false)
+                  d.show()
               }
 
-              private fun chooseTheme() {
-                  val names = Themes.all.map { it.name }.toTypedArray()
-                  val sel = Themes.all.indexOfFirst { it.id == prefs.theme }.coerceAtLeast(0)
-                  AlertDialog.Builder(this).setTitle("Tema").setSingleChoiceItems(names, sel) { dlg, which ->
-                      prefs.theme = Themes.all[which].id
-                      dlg.dismiss()
-                      applyTheme()
-                  }.show()
-              }
-
-              private fun chooseEngine() {
+              private fun chooseEngine(onDone: () -> Unit) {
                   val names = Engines.all.map { it.name }.toTypedArray()
                   val sel = Engines.all.indexOfFirst { it.id == prefs.engine }.coerceAtLeast(0)
                   AlertDialog.Builder(this).setTitle("Arama Motoru").setSingleChoiceItems(names, sel) { dlg, which ->
-                      prefs.engine = Engines.all[which].id; dlg.dismiss()
+                      prefs.engine = Engines.all[which].id; dlg.dismiss(); onDone()
                   }.show()
               }
 
@@ -1420,15 +1568,7 @@ jobs:
                       "var P=JSON.parse;JSON.parse=function(){return clean(P.apply(this,arguments));};" +
                       "try{var v;Object.defineProperty(window,'ytInitialPlayerResponse',{configurable:true," +
                       "get:function(){return v;},set:function(x){clean(x);v=x;}});}catch(e){}" +
-                      "var F=window.fetch;if(F){window.fetch=function(){var a=arguments,u='';" +
-                      "try{u=typeof a[0]==='string'?a[0]:(a[0]&&a[0].url)||'';}catch(e){}" +
-                      "var p=F.apply(this,a);" +
-                      "if(u.indexOf('/youtubei/v1/player')<0&&u.indexOf('/youtubei/v1/next')<0)return p;" +
-                      "return p.then(function(r){try{return r.clone().text().then(function(t){try{" +
-                      "if(t.indexOf('adPlacements')<0&&t.indexOf('playerAds')<0&&t.indexOf('adSlots')<0)return r;" +
-                      "var j=JSON.parse(t);var hd=new Headers(r.headers);hd.delete('content-length');" +
-                      "return new Response(JSON.stringify(j),{status:r.status,statusText:r.statusText,headers:hd});" +
-                      "}catch(e){return r;}},function(){return r;});}catch(e){return r;}});};}" +
+                      "try{var RJ=Response.prototype.json;Response.prototype.json=function(){return RJ.call(this).then(clean);};}catch(e){}" +
                       "var muted=false;" +
                       "setInterval(function(){try{" +
                       "var pl=document.querySelector('.html5-video-player');var vd=document.querySelector('video');" +
@@ -1436,7 +1576,7 @@ jobs:
                       "if(ad&&vd){if(!muted){vd.muted=true;muted=true;}if(isFinite(vd.duration)&&vd.duration>0){vd.currentTime=vd.duration;}}" +
                       "else if(muted&&vd){vd.muted=false;muted=false;}" +
                       "var b=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytp-ad-overlay-close-button');" +
-                      "if(b)b.click();}catch(e){}},300);" +
+                      "if(b)b.click();}catch(e){}},500);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
@@ -1520,7 +1660,7 @@ jobs:
                   val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                   val n = NotificationCompat.Builder(this, CHANNEL)
                       .setSmallIcon(R.drawable.ic_notif)
-                      .setContentTitle("Pusula Medya Oynatıcı")
+                      .setContentTitle("Rota · Medya")
                       .setContentText("Arka Planda Çalışıyor")
                       .setContentIntent(open)
                       .setOngoing(true)
@@ -1581,6 +1721,8 @@ jobs:
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
                 set(v) { sp.edit().putString("theme", v).apply() }
+              var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
+                set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
 
@@ -1689,9 +1831,26 @@ jobs:
           EOF
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
-              <path android:fillColor="#1457E8" android:pathData="M20,0 H76 A20,20 0 0 1 96,20 V76 A20,20 0 0 1 76,96 H20 A20,20 0 0 1 0,76 V20 A20,20 0 0 1 20,0 Z"/>
-              <path android:fillColor="#FFFFFF" android:pathData="M48,24 L58,50 H38 Z"/>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:aapt="http://schemas.android.com/aapt"
+              android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+              <path android:pathData="M24,0 H72 A24,24 0 0 1 96,24 V72 A24,24 0 0 1 72,96 H24 A24,24 0 0 1 0,72 V24 A24,24 0 0 1 24,0 Z">
+                  <aapt:attr name="android:fillColor">
+                      <gradient android:startX="0" android:startY="0" android:endX="96" android:endY="96" android:type="linear">
+                          <item android:offset="0" android:color="#FF2F6BFF"/>
+                          <item android:offset="0.55" android:color="#FF7A4DFF"/>
+                          <item android:offset="1" android:color="#FFFF4D9D"/>
+                      </gradient>
+                  </aapt:attr>
+              </path>
+              <path android:strokeColor="#E6FFFFFF" android:strokeWidth="3.5" android:fillColor="#00000000"
+                  android:pathData="M48,17 A31,31 0 1 1 47.9,17 Z"/>
+              <path android:strokeColor="#66FFFFFF" android:strokeWidth="2" android:pathData="M48,6 L48,13 M48,83 L48,90 M6,48 L13,48 M83,48 L90,48"/>
+              <group android:pivotX="48" android:pivotY="48" android:rotation="45">
+                  <path android:fillColor="#FFFFFFFF" android:pathData="M48,20 L59,48 L37,48 Z"/>
+                  <path android:fillColor="#88FFFFFF" android:pathData="M48,76 L59,48 L37,48 Z"/>
+              </group>
+              <path android:fillColor="#FF2F6BFF" android:pathData="M48,43 A5,5 0 1 1 47.9,43 Z"/>
           </vector>
           EOF
           cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
@@ -1704,7 +1863,7 @@ jobs:
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
           EOF
           cat > app/src/main/res/values/strings.xml <<'EOF'
-          <resources><string name="app_name">Pusula Medya</string></resources>
+          <resources><string name="app_name">Rota</string></resources>
           EOF
           cat > app/src/main/res/values/themes.xml <<'EOF'
           <resources>
