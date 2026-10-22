@@ -318,13 +318,15 @@ jobs:
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val js = when (intent?.action) {
-                          PlaybackService.ACTION_PLAY -> MEDIA_PLAY_JS
+                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
                           PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
                           PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
                           else -> return
                       }
-                      tabs.toList().forEach { t ->
+                      val targets = if (intent.action == PlaybackService.ACTION_PAUSE) tabs.toList()
+                                    else listOfNotNull(tabs.getOrNull(cur))
+                      targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
                       }
                   }
@@ -410,6 +412,7 @@ jobs:
                   askNotificationPermission()
                   val mediaFilter = IntentFilter().apply {
                       addAction(PlaybackService.ACTION_PLAY)
+                      addAction(PlaybackService.ACTION_TOGGLE)
                       addAction(PlaybackService.ACTION_PAUSE)
                       addAction(PlaybackService.ACTION_PREVIOUS)
                       addAction(PlaybackService.ACTION_NEXT)
@@ -1108,6 +1111,7 @@ jobs:
               private fun errorHtml(url: String, desc: String): String {
                   val bg = if (dark) "#0f1115" else "#f4f5f7"
                   val fg = if (dark) "#e8eaed" else "#1b1f24"
+                  val note = ""
                   val js = Html.escapeHtml("location.href=" + JSONObject.quote(url))
                   return "<!doctype html><html><head><meta charset=\"utf-8\">" +
                       "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
@@ -1116,7 +1120,7 @@ jobs:
                       "h1{font-size:22px}p{opacity:.75;line-height:1.5;word-break:break-word}" +
                       "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
                       "</style></head><body><h1>Sayfa açılamadı</h1><p>" + Html.escapeHtml(url) + "</p><p>" +
-                      Html.escapeHtml(desc) + "</p>" +
+                      Html.escapeHtml(desc) + "</p>" + note +
                       "<button onclick=\"" + js + "\">Tekrar dene</button></body></html>"
               }
 
@@ -1384,11 +1388,11 @@ jobs:
                               0 -> chooseEngine()
                               1 -> {
                                   prefs.bgPlay = !prefs.bgPlay
-                                  toast("Arka planda çalma: " + (if (prefs.bgPlay) "açık" else "kapalı"))
+                                  toast("Arka planda çalma: " + (if (prefs.bgPlay) "açık" else "kapalı") + ". Uygulamayı kapatıp açınca tam geçerli olur.")
                               }
                               2 -> {
                                   prefs.adBlock = !prefs.adBlock
-                                  toast("Reklam engelleme " + (if (prefs.adBlock) "açıldı" else "kapatıldı"))
+                                  toast("Reklam engelleme " + (if (prefs.adBlock) "açıldı" else "kapatıldı") + ". Bazı reklamlar görünmeye devam edebilir.")
                               }
                               3 -> openTab(null, true, true)
                               4 -> {
@@ -1398,7 +1402,7 @@ jobs:
                               5 -> clearBrowsingData()
                               6 -> AlertDialog.Builder(this)
                                   .setTitle("Pusula")
-                                  .setMessage("Hafif ve sade bir tarayıcı.")
+                                  .setMessage("Hafif ve sade bir tarayıcı. Sekmeler, yer imleri, geçmiş, indirme ve arka planda müzik çalma içerir.")
                                   .setPositiveButton(android.R.string.ok, null)
                                   .show()
                           }
@@ -1438,18 +1442,22 @@ jobs:
                           "document.addEventListener('visibilitychange',function(e){" +
                           "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
                           "e.stopImmediatePropagation();},true);" +
+                          "document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation()},true);" +
+                          "document.addEventListener('freeze',function(e){e.stopImmediatePropagation()},true);" +
                           "}catch(e){}})();"
 
                   const val BACKGROUND_MEDIA_JS =
                       "(function(){try{" +
                           "document.querySelectorAll('video,audio').forEach(function(m){" +
-                          "if(!m.paused && !m.ended){m.dataset.pusulaWasPlaying='1';}else if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                          "if(!m.paused && !m.ended){m.dataset.pusulaWasPlaying='1';}" +
                           "});" +
                           "}catch(e){}})();"
                   const val MEDIA_PLAY_JS = "(function(){var v=document.querySelector('video,audio');if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{var b=document.querySelector('.ytp-play-button[aria-label*=Play],.ytp-play-button[title*=Play]');if(b)b.click();}})();"
-                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){m.pause();});})();"
-                  const val MEDIA_PREVIOUS_JS = "(function(){var b=document.querySelector('.ytp-prev-button');if(b)b.click();else document.querySelectorAll('video,audio').forEach(function(m){m.currentTime=0;});})();"
+                  const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
+                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.pause();});})();"
+                  const val MEDIA_PREVIOUS_JS = "(function(){var b=document.querySelector('.ytp-prev-button');if(b)b.click();})();"
                   const val MEDIA_NEXT_JS = "(function(){var b=document.querySelector('.ytp-next-button');if(b)b.click();})();"
+
               }
           }
           EOF
@@ -1470,6 +1478,10 @@ jobs:
           import android.support.v4.media.session.MediaSessionCompat
           import android.support.v4.media.session.PlaybackStateCompat
 
+          /**
+           * Uygulama arka plana geçince çalışır. Bildirim göstererek Android'in uygulamayı kapatmasını
+           * önler; böylece sayfadaki müzik/video sesi devam eder. Uygulamaya dönünce durdurulur.
+           */
           class PlaybackService : Service() {
 
               private lateinit var mediaSession: MediaSessionCompat
@@ -1494,7 +1506,7 @@ jobs:
 
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                   when (intent?.action) {
-                      ACTION_PLAY, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> {
+                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> {
                           sendBroadcast(Intent(intent.action).setPackage(packageName))
                       }
                   }
@@ -1516,7 +1528,7 @@ jobs:
                       val icon = when (action) {
                           ACTION_PREVIOUS -> android.R.drawable.ic_media_previous
                           ACTION_NEXT -> android.R.drawable.ic_media_next
-                          ACTION_PLAY -> android.R.drawable.ic_media_play
+                          ACTION_PLAY, ACTION_TOGGLE -> android.R.drawable.ic_media_play
                           else -> android.R.drawable.ic_media_pause
                       }
                       return NotificationCompat.Action.Builder(icon, title, pi).build()
@@ -1527,12 +1539,11 @@ jobs:
                       .setContentText("YouTube ve sayfa medyası")
                       .setContentIntent(open)
                       .addAction(mediaAction(ACTION_PREVIOUS, "Önceki", 11))
-                      .addAction(mediaAction(ACTION_PLAY, "Oynat", 12))
-                      .addAction(mediaAction(ACTION_PAUSE, "Duraklat", 13))
+                      .addAction(mediaAction(ACTION_TOGGLE, "Oynat / duraklat", 12))
                       .addAction(mediaAction(ACTION_NEXT, "Sonraki", 14))
                       .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
                           .setMediaSession(mediaSession.sessionToken)
-                          .setShowActionsInCompactView(0, 1, 3))
+                          .setShowActionsInCompactView(0, 1, 2))
                       .setOngoing(true)
                       .setOnlyAlertOnce(true)
                       .build()
@@ -1561,6 +1572,7 @@ jobs:
               companion object {
                   const val CHANNEL = "playback"
                   const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
+                  const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
                   const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
                   const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
                   const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
@@ -1574,7 +1586,9 @@ jobs:
           import android.net.Uri
           import org.json.JSONArray
           import org.json.JSONObject
+          import java.io.ByteArrayInputStream
 
+          /** Arama motorları. */
           object Engines {
               class E(val id: String, val name: String, val search: String, val home: String)
 
@@ -1592,6 +1606,7 @@ jobs:
               "^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$"
           )
 
+          /** Adres çubuğuna yazılanı adrese ya da arama adresine çevirir. */
           fun resolveInput(raw: String, engine: Engines.E): String {
               val t = raw.trim()
               if (t.isEmpty()) return engine.home
@@ -1600,7 +1615,9 @@ jobs:
               return engine.search.replace("%s", Uri.encode(t))
           }
 
+          /** Ayarlar, yer imleri, geçmiş ve açık sekmeler. Hepsi yalnızca telefonda saklanır. */
           class Prefs(context: Context) {
+
               class Entry(val title: String, val url: String)
 
               private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
@@ -1625,7 +1642,9 @@ jobs:
                           val o = arr.getJSONObject(i)
                           out.add(Entry(o.optString("t"), o.optString("u")))
                       }
-                  } catch (_: Exception) { }
+                  } catch (e: Exception) {
+                      // bozuk veri: boş liste
+                  }
                   return out
               }
 
@@ -1635,10 +1654,13 @@ jobs:
                   sp.edit().putString(key, arr.toString()).apply()
               }
 
+              // ---- yer imleri ----
+
               fun bookmarks(): List<Entry> = readList("bookmarks")
 
               fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
 
+              /** Yer imi yoksa ekler, varsa kaldırır. Eklenmişse true döner. */
               fun toggleBookmark(title: String, url: String): Boolean {
                   val list = readList("bookmarks")
                   val had = list.removeAll { it.url == url }
@@ -1652,6 +1674,8 @@ jobs:
                   list.removeAll { it.url == url }
                   writeList("bookmarks", list)
               }
+
+              // ---- geçmiş ----
 
               fun history(): List<Entry> = readList("history")
 
@@ -1673,6 +1697,8 @@ jobs:
                   sp.edit().putString("history", "[]").apply()
               }
 
+              // ---- açık sekmeler ----
+
               fun saveTabs(urls: List<String>, current: Int) {
                   val arr = JSONArray()
                   for (u in urls) arr.put(u)
@@ -1684,7 +1710,9 @@ jobs:
                   try {
                       val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
                       for (i in 0 until arr.length()) out.add(arr.getString(i))
-                  } catch (_: Exception) { }
+                  } catch (e: Exception) {
+                      // bozuk veri
+                  }
                   return out
               }
 
@@ -1697,8 +1725,14 @@ jobs:
           import android.webkit.JavascriptInterface
           import org.json.JSONArray
           import org.json.JSONObject
+          import java.io.ByteArrayInputStream
 
+          /**
+           * Yeni sekme sayfasının ("Pusula" adıyla) okuduğu küçük köprü.
+           * [trusted] yalnızca kendi sayfamız yüklüyken true olur; dış siteler hiçbir şey okuyamaz.
+           */
           class PusulaBridge(private val prefs: Prefs) {
+
               @Volatile
               var trusted = false
 
