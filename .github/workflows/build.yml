@@ -1877,21 +1877,13 @@ jobs:
               <bool name="light_bars">false</bool>
           </resources>
           EOF
-          cat > app/src/main/res/values-night/colors.xml <<'EOF'
-          <resources>
-              <color name="bg">#0C0F14</color>
-          </resources>
-          EOF
+          printf '%s\n' '<resources>' '    <color name="bg">#0C0F14</color>' '</resources>' > app/src/main/res/values-night/colors.xml
           cat > app/src/main/res/values/bools.xml <<'EOF'
           <resources>
               <bool name="light_bars">true</bool>
           </resources>
           EOF
-          cat > app/src/main/res/values/colors.xml <<'EOF'
-          <codes><resources>
-              <color name="bg">#F4F5F7</color>
-          </resources>
-          EOF
+          printf '%s\n' '<resources>' '    <color name="bg">#F4F5F7</color>' '</resources>' > app/src/main/res/values/colors.xml
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources>
               <string name="app_name">Pusula</string>
