@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.0"
+                  versionName = "2.1"
               }
 
               buildTypes {
@@ -152,7 +152,7 @@ jobs:
           <body>
           <main>
             <h1>Pusula Medya</h1>
-            <p class="sub">Kesintisiz ve Reklamsız Video Deneyimi</p>
+            <p class="sub">Kesintisiz ve Stabil Video Deneyimi</p>
             <form id="f"><input id="q" type="search" placeholder="YouTube'da Ara veya Bağlantı Yapıştır" autocomplete="off"><button class="go" type="submit">&#8594;</button></form>
             <h2>Hızlı Erişim</h2>
             <div class="grid" id="pins"></div>
@@ -635,7 +635,7 @@ jobs:
 
                   if (prefs.bgPlay && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                       WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
-                      WebViewCompat.addDocumentStartJavaScript(web, PRO_AD_KILLER_JS, setOf("*"))
+                      WebViewCompat.addDocumentStartJavaScript(web, STABLE_AD_BLOCKER_JS, setOf("*"))
                   }
 
                   web.setFindListener { active, total, _ ->
@@ -1077,7 +1077,7 @@ jobs:
                   val items = arrayOf(
                       "Arama Motoru: " + Engines.get(prefs.engine).name,
                       "Arka Planda Çalma: " + (if (prefs.bgPlay) "Açık" else "Kapalı"),
-                      "Gelişmiş Reklam Engelleyici: " + (if (prefs.adBlock) "Açık" else "Kapalı"),
+                      "Reklam Engelleyici: " + (if (prefs.adBlock) "Açık" else "Kapalı"),
                       "Geçmişi Temizle", "Önbelleği Temizle"
                   )
                   AlertDialog.Builder(this).setTitle("Ayarlar").setItems(items) { _, which ->
@@ -1120,29 +1120,24 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // YouTube reklamlarını direkt ortadan kaldıran ve atlayan en güncel profesyonel script
-                  const val PRO_AD_KILLER_JS =
+                  // Döngüye sokmayan, güvenli ve stabil reklam atlayıcı script
+                  const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
                           "setInterval(function(){" +
                               "try{" +
-                                  "var adOverlay = document.querySelector('.ad-showing, .video-ads, ytd-player-legacy-desktop-watch-ads-renderer');" +
                                   "var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .videoAdUiSkipButton');" +
-                                  "var videos = document.querySelectorAll('video');" +
-                                  "if (adOverlay || skipBtn) {" +
-                                      "videos.forEach(function(v){" +
-                                          "v.muted = true;" +
-                                          "if (!isNaN(v.duration) && v.duration > 0) {" +
-                                              "v.currentTime = v.duration - 0.1;" +
-                                          "} else {" +
-                                              "v.playbackRate = 16;" +
-                                          "}" +
-                                      "});" +
-                                      "if (skipBtn) { skipBtn.click(); }" +
+                                  "if (skipBtn) { skipBtn.click(); }" +
+                                  "var adShowing = document.querySelector('.ad-showing');" +
+                                  "if (adShowing) {" +
+                                      "var v = document.querySelector('video');" +
+                                      "if (v && !v.muted) { v.muted = true; }" +
+                                      "if (v && v.playbackRate < 16) { v.playbackRate = 16; }" +
                                   "} else {" +
-                                      "videos.forEach(function(v){ if(v.playbackRate === 16) v.playbackRate = 1; });" +
+                                      "var v = document.querySelector('video');" +
+                                      "if (v && v.playbackRate === 16) { v.playbackRate = 1; }" +
                                   "}" +
                               "}catch(e){}" +
-                          "}, 100);" +
+                          "}, 300);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
