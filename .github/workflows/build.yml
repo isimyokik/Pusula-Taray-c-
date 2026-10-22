@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.2"
+                  versionName = "2.3"
               }
 
               buildTypes {
@@ -1120,7 +1120,6 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // Bekletmeden, reklamı anında sonuna taşıyan ve atlama butonuna basan kesin çözüm
                   const val INSTANT_SKIP_AD_JS =
                       "(function(){" +
                           "setInterval(function(){" +
@@ -1203,7 +1202,7 @@ jobs:
               }
           }
           EOF
-          cat > app/src/main/java/com/pusula.browser/Prefs.kt <<'EOF'
+          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
           package com.pusula.browser
 
           import android.content.Context
@@ -1363,6 +1362,10 @@ jobs:
         with: { gradle-version: 8.9 }
       - name: APK derle
         run: gradle assembleDebug --no-daemon
+      - name: APK dosyasini dogrula
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -print
+          test -n "$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
       - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
