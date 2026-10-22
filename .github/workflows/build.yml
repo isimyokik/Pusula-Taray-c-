@@ -116,7 +116,6 @@ jobs:
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
-                      <!-- Bağlantılara tıklanınca Pusula'nın da seçenek olarak çıkması (varsayılan tarayıcı olabilmesi) için -->
                       <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
                           <category android:name="android.intent.category.DEFAULT" />
@@ -297,7 +296,6 @@ jobs:
 
           class MainActivity : AppCompatActivity() {
 
-              /** Bir sekme: kendi WebView'ı, başlığı ve adresi vardır. */
               private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
                   var title: String = "Yeni sekme"
                   var url: String = ""
@@ -325,8 +323,6 @@ jobs:
                           PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
                           else -> return
                       }
-                      // Oynat/durdur ve parça atlama yalnızca seçili sekmeye gider; aksi halde
-                      // her WebView komutu alıp sesi kesebilir veya birden fazla videoyu başlatabilir.
                       val targets = if (intent.action == PlaybackService.ACTION_PAUSE) tabs.toList()
                                     else listOfNotNull(tabs.getOrNull(cur))
                       targets.forEach { t ->
@@ -337,8 +333,6 @@ jobs:
               private val backgroundMediaPump = object : Runnable {
                   override fun run() {
                       if (!appInBackground || !prefs.bgPlay) return
-                      // Medya başka sekmede çalıyor olabilir. Yeni sekmeye geçildiğinde de
-                      // bütün WebView'larda çalan medyayı kontrol et.
                       tabs.toList().forEach { t ->
                           try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
                       }
@@ -346,7 +340,6 @@ jobs:
                   }
               }
 
-              // arayüz
               private lateinit var root: LinearLayout
               private lateinit var content: FrameLayout
               private lateinit var fullscreen: FrameLayout
@@ -360,7 +353,6 @@ jobs:
               private lateinit var findInput: EditText
               private lateinit var findCount: TextView
 
-              // renkler
               private var dark = false
               private var cBg = 0
               private var cSurface = 0
@@ -382,8 +374,6 @@ jobs:
                       )
                       fileCb = null
                   }
-
-              // ------------------------------------------------------------------ yaşam döngüsü
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
@@ -437,15 +427,12 @@ jobs:
                   saveTabs()
                   CookieManager.getInstance().flush()
                   if (prefs.bgPlay) {
-                      // WebView'ı pause etme; hizmet süreci canlı tutar ve JS oynatımı yeniden dener.
                       appInBackground = true
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
                       try {
                           ContextCompat.startForegroundService(this, Intent(this, PlaybackService::class.java))
-                      } catch (e: Exception) {
-                          // Android arka plan hizmetini reddederse WebView yine de pause edilmez.
-                      }
+                      } catch (_: Exception) { }
                   } else {
                       appInBackground = true
                       shown?.onPause()
@@ -464,16 +451,10 @@ jobs:
                   try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
                   handler.removeCallbacks(backgroundMediaPump)
                   for (t in tabs) {
-                      try {
-                          t.web.destroy()
-                      } catch (e: Exception) {
-                          // yok say
-                      }
+                      try { t.web.destroy() } catch (_: Exception) { }
                   }
                   super.onDestroy()
               }
-
-              // ------------------------------------------------------------------ arayüz kurulumu
 
               private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
 
@@ -520,12 +501,10 @@ jobs:
                   root.isFocusable = true
                   root.isFocusableInTouchMode = true
 
-                  // --- üst çubuk: adres/arama, yenile
                   val top = LinearLayout(this)
                   top.orientation = LinearLayout.HORIZONTAL
                   top.gravity = Gravity.CENTER_VERTICAL
                   top.setPadding(dp(8), dp(6), dp(4), dp(6))
-
 
                   privateBadge = TextView(this)
                   privateBadge.text = "● GİZLİ MOD"
@@ -579,13 +558,10 @@ jobs:
                   progress.visibility = View.INVISIBLE
                   root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
 
-                  // --- sayfa alanı
                   content = FrameLayout(this)
                   content.setBackgroundColor(cBg)
                   root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
 
-
-                  // --- sayfada bul çubuğu
                   findBar = LinearLayout(this)
                   findBar.orientation = LinearLayout.HORIZONTAL
                   findBar.gravity = Gravity.CENTER_VERTICAL
@@ -623,7 +599,6 @@ jobs:
                   findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
                   root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
 
-                  // --- alt çubuk: geri, ileri, ana sayfa, yeni sekme, sekmeler, menü
                   val bottom = LinearLayout(this)
                   bottom.orientation = LinearLayout.HORIZONTAL
                   bottom.gravity = Gravity.CENTER_VERTICAL
@@ -652,7 +627,6 @@ jobs:
                   }
                   root.addView(bottom, LinearLayout.LayoutParams(match, wrap))
 
-                  // --- tam ekran video katmanı
                   fullscreen = FrameLayout(this)
                   fullscreen.setBackgroundColor(Color.BLACK)
                   fullscreen.visibility = View.GONE
@@ -674,9 +648,6 @@ jobs:
                   root.requestFocus()
                   updateTabCount()
               }
-
-
-              // ------------------------------------------------------------------ açılış
 
               private fun startBrowsing() {
                   if (tabs.isEmpty()) {
@@ -703,10 +674,6 @@ jobs:
                   if (s != null) openTab(s)
               }
 
-
-
-              // ------------------------------------------------------------------ sekmeler
-
               private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
 
               @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
@@ -729,14 +696,13 @@ jobs:
                   s.allowContentAccess = false
                   s.setGeolocationEnabled(false)
                   s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                  // "wv" işareti kalkınca Google girişi ve bazı siteler normal tarayıcı gibi davranır.
+
                   val ua = s.userAgentString
                       .replace("; wv", "")
                       .replace(Regex("Version/\\d+\\.\\d+ "), "")
                   s.userAgentString = ua
                   tab.mobileUa = ua
                   web.addJavascriptInterface(bridge, "Pusula")
-                  // Sayfa görünürlüğünü sahte biçimde değiştirme: bazı sitelerde medya yaşam döngüsünü bozabiliyor.
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
                           findCount.text = if (total == 0) "0" else "${active + 1}/$total"
@@ -752,7 +718,6 @@ jobs:
                   return tab
               }
 
-              /** Yeni sekme açar. [url] null ise Pusula başlangıç sayfası açılır. */
               private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? {
                   if (tabs.size >= MAX_TABS) {
                       toast("En fazla $MAX_TABS sekme açılabilir")
@@ -801,7 +766,6 @@ jobs:
                   t.web.destroy()
                   tabs.removeAt(index)
                   if (t.incognito) {
-                      // WebView verileri süreç içinde ortaktır; kapanışta gizli oturum verilerini temizle.
                       CookieManager.getInstance().removeAllCookies(null)
                       CookieManager.getInstance().flush()
                       WebStorage.getInstance().deleteAllData()
@@ -833,8 +797,6 @@ jobs:
                   }
                   prefs.saveTabs(urls, 0)
               }
-
-              // ------------------------------------------------------------------ gezinti
 
               private fun shownUrl(u: String): String =
                   if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) ""
@@ -913,7 +875,6 @@ jobs:
                   }
               }
 
-              // Basit URL tabanlı reklam/izleyici engeli. Sunucu taraflı reklamları engelleme garantisi vermez.
               private fun shouldBlockAd(uri: Uri): Boolean {
                   val host = (uri.host ?: "").lowercase()
                   val path = (uri.encodedPath ?: "").lowercase()
@@ -927,8 +888,6 @@ jobs:
                   return path.contains("/ads/") || path.contains("/adserver/") ||
                       path.contains("/pagead/") || path.contains("/advertisement/")
               }
-
-              // ------------------------------------------------------------------ WebView istemcileri
 
               private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
 
@@ -1035,7 +994,7 @@ jobs:
                       return try {
                           fileLauncher.launch(fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).setType("*/*"))
                           true
-                      } catch (e: Exception) {
+                      } catch (_: Exception) {
                           fileCb?.onReceiveValue(null)
                           fileCb = null
                           false
@@ -1129,7 +1088,7 @@ jobs:
                       i.component = null
                       i.selector = null
                       startActivity(i)
-                  } catch (e: Exception) {
+                  } catch (_: Exception) {
                       toast("Bu bağlantıyı açacak uygulama bulunamadı")
                   }
                   return true
@@ -1138,7 +1097,6 @@ jobs:
               private fun errorHtml(url: String, desc: String): String {
                   val bg = if (dark) "#0f1115" else "#f4f5f7"
                   val fg = if (dark) "#e8eaed" else "#1b1f24"
-                  val note = ""
                   val js = Html.escapeHtml("location.href=" + JSONObject.quote(url))
                   return "<!doctype html><html><head><meta charset=\"utf-8\">" +
                       "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
@@ -1147,11 +1105,9 @@ jobs:
                       "h1{font-size:22px}p{opacity:.75;line-height:1.5;word-break:break-word}" +
                       "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
                       "</style></head><body><h1>Sayfa açılamadı</h1><p>" + Html.escapeHtml(url) + "</p><p>" +
-                      Html.escapeHtml(desc) + "</p>" + note +
+                      Html.escapeHtml(desc) + "</p>" +
                       "<button onclick=\"" + js + "\">Tekrar dene</button></body></html>"
               }
-
-              // ------------------------------------------------------------------ indirme
 
               private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) {
                   if (!url.startsWith("http")) {
@@ -1174,12 +1130,10 @@ jobs:
                       }
                       (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
                       toast("İndirme başladı: $name")
-                  } catch (e: Exception) {
+                  } catch (_: Exception) {
                       toast("İndirme başlatılamadı")
                   }
               }
-
-              // ------------------------------------------------------------------ menü ve pencereler
 
               private fun toast(msg: String) {
                   Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
@@ -1369,7 +1323,6 @@ jobs:
                           d.dismiss()
                           switchTo(i)
                       }
-                      // Sekme ön izlemesi: WebView'ın o anki görüntüsünü küçük bir bitmap olarak göster.
                       val preview = ImageView(this)
                       preview.scaleType = ImageView.ScaleType.CENTER_CROP
                       preview.background = shape(cField, 6)
@@ -1401,16 +1354,6 @@ jobs:
                       box.addView(row, lp)
                   }
               }
-
-              private fun closeAllTabs() {
-                  while (tabs.size > 1) closeTab(tabs.size - 1)
-                  val t = tabs.getOrNull(0) ?: return
-                  t.web.clearHistory()
-                  loadInCurrent(NEWTAB_URL)
-              }
-
-
-              // ------------------------------------------------------------------ ayarlar
 
               private fun showSettings() {
                   val eng = Engines.get(prefs.engine)
@@ -1478,12 +1421,10 @@ jobs:
                   const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
                   const val MAX_TABS = 20
                   const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.ended){m.dataset.pusulaWasPlaying='1';}});}catch(e){}})();"
-                  const val MEDIA_PLAY_JS = "(function(){var v=document.querySelector('video,audio');if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{var b=document.querySelector('.ytp-play-button[aria-label*=Play],.ytp-play-button[title*=Play]');if(b)b.click();}})();"
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
                   const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.pause();});})();"
                   const val MEDIA_PREVIOUS_JS = "(function(){var b=document.querySelector('.ytp-prev-button');if(b)b.click();})();"
                   const val MEDIA_NEXT_JS = "(function(){var b=document.querySelector('.ytp-next-button');if(b)b.click();})();"
-
               }
           }
           EOF
@@ -1501,18 +1442,18 @@ jobs:
           import androidx.core.app.NotificationCompat
           import androidx.core.app.ServiceCompat
 
-          /** Silent, minimal foreground service to keep the WebView process eligible for background playback.
-           * Android requires a foreground-service notification; this is not a media-control notification.
-           */
           class PlaybackService : Service() {
+
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> {
+                          sendBroadcast(Intent(intent.action).setPackage(packageName))
+                      }
+                  }
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
                       nm.createNotificationChannel(
-                          NotificationChannel(CHANNEL, "Arka planda çalışma", NotificationManager.IMPORTANCE_MIN).apply {
-                              setShowBadge(false)
-                              description = "Arka planda medya oynatımı için sistem hizmeti"
-                          }
+                          NotificationChannel(CHANNEL, "Arka planda çalma", NotificationManager.IMPORTANCE_LOW)
                       )
                   }
                   val open = PendingIntent.getActivity(
@@ -1521,13 +1462,11 @@ jobs:
                   )
                   val n = NotificationCompat.Builder(this, CHANNEL)
                       .setSmallIcon(R.drawable.ic_notif)
-                      .setContentTitle("Pusula Browser")
-                      .setContentText("Arka planda çalışıyor")
+                      .setContentTitle("Pusula medya oynatımı")
+                      .setContentText("YouTube ve sayfa medyası")
                       .setContentIntent(open)
-                      .setSilent(true)
-                      .setShowWhen(false)
                       .setOngoing(true)
-                      .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                      .setOnlyAlertOnce(true)
                       .build()
                   try {
                       if (Build.VERSION.SDK_INT >= 29) {
@@ -1543,7 +1482,14 @@ jobs:
 
               override fun onBind(intent: Intent?): IBinder? = null
 
-              companion object { const val CHANNEL = "playback" }
+              companion object {
+                  const val CHANNEL = "playback"
+                  const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
+                  const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
+                  const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
+                  const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
+                  const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
+              }
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
@@ -1553,9 +1499,7 @@ jobs:
           import android.net.Uri
           import org.json.JSONArray
           import org.json.JSONObject
-          import java.io.ByteArrayInputStream
 
-          /** Arama motorları. */
           object Engines {
               class E(val id: String, val name: String, val search: String, val home: String)
 
@@ -1573,7 +1517,6 @@ jobs:
               "^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$"
           )
 
-          /** Adres çubuğuna yazılanı adrese ya da arama adresine çevirir. */
           fun resolveInput(raw: String, engine: Engines.E): String {
               val t = raw.trim()
               if (t.isEmpty()) return engine.home
@@ -1582,7 +1525,6 @@ jobs:
               return engine.search.replace("%s", Uri.encode(t))
           }
 
-          /** Ayarlar, yer imleri, geçmiş ve açık sekmeler. Hepsi yalnızca telefonda saklanır. */
           class Prefs(context: Context) {
 
               class Entry(val title: String, val url: String)
@@ -1609,9 +1551,7 @@ jobs:
                           val o = arr.getJSONObject(i)
                           out.add(Entry(o.optString("t"), o.optString("u")))
                       }
-                  } catch (e: Exception) {
-                      // bozuk veri: boş liste
-                  }
+                  } catch (_: Exception) { }
                   return out
               }
 
@@ -1621,13 +1561,10 @@ jobs:
                   sp.edit().putString(key, arr.toString()).apply()
               }
 
-              // ---- yer imleri ----
-
               fun bookmarks(): List<Entry> = readList("bookmarks")
 
               fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
 
-              /** Yer imi yoksa ekler, varsa kaldırır. Eklenmişse true döner. */
               fun toggleBookmark(title: String, url: String): Boolean {
                   val list = readList("bookmarks")
                   val had = list.removeAll { it.url == url }
@@ -1641,8 +1578,6 @@ jobs:
                   list.removeAll { it.url == url }
                   writeList("bookmarks", list)
               }
-
-              // ---- geçmiş ----
 
               fun history(): List<Entry> = readList("history")
 
@@ -1664,8 +1599,6 @@ jobs:
                   sp.edit().putString("history", "[]").apply()
               }
 
-              // ---- açık sekmeler ----
-
               fun saveTabs(urls: List<String>, current: Int) {
                   val arr = JSONArray()
                   for (u in urls) arr.put(u)
@@ -1677,9 +1610,7 @@ jobs:
                   try {
                       val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
                       for (i in 0 until arr.length()) out.add(arr.getString(i))
-                  } catch (e: Exception) {
-                      // bozuk veri
-                  }
+                  } catch (_: Exception) { }
                   return out
               }
 
@@ -1692,12 +1623,7 @@ jobs:
           import android.webkit.JavascriptInterface
           import org.json.JSONArray
           import org.json.JSONObject
-          import java.io.ByteArrayInputStream
 
-          /**
-           * Yeni sekme sayfasının ("Pusula" adıyla) okuduğu küçük köprü.
-           * [trusted] yalnızca kendi sayfamız yüklüyken true olur; dış siteler hiçbir şey okuyamaz.
-           */
           class PusulaBridge(private val prefs: Prefs) {
 
               @Volatile
