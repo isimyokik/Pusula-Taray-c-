@@ -445,12 +445,7 @@ jobs:
                       .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
                       .build()
 
-                  val pal = Themes.get(prefs.theme)
-                  dark = pal.dark
-                  cBg = pal.bg; cSurface = pal.surface; cField = pal.field
-                  cText = pal.text; cSub = pal.sub; cIcon = pal.icon
-                  cAccent = pal.accent; cAccent2 = pal.accent2
-                  window.setBackgroundDrawable(ColorDrawable(cBg))
+                  loadPalette()
 
                   WindowCompat.setDecorFitsSystemWindows(window, false)
                   buildUi()
@@ -511,6 +506,37 @@ jobs:
                   handler.removeCallbacks(backgroundMediaPump)
                   for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
                   super.onDestroy()
+              }
+
+              private fun loadPalette() {
+                  val pal = Themes.get(prefs.theme)
+                  dark = pal.dark
+                  cBg = pal.bg; cSurface = pal.surface; cField = pal.field
+                  cText = pal.text; cSub = pal.sub; cIcon = pal.icon
+                  cAccent = pal.accent; cAccent2 = pal.accent2
+                  window.setBackgroundDrawable(ColorDrawable(cBg))
+              }
+
+              /** Temayı uygulamadan çıkmadan, sekmeleri koruyarak uygular. */
+              private fun applyTheme() {
+                  if (customView != null) hideCustom()
+                  val web = shown
+                  if (web != null) content.removeView(web)
+                  loadPalette()
+                  buildUi()
+                  if (web != null) {
+                      content.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  }
+                  val bars = WindowInsetsControllerCompat(window, window.decorView)
+                  bars.isAppearanceLightStatusBars = !dark
+                  bars.isAppearanceLightNavigationBars = !dark
+                  val t = tabs.getOrNull(cur)
+                  if (t != null) {
+                      privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE
+                      topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg)
+                      if (t.url.startsWith(ASSET_PREFIX)) t.web.reload()
+                  }
+                  syncUi()
               }
 
               private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
@@ -1350,7 +1376,7 @@ jobs:
                   AlertDialog.Builder(this).setTitle("Tema").setSingleChoiceItems(names, sel) { dlg, which ->
                       prefs.theme = Themes.all[which].id
                       dlg.dismiss()
-                      recreate()
+                      applyTheme()
                   }.show()
               }
 
@@ -1399,6 +1425,7 @@ jobs:
                       "var p=F.apply(this,a);" +
                       "if(u.indexOf('/youtubei/v1/player')<0&&u.indexOf('/youtubei/v1/next')<0)return p;" +
                       "return p.then(function(r){try{return r.clone().text().then(function(t){try{" +
+                      "if(t.indexOf('adPlacements')<0&&t.indexOf('playerAds')<0&&t.indexOf('adSlots')<0)return r;" +
                       "var j=JSON.parse(t);var hd=new Headers(r.headers);hd.delete('content-length');" +
                       "return new Response(JSON.stringify(j),{status:r.status,statusText:r.statusText,headers:hd});" +
                       "}catch(e){return r;}},function(){return r;});}catch(e){return r;}});};}" +
