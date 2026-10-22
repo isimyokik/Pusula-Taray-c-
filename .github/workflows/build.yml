@@ -801,7 +801,7 @@ jobs:
               private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
                   override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                       val uri = request?.url ?: return null
-                      if (prefs.adBlock && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) {
+                      if (prefs.adBlock && shouldBlockAd(uri)) {
                           return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                       }
                       return loader.shouldInterceptRequest(uri)
@@ -1123,11 +1123,21 @@ jobs:
                   // Döngüye sokmayan, güvenli ve stabil reklam atlayıcı script
                   const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
-                          "if(location.hostname.indexOf('youtube.com')<0)return;" +
-                          "setInterval(function(){try{" +
-                              "var b=document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');" +
-                              "if(b){b.click();}" +
-                          "}catch(e){}},500);" +
+                          "setInterval(function(){" +
+                              "try{" +
+                                  "var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .videoAdUiSkipButton');" +
+                                  "if (skipBtn) { skipBtn.click(); }" +
+                                  "var adShowing = document.querySelector('.ad-showing');" +
+                                  "if (adShowing) {" +
+                                      "var v = document.querySelector('video');" +
+                                      "if (v && !v.muted) { v.muted = true; }" +
+                                      "if (v && v.playbackRate < 16) { v.playbackRate = 16; }" +
+                                  "} else {" +
+                                      "var v = document.querySelector('video');" +
+                                      "if (v && v.playbackRate === 16) { v.playbackRate = 1; }" +
+                                  "}" +
+                              "}catch(e){}" +
+                          "}, 300);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
