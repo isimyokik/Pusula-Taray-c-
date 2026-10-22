@@ -230,7 +230,6 @@ jobs:
           import android.content.res.ColorStateList
           import android.content.res.Configuration
           import android.graphics.Bitmap
-          import android.graphics.Canvas
           import android.graphics.Color
           import android.graphics.Typeface
           import android.graphics.drawable.ColorDrawable
@@ -295,7 +294,7 @@ jobs:
           class MainActivity : AppCompatActivity() {
 
               /** Bir sekme: kendi WebView'ı, başlığı ve adresi vardır. */
-              private class BTab(val web: WebView, val bridge: PusulaBridge) {
+              private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
                   var title: String = "Yeni sekme"
                   var url: String = ""
                   var pendingUrl: String? = null
@@ -321,6 +320,7 @@ jobs:
               private lateinit var backBtn: ImageButton
               private lateinit var fwdBtn: ImageButton
               private lateinit var tabCount: TextView
+              private lateinit var privateBadge: TextView
               private lateinit var findBar: LinearLayout
               private lateinit var findInput: EditText
               private lateinit var findCount: TextView
@@ -488,6 +488,17 @@ jobs:
                   top.gravity = Gravity.CENTER_VERTICAL
                   top.setPadding(dp(8), dp(6), dp(4), dp(6))
 
+
+                  privateBadge = TextView(this)
+                  privateBadge.text = "● GİZLİ MOD"
+                  privateBadge.textSize = 11f
+                  privateBadge.setTypeface(null, Typeface.BOLD)
+                  privateBadge.setTextColor(Color.WHITE)
+                  privateBadge.gravity = Gravity.CENTER
+                  privateBadge.setPadding(dp(8), 0, dp(8), 0)
+                  privateBadge.background = shape(0xFF7C3AED.toInt(), 12)
+                  privateBadge.visibility = View.GONE
+                  top.addView(privateBadge, LinearLayout.LayoutParams(wrap, dp(30)))
 
                   urlField = EditText(this)
                   urlField.hint = "Ara veya adres yaz"
@@ -661,13 +672,14 @@ jobs:
               private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
 
               @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
-              private fun createTab(): BTab {
+              private fun createTab(incognito: Boolean = false): BTab {
                   val web = WebView(this)
                   val bridge = PusulaBridge(prefs)
-                  val tab = BTab(web, bridge)
+                  val tab = BTab(web, bridge, incognito)
                   val s = web.settings
                   s.javaScriptEnabled = true
                   s.domStorageEnabled = true
+                  s.mediaPlaybackRequiresUserGesture = false
                   s.setSupportMultipleWindows(true)
                   s.javaScriptCanOpenWindowsAutomatically = false
                   s.setSupportZoom(true)
@@ -706,12 +718,12 @@ jobs:
               }
 
               /** Yeni sekme açar. [url] null ise Pusula başlangıç sayfası açılır. */
-              private fun openTab(url: String?, load: Boolean = true): BTab? {
+              private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? {
                   if (tabs.size >= MAX_TABS) {
                       toast("En fazla $MAX_TABS sekme açılabilir")
                       return null
                   }
-                  val t = createTab()
+                  val t = createTab(incognito)
                   switchTo(tabs.size - 1)
                   if (load) t.web.loadUrl(url ?: NEWTAB_URL)
                   return t
@@ -735,6 +747,7 @@ jobs:
                       t.web.loadUrl(p)
                   }
                   closeFind()
+                  privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE
                   syncUi()
               }
 
@@ -747,8 +760,16 @@ jobs:
                       shown = null
                   }
                   t.web.stopLoading()
+                  t.web.clearHistory()
+                  t.web.clearCache(true)
                   t.web.destroy()
                   tabs.removeAt(index)
+                  if (t.incognito) {
+                      // WebView verileri süreç içinde ortaktır; kapanışta gizli oturum verilerini temizle.
+                      CookieManager.getInstance().removeAllCookies(null)
+                      CookieManager.getInstance().flush()
+                      WebStorage.getInstance().deleteAllData()
+                  }
                   if (tabs.isEmpty()) {
                       cur = -1
                       openTab(null)
@@ -770,10 +791,11 @@ jobs:
                   if (tabs.isEmpty()) return
                   val urls = ArrayList<String>()
                   for (t in tabs) {
+                      if (t.incognito) continue
                       val u = t.pendingUrl ?: t.url
                       urls.add(if (u.startsWith("http")) u else NEWTAB_URL)
                   }
-                  prefs.saveTabs(urls, if (cur >= 0) cur else 0)
+                  prefs.saveTabs(urls, 0)
               }
 
               // ------------------------------------------------------------------ gezinti
@@ -890,7 +912,7 @@ jobs:
                   override fun onPageFinished(view: WebView?, url: String?) {
                       tab.progress = 100
                       val u = url ?: return
-                      if (u.startsWith("http")) {
+                      if (u.startsWith("http") && !tab.incognito) {
                           val title = view?.title
                           prefs.addHistory(if (title.isNullOrBlank()) u else title, u)
                       }
@@ -1114,18 +1136,20 @@ jobs:
                   val m = pm.menu
                   val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
                   m.add(0, 1, 0, "Yeni sekme")
-                  m.add(0, 2, 1, if (marked) "Yer imini kaldır" else "Yer imi ekle")
-                  m.add(0, 3, 2, "Yer imleri")
-                  m.add(0, 4, 3, "Geçmiş")
-                  m.add(0, 5, 4, "Sayfada bul")
-                  val desk = m.add(0, 6, 5, "Masaüstü sitesi")
+                  m.add(0, 10, 1, "Yeni gizli sekme")
+                  m.add(0, 2, 2, if (marked) "Yer imini kaldır" else "Yer imi ekle")
+                  m.add(0, 3, 3, "Yer imleri")
+                  m.add(0, 4, 4, "Geçmiş")
+                  m.add(0, 5, 5, "Sayfada bul")
+                  val desk = m.add(0, 6, 6, "Masaüstü sitesi")
                   desk.isCheckable = true
                   desk.isChecked = t.desktop
-                  m.add(0, 7, 6, "Paylaş")
-                  m.add(0, 9, 8, "Ayarlar")
+                  m.add(0, 7, 7, "Paylaş")
+                  m.add(0, 9, 9, "Ayarlar")
                   pm.setOnMenuItemClickListener { item ->
                       when (item.itemId) {
                           1 -> openTab(null)
+                          10 -> openTab(null, true, true)
                           2 -> toggleBookmark()
                           3 -> showBookmarks()
                           4 -> showHistory()
@@ -1250,7 +1274,7 @@ jobs:
                       .setTitle("Sekmeler")
                       .setView(scroll)
                       .setPositiveButton("Yeni sekme") { _, _ -> openTab(null) }
-                      .setNeutralButton("Hepsini kapat") { _, _ -> closeAllTabs() }
+                      .setNeutralButton("Gizli sekme") { _, _ -> openTab(null, true, true) }
                       .setNegativeButton("Kapat", null)
                       .create()
                   fillTabs(box, d)
@@ -1265,30 +1289,7 @@ jobs:
                       row.orientation = LinearLayout.HORIZONTAL
                       row.gravity = Gravity.CENTER_VERTICAL
                       row.background = shape(if (i == cur) cField else 0, 10)
-                      row.setPadding(dp(8), dp(6), dp(4), dp(6))
-                      // Sekme kartında gerçek WebView görüntüsünden küçük ön izleme.
-                      val preview = ImageView(this)
-                      preview.scaleType = ImageView.ScaleType.CENTER_CROP
-                      preview.background = shape(cSurface, 6)
-                      val pw = dp(104)
-                      val ph = dp(66)
-                      preview.layoutParams = LinearLayout.LayoutParams(pw, ph).apply {
-                          rightMargin = dp(10)
-                      }
-                      try {
-                          if (t.web.width > 0 && t.web.height > 0) {
-                              val thumb = Bitmap.createBitmap(208, 132, Bitmap.Config.ARGB_8888)
-                              val canvas = Canvas(thumb)
-                              canvas.scale(208f / t.web.width, 132f / t.web.height)
-                              t.web.draw(canvas)
-                              preview.setImageBitmap(thumb)
-                          } else {
-                              preview.setImageDrawable(ColorDrawable(cField))
-                          }
-                      } catch (_: Exception) {
-                          preview.setImageDrawable(ColorDrawable(cField))
-                      }
-                      row.addView(preview)
+                      row.setPadding(dp(12), dp(6), dp(4), dp(6))
                       row.setOnClickListener {
                           d.dismiss()
                           switchTo(i)
@@ -1296,7 +1297,7 @@ jobs:
                       val label = TextView(this)
                       val url = t.pendingUrl ?: t.url
                       val name = if (t.title.isBlank()) shownUrl(url) else t.title
-                      label.text = (if (name.isEmpty()) "Yeni sekme" else name) + "\n" + shownUrl(url)
+                      label.text = (if (t.incognito) "🟣 GİZLİ MOD · " else "") + (if (name.isEmpty()) "Yeni sekme" else name) + "\n" + shownUrl(url)
                       label.textSize = 14f
                       label.maxLines = 2
                       label.setTextColor(cText)
@@ -1327,6 +1328,7 @@ jobs:
                   val items = arrayOf(
                       "Arama motoru: " + eng.name,
                       "Arka planda çalma (müzik/video): " + (if (prefs.bgPlay) "açık" else "kapalı"),
+                      "Yeni gizli sekme aç",
                       "Geçmişi temizle",
                       "Çerezleri ve önbelleği temizle",
                       "Hakkında"
@@ -1340,12 +1342,13 @@ jobs:
                                   prefs.bgPlay = !prefs.bgPlay
                                   toast("Arka planda çalma: " + (if (prefs.bgPlay) "açık" else "kapalı") + ". Uygulamayı kapatıp açınca tam geçerli olur.")
                               }
-                              2 -> {
+                              2 -> openTab(null, true, true)
+                              3 -> {
                                   prefs.clearHistory()
                                   toast("Geçmiş temizlendi")
                               }
-                              3 -> clearBrowsingData()
-                              4 -> AlertDialog.Builder(this)
+                              4 -> clearBrowsingData()
+                              5 -> AlertDialog.Builder(this)
                                   .setTitle("Pusula")
                                   .setMessage("Hafif ve sade bir tarayıcı. Sekmeler, yer imleri, geçmiş, indirme ve arka planda müzik çalma içerir.")
                                   .setPositiveButton(android.R.string.ok, null)
@@ -1385,6 +1388,8 @@ jobs:
                           "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
                           "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
                           "document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation()},true);" +
+                          "document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation()},true);" +
+                          "document.addEventListener('freeze',function(e){e.stopImmediatePropagation()},true);" +
                           "}catch(e){}})();"
 
               }
