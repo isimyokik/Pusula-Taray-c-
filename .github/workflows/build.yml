@@ -1557,24 +1557,22 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // Sayfa yüklenmesine hiç karışmaz (video gecikmez): reklam görünür görünmez sessize alıp sonuna sarar,
-                  // "Atla" düğmesine basar, reklam afişlerini gizler.
+                  // Hiçbir şeyi gizlemez, veriyi değiştirmez, yalnızca inmiş (tamponlanmış) kısmı atlar, inmemiş yere sarmaz:
+                  // reklam sırasında sesi kapatıp 16 kat hızlandırır ve "Atla" düğmesine basar.
                   const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
                       "if(location.hostname.indexOf('youtube.com')<0)return;" +
-                      "try{var st=document.createElement('style');" +
-                      "st.textContent='.ytp-ad-overlay-container,.ytp-ad-module .ytp-ad-image-overlay,ytm-promoted-sparkles-web-renderer,ytm-promoted-video-renderer,ytm-companion-slot,ad-slot-renderer,ytm-statement-banner-renderer,.ytp-ad-action-interstitial{display:none!important}';" +
-                      "(document.head||document.documentElement).appendChild(st);}catch(e){}" +
-                      "var muted=false;" +
+                      "var fast=false;" +
                       "setInterval(function(){try{" +
-                      "var pl=document.querySelector('.html5-video-player');var vd=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
-                      "var ad=pl&&pl.classList.contains('ad-showing');" +
-                      "if(ad&&vd){if(!muted){vd.muted=true;muted=true;}" +
-                      "try{vd.playbackRate=16;}catch(e){}" +
-                      "if(isFinite(vd.duration)&&vd.duration>0&&vd.currentTime<vd.duration-0.1){vd.currentTime=vd.duration-0.05;}}" +
-                      "else if(muted&&vd){vd.muted=false;muted=false;try{vd.playbackRate=1;}catch(e){}}" +
-                      "var b=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytp-ad-overlay-close-button');" +
-                      "if(b)b.click();}catch(e){}},150);" +
+                      "var pl=document.querySelector('.html5-video-player');" +
+                      "if(!pl)return;" +
+                      "var vd=pl.querySelector('video');" +
+                      "if(pl.classList.contains('ad-showing')){" +
+                      "if(vd){if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';}vd.muted=true;vd.playbackRate=16;var n=vd.buffered.length;if(n){var e=vd.buffered.end(n-1);if(e-vd.currentTime>0.3){vd.currentTime=e-0.1;}}}" +
+                      "var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button');" +
+                      "if(b)b.click();" +
+                      "}else if(fast){fast=false;if(vd){vd.playbackRate=1;if(vd.dataset.pm!=='1')vd.muted=false;}}" +
+                      "}catch(e){}},80);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
