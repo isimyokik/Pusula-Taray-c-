@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.1"
+                  versionName = "2.2"
               }
 
               buildTypes {
@@ -152,7 +152,7 @@ jobs:
           <body>
           <main>
             <h1>Pusula Medya</h1>
-            <p class="sub">Kesintisiz ve Stabil Video Deneyimi</p>
+            <p class="sub">Hızlı ve Reklamsız Video Deneyimi</p>
             <form id="f"><input id="q" type="search" placeholder="YouTube'da Ara veya Bağlantı Yapıştır" autocomplete="off"><button class="go" type="submit">&#8594;</button></form>
             <h2>Hızlı Erişim</h2>
             <div class="grid" id="pins"></div>
@@ -635,7 +635,7 @@ jobs:
 
                   if (prefs.bgPlay && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                       WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
-                      WebViewCompat.addDocumentStartJavaScript(web, STABLE_AD_BLOCKER_JS, setOf("*"))
+                      WebViewCompat.addDocumentStartJavaScript(web, INSTANT_SKIP_AD_JS, setOf("*"))
                   }
 
                   web.setFindListener { active, total, _ ->
@@ -1120,24 +1120,22 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // Döngüye sokmayan, güvenli ve stabil reklam atlayıcı script
-                  const val STABLE_AD_BLOCKER_JS =
+                  // Bekletmeden, reklamı anında sonuna taşıyan ve atlama butonuna basan kesin çözüm
+                  const val INSTANT_SKIP_AD_JS =
                       "(function(){" +
                           "setInterval(function(){" +
                               "try{" +
                                   "var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .videoAdUiSkipButton');" +
                                   "if (skipBtn) { skipBtn.click(); }" +
-                                  "var adShowing = document.querySelector('.ad-showing');" +
+                                  "var adShowing = document.querySelector('.ad-showing, .video-ads');" +
                                   "if (adShowing) {" +
                                       "var v = document.querySelector('video');" +
-                                      "if (v && !v.muted) { v.muted = true; }" +
-                                      "if (v && v.playbackRate < 16) { v.playbackRate = 16; }" +
-                                  "} else {" +
-                                      "var v = document.querySelector('video');" +
-                                      "if (v && v.playbackRate === 16) { v.playbackRate = 1; }" +
+                                      "if (v && !isNaN(v.duration) && v.duration > 0 && v.currentTime < v.duration) {" +
+                                          "v.currentTime = v.duration;" +
+                                      "}" +
                                   "}" +
                               "}catch(e){}" +
-                          "}, 300);" +
+                          "}, 50);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
@@ -1205,7 +1203,7 @@ jobs:
               }
           }
           EOF
-          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
+          cat > app/src/main/java/com/pusula.browser/Prefs.kt <<'EOF'
           package com.pusula.browser
 
           import android.content.Context
