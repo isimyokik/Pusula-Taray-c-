@@ -173,7 +173,7 @@ jobs:
               text = (text || "").trim();
               if (!text) return;
               if (/^https?:\/\//i.test(text)) { location.href = text; return; }
-              if (!/\s/.test(text) && /^([a-z0-9-]+\.)+[a-z]{2,}([:\/?#].*)?$/i.test(text)) { location.href = "https://" + text; return; }
+              if (!/\s/.test(text) && /^([a-z0-9-]+\.)+[a-z]{2,}([:\/?#].*)?$/.test(text)) { location.href = "https://" + text; return; }
               location.href = cfg.search.replace("%s", encodeURIComponent(text));
             }
             document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
@@ -230,6 +230,7 @@ jobs:
           import android.content.res.ColorStateList
           import android.content.res.Configuration
           import android.graphics.Bitmap
+          import android.graphics.Canvas
           import android.graphics.Color
           import android.graphics.Typeface
           import android.graphics.drawable.ColorDrawable
@@ -1264,7 +1265,30 @@ jobs:
                       row.orientation = LinearLayout.HORIZONTAL
                       row.gravity = Gravity.CENTER_VERTICAL
                       row.background = shape(if (i == cur) cField else 0, 10)
-                      row.setPadding(dp(12), dp(6), dp(4), dp(6))
+                      row.setPadding(dp(8), dp(6), dp(4), dp(6))
+                      // Sekme kartında gerçek WebView görüntüsünden küçük ön izleme.
+                      val preview = ImageView(this)
+                      preview.scaleType = ImageView.ScaleType.CENTER_CROP
+                      preview.background = shape(cSurface, 6)
+                      val pw = dp(104)
+                      val ph = dp(66)
+                      preview.layoutParams = LinearLayout.LayoutParams(pw, ph).apply {
+                          rightMargin = dp(10)
+                      }
+                      try {
+                          if (t.web.width > 0 && t.web.height > 0) {
+                              val thumb = Bitmap.createBitmap(208, 132, Bitmap.Config.ARGB_8888)
+                              val canvas = Canvas(thumb)
+                              canvas.scale(208f / t.web.width, 132f / t.web.height)
+                              t.web.draw(canvas)
+                              preview.setImageBitmap(thumb)
+                          } else {
+                              preview.setImageDrawable(ColorDrawable(cField))
+                          }
+                      } catch (_: Exception) {
+                          preview.setImageDrawable(ColorDrawable(cField))
+                      }
+                      row.addView(preview)
                       row.setOnClickListener {
                           d.dismiss()
                           switchTo(i)
