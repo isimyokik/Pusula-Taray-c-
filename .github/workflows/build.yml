@@ -114,6 +114,20 @@ jobs:
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                       <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.APP_BROWSER" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="http" />
+                          <data android:scheme="https" />
+                          <data android:mimeType="text/html" />
+                          <data android:mimeType="application/xhtml+xml" />
+                      </intent-filter>
+                      <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
                           <category android:name="android.intent.category.DEFAULT" />
                           <category android:name="android.intent.category.BROWSABLE" />
@@ -168,6 +182,19 @@ jobs:
             .priv .big{font-size:64px;margin-bottom:6px}
             .priv h1{margin-bottom:8px}
             .priv p{color:var(--sub);line-height:1.6;margin:0 auto 10px;max-width:30ch}
+            a.t{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transition:transform .15s}
+            a.t.drag{transform:scale(1.14);opacity:.85;z-index:5}
+            a.t.add i{background:transparent!important;border:2px dashed color-mix(in srgb,var(--sub) 70%,transparent);box-shadow:none;color:var(--sub);font-size:30px;font-weight:400}
+            .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+            .sheet{width:100%;max-width:560px;background:var(--surface);border-radius:26px 26px 0 0;padding:20px 18px 26px;box-shadow:0 -10px 40px rgba(0,0,0,.4)}
+            .sheet h3{margin:0 0 14px;font-size:18px}
+            .sheet label{display:block;font-size:12px;color:var(--sub);margin:10px 4px 5px}
+            .sheet input{width:100%;height:46px;border-radius:14px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);background:var(--field);color:var(--text);font-size:16px;padding:0 14px;outline:none}
+            .sheet input:focus{border-color:var(--acc)}
+            .btns{display:flex;gap:10px;margin-top:18px}
+            .btns button{flex:1;height:48px;border-radius:24px;border:0;font-size:15px;font-weight:700;color:var(--text);background:var(--field)}
+            .btns button.pri{color:#fff;background:linear-gradient(135deg,var(--acc),var(--acc2))}
+            .btns button.dng{color:#fff;background:linear-gradient(135deg,#ff5a5f,#d6245a)}
             [hidden]{display:none!important}
           </style>
           </head>
@@ -222,16 +249,17 @@ jobs:
             document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
             document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
 
-            var pins = [
-              ["YouTube","https://m.youtube.com/","▶","linear-gradient(135deg,#ff4b4b,#c4001d)"],
-              ["Ara","https://www.google.com/","🔎","linear-gradient(135deg,#4c8dff,#2457d6)"],
-              ["Müzik","https://music.youtube.com/","🎵","linear-gradient(135deg,#ff7a45,#ff2d6f)"],
-              ["Haberler","https://news.google.com/?hl=tr","📰","linear-gradient(135deg,#34c3ff,#2477ff)"],
-              ["Harita","https://maps.google.com/","🗺️","linear-gradient(135deg,#34d37a,#0f9d58)"],
-              ["Çeviri","https://translate.google.com/","🌐","linear-gradient(135deg,#8a5cff,#4a35d9)"],
-              ["Hava","https://www.google.com/search?q=hava+durumu","⛅","linear-gradient(135deg,#ffc84a,#ff8a1f)"],
-              ["GitHub","https://github.com/","🐙","linear-gradient(135deg,#59616e,#1b1f24)"]
+            var G = ["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
+            var pins = (cfg.pins && cfg.pins.length >= 0 && Array.isArray(cfg.pins)) ? cfg.pins : [
+              {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
+              {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
+              {t:"Müzik",u:"https://music.youtube.com/",e:"🎵",g:2},
+              {t:"Haberler",u:"https://news.google.com/?hl=tr",e:"📰",g:3},
+              {t:"Harita",u:"https://maps.google.com/",e:"🗺️",g:4},
+              {t:"Wikipedia",u:"https://tr.wikipedia.org/",e:"📚",g:5},
+              {t:"Çeviri",u:"https://translate.google.com/",e:"🌐",g:6}
             ];
+            function save(){ try { if (window.Pusula && window.Pusula.savePins) window.Pusula.savePins(JSON.stringify(pins)); } catch (e) {} }
             function tile(label, url, icon, bg){
               var a = document.createElement("a"); a.className = "t"; a.href = url;
               var i = document.createElement("i"); i.style.background = bg; i.textContent = icon;
@@ -239,7 +267,112 @@ jobs:
               a.appendChild(i); a.appendChild(s); return a;
             }
             var g = document.getElementById("pins");
-            pins.forEach(function(p){ g.appendChild(tile(p[0],p[1],p[2],p[3])); });
+            var suppress = false;
+
+            function render(){
+              g.innerHTML = "";
+              pins.forEach(function(p, n){
+                var a = tile(p.t, p.u, p.e || (p.t||"?").charAt(0).toUpperCase(), G[(p.g == null ? n : p.g) % G.length]);
+                a.dataset.n = n;
+                attachDrag(a);
+                g.appendChild(a);
+              });
+              var plus = tile("Ekle", "#", "+", "none");
+              plus.classList.add("add");
+              plus.addEventListener("click", function(e){ e.preventDefault(); openEditor(-1); });
+              g.appendChild(plus);
+            }
+
+            function closeSheet(){ var o = document.getElementById("ov"); if (o) o.remove(); }
+            function sheet(html){
+              closeSheet();
+              var o = document.createElement("div"); o.className = "sheet-bg"; o.id = "ov";
+              o.innerHTML = '<div class="sheet">' + html + '</div>';
+              var t0 = Date.now();
+              o.addEventListener("click", function(e){ if (e.target === o && Date.now() - t0 > 600) closeSheet(); });
+              document.body.appendChild(o);
+              return o;
+            }
+            function fixUrl(u){
+              u = (u || "").trim();
+              if (!u) return "";
+              if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+              return u;
+            }
+            function esc(x){ return String(x == null ? "" : x).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+            function openEditor(idx){
+              var p = idx >= 0 ? pins[idx] : {t:"",u:"",e:""};
+              var o = sheet('<h3>' + (idx >= 0 ? "Kısayolu düzenle" : "Yeni kısayol") + '</h3>' +
+                '<label>Ad</label><input id="fe_t" value="' + esc(p.t) + '" placeholder="Örn. Wikipedia">' +
+                '<label>Adres</label><input id="fe_u" value="' + esc(p.u) + '" placeholder="Örn. tr.wikipedia.org" autocapitalize="off">' +
+                '<label>Simge (isteğe bağlı emoji)</label><input id="fe_e" value="' + esc(p.e) + '" maxlength="4" placeholder="📚">' +
+                '<div class="btns"><button id="fe_c">İptal</button><button class="pri" id="fe_s">Kaydet</button></div>');
+              o.querySelector("#fe_c").onclick = closeSheet;
+              o.querySelector("#fe_s").onclick = function(){
+                var t = o.querySelector("#fe_t").value.trim();
+                var u = fixUrl(o.querySelector("#fe_u").value);
+                var e = o.querySelector("#fe_e").value.trim();
+                if (!u) { o.querySelector("#fe_u").focus(); return; }
+                if (!t) t = u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
+                if (idx >= 0) { pins[idx].t = t; pins[idx].u = u; pins[idx].e = e; }
+                else pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});
+                save(); closeSheet(); render();
+              };
+            }
+
+            function openActions(idx){
+              var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin-top:4px"><button id="ac_e">Düzenle</button><button class="dng" id="ac_d">Sil</button></div>' +
+                '<div class="btns" style="margin-top:10px"><button id="ac_c">Kapat</button></div>');
+              o.querySelector("#ac_c").onclick = closeSheet;
+              o.querySelector("#ac_e").onclick = function(){ closeSheet(); openEditor(idx); };
+              o.querySelector("#ac_d").onclick = function(){ pins.splice(idx, 1); save(); closeSheet(); render(); };
+            }
+
+            function attachDrag(a){
+              var timer = null, dragging = false, sx = 0, sy = 0, moved = false;
+              a.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+              a.addEventListener("click", function(e){ if (suppress) { e.preventDefault(); e.stopPropagation(); } });
+              a.addEventListener("touchstart", function(e){
+                var t = e.touches[0]; sx = t.clientX; sy = t.clientY; moved = false; dragging = false;
+                clearTimeout(timer);
+                timer = setTimeout(function(){ dragging = true; suppress = true; a.classList.add("drag"); try { navigator.vibrate && navigator.vibrate(15); } catch (x) {} }, 420);
+              }, {passive:true});
+              a.addEventListener("touchmove", function(e){
+                var t = e.touches[0];
+                if (!dragging) {
+                  if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) clearTimeout(timer);
+                  return;
+                }
+                e.preventDefault();
+                if (Math.abs(t.clientX - sx) > 6 || Math.abs(t.clientY - sy) > 6) moved = true;
+                a.style.pointerEvents = "none";
+                var el = document.elementFromPoint(t.clientX, t.clientY);
+                a.style.pointerEvents = "";
+                var tgt = el && el.closest ? el.closest("a.t") : null;
+                if (tgt && tgt !== a && !tgt.classList.contains("add") && tgt.parentNode === g) {
+                  var kids = Array.prototype.slice.call(g.children);
+                  if (kids.indexOf(a) < kids.indexOf(tgt)) g.insertBefore(a, tgt.nextSibling); else g.insertBefore(a, tgt);
+                }
+              }, {passive:false});
+              function end(e){
+                clearTimeout(timer);
+                if (!dragging) return;
+                try { if (e && e.cancelable) e.preventDefault(); } catch (x) {}
+                dragging = false; a.classList.remove("drag");
+                if (moved) {
+                  var order = [];
+                  Array.prototype.forEach.call(g.children, function(c){ if (c.dataset.n != null && c.dataset.n !== "") order.push(pins[+c.dataset.n]); });
+                  pins = order; save(); render();
+                } else {
+                  openActions(+a.dataset.n);
+                }
+                setTimeout(function(){ suppress = false; }, 350);
+              }
+              a.addEventListener("touchend", end);
+              a.addEventListener("touchcancel", end);
+            }
+            render();
 
             var grads = ["linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#a55eea,#6c3fc8)","linear-gradient(135deg,#fd79a8,#d63384)","linear-gradient(135deg,#5f7cff,#3949ab)","linear-gradient(135deg,#ff9f43,#e17055)"];
             function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./,""); } catch (e) { return u; } }
@@ -1017,10 +1150,7 @@ jobs:
                           val title = view?.title
                           prefs.addHistory(if (title.isNullOrBlank()) u else title, u)
                       }
-                      if (tabs.getOrNull(cur) === tab) {
-                          syncUi()
-                          view?.post { capturePreview(tab) }
-                      }
+                      if (tabs.getOrNull(cur) === tab) syncUi()
                   }
 
                   override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -1461,6 +1591,7 @@ jobs:
                   add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
                       prefs.barBottom = v; applyTheme()
                   })
+                  add(settingsRow("🌐", "Varsayılan tarayıcı yap", "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
                   label("Görünüm ve arama")
                   add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
                   add(settingsRow("🔎", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
@@ -1473,6 +1604,22 @@ jobs:
                   rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
                   sheetWindow(d, rootV, true)
                   d.show()
+              }
+
+              private fun askDefaultBrowser() {
+                  try {
+                      if (Build.VERSION.SDK_INT >= 29) {
+                          val rm = getSystemService(android.app.role.RoleManager::class.java)
+                          if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
+                              if (rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) { toast("Rota zaten varsayılan tarayıcı"); return }
+                              startActivity(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER))
+                              return
+                          }
+                      }
+                      startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+                  } catch (_: Exception) {
+                      try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar açılamadı") }
+                  }
               }
 
               private fun chooseTheme(onDone: () -> Unit) {
@@ -1557,7 +1704,7 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // Hiçbir şeyi gizlemez, veriyi değiştirmez, yalnızca inmiş (tamponlanmış) kısmı atlar, inmemiş yere sarmaz:
+                  // Reklam görüntüsünü gizler (siyah bekleme ekranı kalır), veriyi değiştirmez, yalnızca inmiş (tamponlanmış) kısmı atlar, inmemiş yere sarmaz:
                   // reklam sırasında sesi kapatıp 16 kat hızlandırır ve "Atla" düğmesine basar.
                   const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
@@ -1568,11 +1715,11 @@ jobs:
                       "if(!pl)return;" +
                       "var vd=pl.querySelector('video');" +
                       "if(pl.classList.contains('ad-showing')){" +
-                      "if(vd){if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';}vd.muted=true;vd.playbackRate=16;var n=vd.buffered.length;if(n){var e=vd.buffered.end(n-1);if(e-vd.currentTime>0.3){vd.currentTime=e-0.1;}}}" +
+                      "var va=pl.querySelector('.video-ads');if(va)va.style.visibility='hidden';if(vd){if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';}vd.style.visibility='hidden';vd.muted=true;vd.playbackRate=16;var n=vd.buffered.length;if(n){var e=vd.buffered.end(n-1);if(e-vd.currentTime>0.3){vd.currentTime=e-0.1;}}}" +
                       "var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button');" +
                       "if(b)b.click();" +
-                      "}else if(fast){fast=false;if(vd){vd.playbackRate=1;if(vd.dataset.pm!=='1')vd.muted=false;}}" +
-                      "}catch(e){}},80);" +
+                      "}else if(fast){fast=false;var va2=pl.querySelector('.video-ads');if(va2)va2.style.visibility='';if(vd){vd.style.visibility='';vd.playbackRate=1;if(vd.dataset.pm!=='1')vd.muted=false;}}" +
+                      "}catch(e){}},120);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
@@ -1719,6 +1866,8 @@ jobs:
                 set(v) { sp.edit().putString("theme", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
+              var pins: String get() = sp.getString("pins", "") ?: ""
+                set(v) { sp.edit().putString("pins", v).apply() }
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
 
@@ -1787,6 +1936,18 @@ jobs:
 
               private fun hex(v: Int): String = "#%06X".format(0xFFFFFF and v)
 
+              private fun pinsJson(): Any {
+                  val raw = prefs.pins
+                  if (raw.isEmpty()) return JSONObject.NULL
+                  return try { JSONArray(raw) } catch (e: Exception) { JSONObject.NULL }
+              }
+
+              @JavascriptInterface
+              fun savePins(json: String) {
+                  if (!trusted) return
+                  try { prefs.pins = JSONArray(json).toString() } catch (e: Exception) { }
+              }
+
               @JavascriptInterface
               fun config(): String {
                   if (!trusted) return "{}"
@@ -1801,6 +1962,7 @@ jobs:
                       .put("search", e.search)
                       .put("bookmarks", bm)
                       .put("history", hs)
+                      .put("pins", pinsJson())
                       .put("dark", th.dark)
                       .put("bg", hex(th.bg))
                       .put("surface", hex(th.surface))
