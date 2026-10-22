@@ -333,9 +333,8 @@ jobs:
               private val backgroundMediaPump = object : Runnable {
                   override fun run() {
                       if (!appInBackground || !prefs.bgPlay) return
-                      tabs.toList().forEach { t ->
-                          try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
-                      }
+                      val t = tabs.getOrNull(cur)
+                      try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
                       handler.postDelayed(this, 1200L)
                   }
               }
@@ -703,7 +702,7 @@ jobs:
                   s.userAgentString = ua
                   tab.mobileUa = ua
                   web.addJavascriptInterface(bridge, "Pusula")
-                  
+
                   if (prefs.bgPlay && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                       WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
                   }
@@ -728,6 +727,7 @@ jobs:
                       toast("En fazla $MAX_TABS sekme açılabilir")
                       return null
                   }
+                  // Yeni sekme açmadan önce aktif (eski) sekmedeki medyanın sesini/durumunu duraklatmadan bırakıyoruz ki arka planda çalmaya devam edebilsin, ama yenisi açılınca sesler karışmasın.
                   val t = createTab(incognito)
                   switchTo(tabs.size - 1)
                   if (load) t.web.loadUrl(url ?: NEWTAB_URL)
@@ -736,17 +736,36 @@ jobs:
 
               private fun switchTo(i: Int) {
                   if (i !in tabs.indices) return
+                  
+                  // Önceki sekmeden çıkarken, oradaki medyanın sesini kesmemek için sadece görünümü kaldırıyoruz ama durdurmuyoruz (arkada çalmaya devam etsin diye).
+                  // Ancak yeni bir sekme seçtiğimizde seslerin karışmaması için:
+                  // 1. Yeni geçilen sekmede daha önce çalan bir müzik varsa devam ettirilir.
+                  // 2. Diğer sekmeler arka planda bağımsız kalır.
+                  
                   shown?.let {
                       tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }
                       content.removeView(it)
-                      if (!prefs.bgPlay) it.onPause()
                   }
+                  
+                  // Diğer tüm sekmelerin medyasını sessize al/duraklat ki sesler karışmasın
+                  for (idx in tabs.indices) {
+                      if (idx != i) {
+                          try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {}
+                      }
+                  }
+
                   cur = i
                   val t = tabs[i]
                   shown = t.web
                   content.addView(t.web, 0, FrameLayout.LayoutParams(
                       ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                   t.web.onResume()
+                  
+                  // Seçilen sekmeye geri dönüldüğünde varsa medyasını canlandır / devam ettir
+                  try {
+                      t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null)
+                  } catch (_: Exception) {}
+
                   val p = t.pendingUrl
                   if (p != null) {
                       t.pendingUrl = null
@@ -1445,7 +1464,7 @@ jobs:
                           "}catch(e){}})();"
 
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
-                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.pause();});})();"
+                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){m.pause();m.dataset.pusulaWasPlaying='';}});})();"
                   const val MEDIA_PREVIOUS_JS = "(function(){var b=document.querySelector('.ytp-prev-button');if(b)b.click();})();"
                   const val MEDIA_NEXT_JS = "(function(){var b=document.querySelector('.ytp-next-button');if(b)b.click();})();"
               }
