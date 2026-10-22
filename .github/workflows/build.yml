@@ -1543,7 +1543,14 @@ jobs:
 
               override fun onBind(intent: Intent?): IBinder? = null
 
-              companion object { const val CHANNEL = "playback" }
+              companion object { 
+                  const val CHANNEL = "playback"
+                  const val ACTION_PLAY = "com.pusula.browser.action.PLAY"
+                  const val ACTION_TOGGLE = "com.pusula.browser.action.TOGGLE"
+                  const val ACTION_PAUSE = "com.pusula.browser.action.PAUSE"
+                  const val ACTION_PREVIOUS = "com.pusula.browser.action.PREVIOUS"
+                  const val ACTION_NEXT = "com.pusula.browser.action.NEXT"
+              }
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
