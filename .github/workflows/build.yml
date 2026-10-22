@@ -703,6 +703,11 @@ jobs:
                   s.userAgentString = ua
                   tab.mobileUa = ua
                   web.addJavascriptInterface(bridge, "Pusula")
+                  
+                  if (prefs.bgPlay && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                      WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
+                  }
+
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
                           findCount.text = if (total == 0) "0" else "${active + 1}/$total"
@@ -1420,7 +1425,25 @@ jobs:
                   const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
                   const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
                   const val MAX_TABS = 20
-                  const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.ended){m.dataset.pusulaWasPlaying='1';}});}catch(e){}})();"
+                  
+                  const val KEEP_PLAYING_JS =
+                      "(function(){try{" +
+                          "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
+                          "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
+                          "document.addEventListener('visibilitychange',function(e){" +
+                          "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
+                          "e.stopImmediatePropagation();},true);" +
+                          "document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation()},true);" +
+                          "document.addEventListener('freeze',function(e){e.stopImmediatePropagation()},true);" +
+                          "}catch(e){}})();"
+
+                  const val BACKGROUND_MEDIA_JS =
+                      "(function(){try{" +
+                          "document.querySelectorAll('video,audio').forEach(function(m){" +
+                          "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                          "});" +
+                          "}catch(e){}})();"
+
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
                   const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.pause();});})();"
                   const val MEDIA_PREVIOUS_JS = "(function(){var b=document.querySelector('.ytp-prev-button');if(b)b.click();})();"
@@ -1750,13 +1773,21 @@ jobs:
               <bool name="light_bars">false</bool>
           </resources>
           EOF
-          printf '%s\n' '<resources>' '    <color name="bg">#0C0F14</color>' '</resources>' > app/src/main/res/values-night/colors.xml
+          cat > app/src/main/res/values-night/colors.xml <<'EOF'
+          <resources>
+              <color name="bg">#0C0F14</color>
+          </resources>
+          EOF
           cat > app/src/main/res/values/bools.xml <<'EOF'
           <resources>
               <bool name="light_bars">true</bool>
           </resources>
           EOF
-          printf '%s\n' '<resources>' '    <color name="bg">#F4F5F7</color>' '</resources>' > app/src/main/res/values/colors.xml
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <resources>
+              <color name="bg">#F4F5F7</color>
+          </resources>
+          EOF
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources>
               <string name="app_name">Pusula</string>
