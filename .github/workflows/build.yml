@@ -1566,7 +1566,7 @@ jobs:
                   E("yandex", "Yandex", "https://yandex.com.tr/search/?text=%s", "https://yandex.com.tr/")
               )
 
-              fn get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
+              fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
           }
 
           private val HOST_LIKE = Regex(
