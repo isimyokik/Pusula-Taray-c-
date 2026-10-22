@@ -1,77 +1,1736 @@
-<!DOCTYPE html><html data-dpl-id="dpl_Ao31KQP8FHt7yrkUV351FUf1xC9c" lang="en" class="optimisticai_d4925249-module__WZtcjq__variable optimisticmono_9b82a078-module__hMSRWa__variable light"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/immutable/chunks/1f8erciyyi1ut.css" data-precedence="next"/><link rel="stylesheet" href="/_next/static/immutable/chunks/1_qls4d_svasd.css" data-precedence="next"/><link rel="stylesheet" href="/_next/static/immutable/chunks/2r0g1tiua-xns.css" data-precedence="next"/><link rel="stylesheet" href="/_next/static/immutable/chunks/18ny043cr5ukd.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/immutable/chunks/176hbz2k-u20e.js"/><script src="/_next/static/immutable/chunks/3vc6-q46027dl.js" async=""></script><script src="/_next/static/immutable/chunks/2_lhxaj6d_76l.js" async=""></script><script src="/_next/static/immutable/chunks/turbopack-1xod52byojfvs.js" async=""></script><script src="/_next/static/immutable/chunks/2fpr3cz42ore3.js" async=""></script><script src="/_next/static/immutable/chunks/3s9arri0r4hli.js" async=""></script><meta name="next-size-adjust" content=""/><script>(function(){try{var d=document.documentElement,m=window.matchMedia("(prefers-color-scheme: dark)");function a(){var c=d.classList;if(m.matches){c.remove("light");c.add("dark");}else{c.remove("dark");c.add("light");}}a();m.addEventListener("change",a);}catch(e){}})()</script><meta name="sentry-trace" content="94f28ce365474d11af9d4f656beadb49-b9889db6651fba72-0"/><meta name="baggage" content="sentry-environment=production,sentry-release=3e80228481ec047b6fed5a2b627cbf2b08a915d1,sentry-public_key=217336c598020d63d1a44137ff8fdb71,sentry-trace_id=94f28ce365474d11af9d4f656beadb49,sentry-org_id=4509963614355457,sentry-sampled=false,sentry-sample_rand=0.3637378454973631,sentry-sample_rate=0.1"/><script src="/_next/static/immutable/chunks/0c0hxoamwjsbw.js" noModule=""></script></head><body><div hidden=""><!--$--><!--/$--></div><div class="min-h-dvh px-6 pt-8 pb-8 font-mono text-[14px] leading-[1.6]"><pre class="mx-auto flex max-w-[1000px] items-start bg-transparent"><div class="text-text-tertiary border-fill-divider me-4 min-w-[40px] shrink-0 border-e pe-4 text-end select-none" aria-hidden="true"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div><div>24</div><div>25</div><div>26</div><div>27</div><div>28</div><div>29</div><div>30</div><div>31</div><div>32</div><div>33</div><div>34</div><div>35</div><div>36</div><div>37</div><div>38</div><div>39</div><div>40</div><div>41</div><div>42</div><div>43</div><div>44</div><div>45</div><div>46</div><div>47</div><div>48</div><div>49</div><div>50</div><div>51</div><div>52</div><div>53</div><div>54</div><div>55</div><div>56</div><div>57</div><div>58</div><div>59</div><div>60</div><div>61</div><div>62</div><div>63</div><div>64</div><div>65</div><div>66</div><div>67</div><div>68</div><div>69</div><div>70</div><div>71</div><div>72</div><div>73</div><div>74</div><div>75</div><div>76</div><div>77</div></div><code class="block min-w-0 flex-1 overflow-x-auto whitespace-pre"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Pusula Browser Build</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">on</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">  push</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">    branches</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: [ </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">master</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ]</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">  pull_request</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">    branches</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: [ </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">master</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ]</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">  workflow_dispatch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">jobs</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">  build</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">    runs-on</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">ubuntu-latest</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">    steps</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Checkout code</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        uses</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">actions/checkout@v4</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">List files (debug)</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">ls -la</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Set up JDK 17</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        uses</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">actions/setup-java@v5</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        with</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">          java-version</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">'17'</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">          distribution</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">'temurin'</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Setup Node for web build</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        uses</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">actions/setup-node@v4</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        with</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">          node-version</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">'20'</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Check if gradlew exists</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        id</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">check_gradle</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">          if [ -f "./gradlew" ]; then</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">            echo "exists=true" >> $GITHUB_OUTPUT</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">            chmod +x ./gradlew</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">          else</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">            echo "exists=false" >> $GITHUB_OUTPUT</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">            echo "gradlew not found - skipping Android build"</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">          fi</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Setup Gradle (only if gradlew exists)</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">steps.check_gradle.outputs.exists == 'true'</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        uses</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">gradle/actions/setup-gradle@v4</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Setup Android SDK (only if gradlew exists)</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">steps.check_gradle.outputs.exists == 'true'</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        uses</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">android-actions/setup-android@v3</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Build Debug APK</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">steps.check_gradle.outputs.exists == 'true'</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">./gradlew assembleDebug --stacktrace --no-daemon</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Build Release APK</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">steps.check_gradle.outputs.exists == 'true'</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">./gradlew assembleRelease --stacktrace --no-daemon</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        continue-on-error</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Upload Debug APK</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">steps.check_gradle.outputs.exists == 'true'</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        uses</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">actions/upload-artifact@v4</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        with</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">          name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">pusula-debug-apk</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">          path</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">app/build/outputs/apk/debug/app-debug.apk</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">          if-no-files-found</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">warn</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Build web version (fallback)</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">steps.check_gradle.outputs.exists == 'false'</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">          echo "No Android project found, building web artifact"</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">          if [ -f "package.json" ]; then npm install &#x26;&#x26; npm run build || echo "npm build skipped"; fi</span></span>
-<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">          echo "Build completed - web version ready"</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">      - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">Success</span></span>
-<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">        run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">echo "Workflow finished without error"</span></span>
-<span class="line"></span></code></pre></code></pre></div><!--$--><!--/$--><script src="/_next/static/immutable/chunks/176hbz2k-u20e.js" id="_R_" async=""></script><script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"1:\"$Sreact.fragment\"\n3:I[498022,[\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\"],\"default\"]\n4:I[410469,[\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\"],\"default\"]\n6:I[430098,[\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\"],\"OutletBoundary\"]\n7:\"$Sreact.suspense\"\na:I[430098,[\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\"],\"ViewportBoundary\"]\nc:I[430098,[\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\"],\"MetadataBoundary\"]\ne:I[161360,[\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\"],\"default\",1]\n:HL[\"/_next/static/immutable/chunks/1f8erciyyi1ut.css\",\"style\"]\n:HL[\"/_next/static/immutable/chunks/1_qls4d_svasd.css\",\"style\"]\n:HL[\"/_next/static/immutable/media/OptimisticAI_VF_Optimized-s.p.1qcbydubu9isy.woff2\",\"font\",{\"crossOrigin\":\"\",\"type\":\"font/woff2\"}]\n:HL[\"/_next/static/immutable/media/OptimisticAI_W_TextRegularIt-s.p.2woqy10pf2_t7.woff2\",\"font\",{\"crossOrigin\":\"\",\"type\":\"font/woff2\"}]\n:HL[\"/_next/static/immutable/chunks/2r0g1tiua-xns.css\",\"style\"]\n:HL[\"/_next/static/immutable/chunks/18ny043cr5ukd.css\",\"style\"]\n9:X\n0:{\"P\":null,\"c\":[\"\",\"document?artifact_uuid=e6d33f99-f9e8-4b8c-8ebd-1d90edf5c343\u0026ext=1792694304\u0026hash=Q5fpDAEqBqLDhOg6SFlvxDKRdM0N\"],\"q\":\"?artifact_uuid=e6d33f99-f9e8-4b8c-8ebd-1d90edf5c343\u0026ext=1792694304\u0026hash=Q5fpDAEqBqLDhOg6SFlvxDKRdM0N\",\"i\":false,\"f\":[[[\"\",{\"children\":[\"document\",{\"children\":[\"__PAGE__?{\\\"artifact_uuid\\\":\\\"e6d33f99-f9e8-4b8c-8ebd-1d90edf5c343\\\",\\\"ext\\\":\\\"1792694304\\\",\\\"hash\\\":\\\"Q5fpDAEqBqLDhOg6SFlvxDKRdM0N\\\"}\",{},\"$undefined\",\"$undefined\",4096]},\"$undefined\",\"$undefined\",4096]},\"$undefined\",\"$undefined\",4112],[[\"$\",\"$1\",\"c\",{\"children\":[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/immutable/chunks/1f8erciyyi1ut.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}],[\"$\",\"link\",\"1\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/immutable/chunks/1_qls4d_svasd.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}],[\"$\",\"script\",\"script-0\",{\"src\":\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\",\"async\":true,\"nonce\":\"$undefined\"}]],\"$L2\"]}],{\"children\":[[\"$\",\"$1\",\"c\",{\"children\":[null,[\"$\",\"$L3\",null,{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L4\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$undefined\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]]}],{\"children\":[[\"$\",\"$1\",\"c\",{\"children\":[\"$L5\",[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/immutable/chunks/2r0g1tiua-xns.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}],[\"$\",\"link\",\"1\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/immutable/chunks/18ny043cr5ukd.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}],[\"$\",\"script\",\"script-0\",{\"src\":\"/_next/static/immutable/chunks/3s9arri0r4hli.js\",\"async\":true,\"nonce\":\"$undefined\"}]],[\"$\",\"$L6\",null,{\"children\":[\"$\",\"$7\",null,{\"name\":\"Next.MetadataOutlet\",\"children\":\"$@8\"}]}]]}],{},null,false,null]},null,false,\"$9\"]},null,false,null],[\"$\",\"$1\",\"h\",{\"children\":[null,[\"$\",\"$La\",null,{\"children\":\"$Lb\"}],[\"$\",\"div\",null,{\"hidden\":true,\"children\":[\"$\",\"$Lc\",null,{\"children\":[\"$\",\"$7\",null,{\"name\":\"Next.Metadata\",\"children\":\"$Ld\"}]}]}],[\"$\",\"meta\",null,{\"name\":\"next-size-adjust\",\"content\":\"\"}]]}],false]],\"m\":\"$undefined\",\"G\":[\"$e\",[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/immutable/chunks/1f8erciyyi1ut.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}],[\"$\",\"link\",\"1\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/immutable/chunks/1_qls4d_svasd.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}]]],\"S\":false,\"h\":null,\"r\":\"$undefined\",\"s\":\"$undefined\",\"a\":\"$undefined\",\"l\":\"$undefined\",\"p\":\"$undefined\",\"d\":\"$undefined\"}\n9:C\n2:[\"$\",\"html\",null,{\"lang\":\"en\",\"className\":\"optimisticai_d4925249-module__WZtcjq__variable optimisticmono_9b82a078-module__hMSRWa__variable light\",\"children\":[[\"$\",\"head\",null,{\"children\":[\"$\",\"script\",null,{\"suppressHydrationWarning\":true,\"dangerouslySetInnerHTML\":{\"__html\":\"(function(){try{var d=document.documentElement,m=window.matchMedia(\\\"(prefers-color-scheme: dark)\\\");function a(){var c=d.classList;if(m.matches){c.remove(\\\"light\\\");c.add(\\\"dark\\\");}else{c.remove(\\\"dark\\\");c.add(\\\"light\\\");}}a();m.addEventListener(\\\"change\\\",a);}catch(e){}})()\"}}]}],[\"$\",\"body\",null,{\"children\":[\"$\",\"$L3\",null,{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L4\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[null,[]],\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]}]]}]\nb:[[\"$\",\"meta\",\"0\",{\"charSet\":\"utf-8\"}],[\"$\",\"meta\",\"1\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}]]\n8:null\nd:[]\nf:I[247881,[\"/_next/static/immutable/chunks/2fpr3cz42ore3.js\",\"/_next/static/immutable/chunks/3s9arri0r4hli.js\"],\"TextViewer\"]\n10:T8bc,name: Pusula Browser Build\n\non:\n  push:\n    branches: [ main, master ]\n  pull_request:\n    branches: [ main, master ]\n  workflow_dispatch:\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n\n    steps:\n      - name: Checkout code\n        uses: actions/checkout@v4\n\n      - name: List files (debug)\n        run: ls -la\n\n      - name: Set up JDK 17\n        uses: actions/setup-java@v5\n        with:\n          java-version: '17'\n          distribution: 'temurin'\n\n      - name: Setup Node for web build\n        uses: actions/setup-node@v4\n        with:\n          node-version: '20'\n\n      - name: Check if gradlew exists\n        id: check_gradle\n        run: |\n          if [ -f \"./gradlew\" ]; then\n            echo \"exists=true\" \u003e\u003e $GITHUB_OUTPUT\n            chmod +x ./gradlew\n          else\n            echo \"exists=false\" \u003e\u003e $GITHUB_OUTPUT\n            echo \"gradlew not found - skipping Android build\"\n          fi\n\n      - name: Setup Gradle (only if gradlew exists)\n        if: steps.check_gradle.outputs.exists == 'true'\n        uses: gradle/actions/setup-gradle@v4\n\n      - name: Setup Android SDK (only if gradlew exists)\n        if: steps.check_gradle.outputs.exists == 'true'\n        uses: android-actions/setup-android@v3\n\n      - name: Build Debug APK\n        if: steps.check_gradle.outputs.exists == 'true'\n        run: ./gradlew assembleDebug --stacktrace --no-daemon\n\n      - name: Build Release APK\n        if: steps.check_gradle.outputs.exists == 'true'\n        run: ./gradlew assembleRelease --stacktrace --no-daemon\n        continue-on-error: true\n\n      - name: Upload Debug APK\n        if: steps.check_gradle.outputs.exists == 'true'\n        uses: actions/upload-artifact@v4\n        with:\n          name: pusula-debug-apk\n          path: app/build/outputs/apk/debug/app-debug.apk\n          if-no-files-found: warn\n\n      - name: Build web version (fallback)\n        if: steps.check_gradle.outputs.exists == 'false'\n        run: |\n          echo \"No Android project found, building web artifact\"\n          if [ -f \"package.json\" ]; then npm install \u0026\u0026 npm run build || echo \"npm build skipped\"; fi\n          echo \"Build completed - web version ready\"\n\n      - name: Success\n        run: echo \"Workflow finished without error\"\n11:T3cd2,\u003cpre class=\"shiki shiki-themes github-light github-dark\" style=\"--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e\" tabindex=\"0\"\u003e\u003ccode\u003e\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003ePusula Browser Build\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#005CC5;--shiki-dark:#79B8FF\"\u003eon\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e  push\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e    branches\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: [ \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003emain\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e, \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003emaster\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e ]\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e  pull_request\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e    branches\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: [ \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003emain\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e, \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003emaster\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e ]\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e  workflow_dispatch\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ejobs\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e  build\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e    runs-on\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eubuntu-latest\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e    steps\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eCheckout code\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        uses\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eactions/checkout@v4\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eList files (debug)\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        run\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003els -la\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eSet up JDK 17\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        uses\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eactions/setup-java@v5\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        with\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e          java-version\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e'17'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e          distribution\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e'temurin'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eSetup Node for web build\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        uses\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eactions/setup-node@v4\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        with\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e          node-version\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e'20'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eCheck if gradlew exists\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        id\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003echeck_gradle\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        run\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#D73A49;--shiki-dark:#F97583\"\u003e|\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e          if [ -f \"./gradlew\" ]; then\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e            echo \"exists=true\" \u003e\u003e $GITHUB_OUTPUT\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e            chmod +x ./gradlew\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e          else\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e            echo \"exists=false\" \u003e\u003e $GITHUB_OUTPUT\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e            echo \"gradlew not found - skipping Android build\"\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e          fi\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eSetup Gradle (only if gradlew exists)\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        if\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003esteps.check_gradle.outputs.exists == 'true'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        uses\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003egradle/actions/setup-gradle@v4\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eSetup Android SDK (only if gradlew exists)\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        if\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003esteps.check_gradle.outputs.exists == 'true'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        uses\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eandroid-actions/setup-android@v3\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eBuild Debug APK\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        if\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003esteps.check_gradle.outputs.exists == 'true'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        run\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e./gradlew assembleDebug --stacktrace --no-daemon\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eBuild Release APK\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        if\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003esteps.check_gradle.outputs.exists == 'true'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        run\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e./gradlew assembleRelease --stacktrace --no-daemon\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        continue-on-error\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#005CC5;--shiki-dark:#79B8FF\"\u003etrue\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eUpload Debug APK\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        if\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003esteps.check_gradle.outputs.exists == 'true'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        uses\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eactions/upload-artifact@v4\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        with\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e          name\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003epusula-debug-apk\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e          path\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eapp/build/outputs/apk/debug/app-debug.apk\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e          if-no-files-found\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003ewarn\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eBuild web version (fallback)\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        if\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003esteps.check_gradle.outputs.exists == 'false'\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        run\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#D73A49;--shiki-dark:#F97583\"\u003e|\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e          echo \"No Android project found, building web artifact\"\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e          if [ -f \"package.json\" ]; then npm install \u0026#x26;\u0026#x26; npm run build || echo \"npm build skipped\"; fi\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003e          echo \"Build completed - web version ready\"\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e      - \u003c/span\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003ename\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eSuccess\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003cspan style=\"--shiki-light:#22863A;--shiki-dark:#85E89D\"\u003e        run\u003c/span\u003e\u003cspan style=\"--shiki-light:#24292E;--shiki-dark:#E1E4E8\"\u003e: \u003c/span\u003e\u003cspan style=\"--shiki-light:#032F62;--shiki-dark:#9ECBFF\"\u003eecho \"Workflow finished without error\"\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\"line\"\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e5:[\"$\",\"$Lf\",null,{\"content\":\"$10\",\"language\":\"yaml\",\"highlightedHtml\":\"$11\",\"editable\":false,\"thumbnailZoom\":null}]\n"])</script></body></html>
+name: Pusula APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '17' }
+      - name: Projeyi olustur
+        run: |
+          rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          EOF
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "Pusula"
+          include(":app")
+          EOF
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.pusula.browser"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.pusula.browser"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+
+              }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+              implementation("androidx.appcompat:appcompat:1.7.0")
+              implementation("androidx.webkit:webkit:1.12.1")
+
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.Pusula"
+                  android:usesCleartextTraffic="true">
+
+                  <service
+                      android:name=".PlaybackService"
+                      android:exported="false"
+                      android:foregroundServiceType="mediaPlayback" />
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:windowSoftInputMode="adjustResize|stateHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <!-- Bağlantılara tıklanınca Pusula'nın da seçenek olarak çıkması (varsayılan tarayıcı olabilmesi) için -->
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="http" />
+                          <data android:scheme="https" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > app/src/main/assets/newtab.html <<'EOF'
+          <!doctype html>
+          <html lang="tr">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>Yeni sekme</title>
+          <style>
+            :root{--bg:#f4f5f7;--card:#fff;--text:#1b1f24;--sub:#6b7280;--line:#e3e6ea;--acc:#2f6bff}
+            @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#1a1d23;--text:#e8eaed;--sub:#9aa0a6;--line:#2a2e36}}
+            *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+            body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Roboto,"Segoe UI",sans-serif;min-height:100vh}
+            main{max-width:560px;margin:0 auto;padding:44px 20px 32px}
+            h1{font-size:34px;margin:0 0 4px;text-align:center;letter-spacing:.5px}
+            .sub{text-align:center;color:var(--sub);margin:0 0 28px;font-size:14px}
+            form{display:flex;gap:8px;margin-bottom:28px}
+            input{flex:1;min-width:0;height:50px;border-radius:26px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:0 20px;font-size:16px;outline:none}
+            input:focus{border-color:var(--acc)}
+            button.go{width:50px;height:50px;border-radius:50%;border:0;background:var(--acc);color:#fff;font-size:20px}
+            h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--sub);margin:24px 4px 10px}
+            .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+            a.t{display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-size:12px;padding:12px 4px;background:var(--card);border-radius:16px;border:1px solid var(--line);text-align:center;overflow:hidden}
+            a.t i{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-weight:700;font-size:18px}
+            a.t span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          </style>
+          </head>
+          <body>
+          <main>
+            <h1>Pusula</h1>
+            <p class="sub" id="sub">Ara ya da adres yaz</p>
+            <form id="f"><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"><button class="go" type="submit" aria-label="Git">&#8594;</button></form>
+            <h2>Hızlı erişim</h2>
+            <div class="grid" id="pins"></div>
+            <div id="bmWrap" style="display:none"><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
+          </main>
+          <script>
+          (function(){
+            var cfg = {engine:"Google", search:"https://www.google.com/search?q=%s", bookmarks:[]};
+            try { if (window.Pusula) { var c = JSON.parse(window.Pusula.config()); if (c && c.search) cfg = c; } } catch (e) {}
+            document.getElementById("sub").textContent = cfg.engine + " ile ara ya da adres yaz";
+
+            function go(text){
+              text = (text || "").trim();
+              if (!text) return;
+              if (/^https?:\/\//i.test(text)) { location.href = text; return; }
+              if (!/\s/.test(text) && /^([a-z0-9-]+\.)+[a-z]{2,}([:\/?#].*)?$/i.test(text)) { location.href = "https://" + text; return; }
+              location.href = cfg.search.replace("%s", encodeURIComponent(text));
+            }
+            document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
+
+            var pins = [
+              ["Google","https://www.google.com/","#4285f4"],
+              ["YouTube","https://m.youtube.com/","#e53935"],
+              ["Vikipedi","https://tr.wikipedia.org/","#455a64"],
+              ["Haberler","https://news.google.com/?hl=tr","#1e88e5"],
+              ["Harita","https://maps.google.com/","#43a047"],
+              ["Çeviri","https://translate.google.com/","#5c6bc0"],
+              ["DuckDuckGo","https://duckduckgo.com/","#ef6c00"],
+              ["GitHub","https://github.com/","#24292f"]
+            ];
+            function tile(label, url, color){
+              var a = document.createElement("a");
+              a.className = "t"; a.href = url;
+              var i = document.createElement("i");
+              i.style.background = color;
+              i.textContent = (label || "?").charAt(0).toUpperCase();
+              var s = document.createElement("span");
+              s.textContent = label;
+              a.appendChild(i); a.appendChild(s);
+              return a;
+            }
+            var g = document.getElementById("pins");
+            pins.forEach(function(p){ g.appendChild(tile(p[0], p[1], p[2])); });
+
+            var bms = cfg.bookmarks || [];
+            if (bms.length) {
+              document.getElementById("bmWrap").style.display = "block";
+              var bg = document.getElementById("bms");
+              var colors = ["#00897b","#8e24aa","#d81b60","#3949ab","#f4511e","#6d4c41"];
+              bms.forEach(function(b, n){
+                var host = b.u;
+                try { host = new URL(b.u).hostname.replace(/^www\./, ""); } catch (e) {}
+                bg.appendChild(tile((b.t && b.t.length < 18) ? b.t : host, b.u, colors[n % colors.length]));
+              });
+            }
+          })();
+          </script>
+          </body>
+          </html>
+          EOF
+          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.annotation.SuppressLint
+          import android.Manifest
+          import android.app.DownloadManager
+          import android.content.Context
+          import android.content.Intent
+          import android.content.pm.PackageManager
+          import android.content.res.ColorStateList
+          import android.content.res.Configuration
+          import android.graphics.Bitmap
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.Drawable
+          import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.RippleDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Environment
+          import android.os.Handler
+          import android.os.Looper
+          import android.os.Message
+          import android.text.Html
+          import android.text.InputType
+          import android.view.Gravity
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.ViewGroup
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.webkit.CookieManager
+          import android.webkit.JsPromptResult
+          import android.webkit.JsResult
+          import android.webkit.URLUtil
+          import android.webkit.ValueCallback
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceError
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebResourceResponse
+          import android.webkit.WebStorage
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.ArrayAdapter
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.ImageButton
+          import android.widget.ImageView
+          import android.widget.LinearLayout
+          import android.widget.ListView
+          import android.widget.PopupMenu
+          import android.widget.ProgressBar
+          import android.widget.ScrollView
+          import android.widget.TextView
+          import android.widget.Toast
+          import androidx.activity.OnBackPressedCallback
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.appcompat.app.AlertDialog
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.content.ContextCompat
+          import androidx.core.view.ViewCompat
+          import androidx.core.view.WindowCompat
+          import androidx.core.view.WindowInsetsCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+          import androidx.core.widget.doAfterTextChanged
+          import androidx.webkit.WebViewAssetLoader
+          import androidx.webkit.WebViewCompat
+          import androidx.webkit.WebViewFeature
+          import org.json.JSONObject
+
+          class MainActivity : AppCompatActivity() {
+
+              /** Bir sekme: kendi WebView'ı, başlığı ve adresi vardır. */
+              private class BTab(val web: WebView, val bridge: PusulaBridge) {
+                  var title: String = "Yeni sekme"
+                  var url: String = ""
+                  var pendingUrl: String? = null
+                  var desktop: Boolean = false
+                  var mobileUa: String = ""
+                  var progress: Int = 100
+              }
+
+              private val tabs = ArrayList<BTab>()
+              private var cur = -1
+              private var shown: WebView? = null
+
+              private lateinit var prefs: Prefs
+              private lateinit var loader: WebViewAssetLoader
+              private val handler = Handler(Looper.getMainLooper())
+
+              // arayüz
+              private lateinit var root: LinearLayout
+              private lateinit var content: FrameLayout
+              private lateinit var fullscreen: FrameLayout
+              private lateinit var urlField: EditText
+              private lateinit var progress: ProgressBar
+              private lateinit var backBtn: ImageButton
+              private lateinit var fwdBtn: ImageButton
+              private lateinit var tabCount: TextView
+              private lateinit var findBar: LinearLayout
+              private lateinit var findInput: EditText
+              private lateinit var findCount: TextView
+
+              // renkler
+              private var dark = false
+              private var cBg = 0
+              private var cSurface = 0
+              private var cField = 0
+              private var cText = 0
+              private var cSub = 0
+              private var cIcon = 0
+              private val cAccent = 0xFF2F6BFF.toInt()
+
+              private var customView: View? = null
+              private var customCb: WebChromeClient.CustomViewCallback? = null
+              private var fileCb: ValueCallback<Array<Uri>>? = null
+              private var startUrl: String? = null
+
+              private val notifLauncher =
+                  registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+              private val fileLauncher =
+                  registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+                      fileCb?.onReceiveValue(
+                          WebChromeClient.FileChooserParams.parseResult(res.resultCode, res.data)
+                      )
+                      fileCb = null
+                  }
+
+              // ------------------------------------------------------------------ yaşam döngüsü
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  prefs = Prefs(this)
+                  loader = WebViewAssetLoader.Builder()
+                      .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+                      .build()
+
+                  dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                      Configuration.UI_MODE_NIGHT_YES
+                  cBg = if (dark) 0xFF0F1115.toInt() else 0xFFF4F5F7.toInt()
+                  cSurface = if (dark) 0xFF1A1D23.toInt() else 0xFFFFFFFF.toInt()
+                  cField = if (dark) 0xFF2A2E36.toInt() else 0xFFEDEFF3.toInt()
+                  cText = if (dark) 0xFFE8EAED.toInt() else 0xFF1B1F24.toInt()
+                  cSub = if (dark) 0xFF9AA0A6.toInt() else 0xFF6B7280.toInt()
+                  cIcon = if (dark) 0xFFD5D8DD.toInt() else 0xFF3C4350.toInt()
+
+                  WindowCompat.setDecorFitsSystemWindows(window, false)
+                  buildUi()
+                  val bars = WindowInsetsControllerCompat(window, window.decorView)
+                  bars.isAppearanceLightStatusBars = !dark
+                  bars.isAppearanceLightNavigationBars = !dark
+
+                  startUrl = intent?.dataString
+
+                  onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                      override fun handleOnBackPressed() {
+                          handleBack()
+                      }
+                  })
+
+                  askNotificationPermission()
+                  startBrowsing()
+              }
+
+              override fun onNewIntent(intent: Intent) {
+                  super.onNewIntent(intent)
+                  val u = intent.dataString ?: return
+                  openTab(u)
+              }
+
+              override fun onPause() {
+                  super.onPause()
+                  saveTabs()
+                  CookieManager.getInstance().flush()
+                  if (prefs.bgPlay) {
+                      // Sayfalar durdurulmaz, bildirimli servis uygulamayı canlı tutar: müzik arka planda sürer.
+                      try {
+                          ContextCompat.startForegroundService(this, Intent(this, PlaybackService::class.java))
+                      } catch (e: Exception) {
+                          // servis başlatılamadı: sayfa yine de durdurulmadan kalır
+                      }
+                  } else {
+                      shown?.onPause()
+                  }
+              }
+
+              override fun onResume() {
+                  super.onResume()
+                  stopService(Intent(this, PlaybackService::class.java))
+                  shown?.onResume()
+              }
+
+              private fun askNotificationPermission() {
+                  if (Build.VERSION.SDK_INT >= 33 &&
+                      ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+                      PackageManager.PERMISSION_GRANTED
+                  ) {
+                      notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                  }
+              }
+
+              override fun onDestroy() {
+                  for (t in tabs) {
+                      try {
+                          t.web.destroy()
+                      } catch (e: Exception) {
+                          // yok say
+                      }
+                  }
+                  super.onDestroy()
+              }
+
+              // ------------------------------------------------------------------ arayüz kurulumu
+
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
+
+              private fun shape(color: Int, radiusDp: Int, stroke: Int = 0, strokeDp: Int = 0): GradientDrawable {
+                  val g = GradientDrawable()
+                  g.setColor(color)
+                  g.cornerRadius = dp(radiusDp).toFloat()
+                  if (stroke != 0) g.setStroke(dp(strokeDp), stroke)
+                  return g
+              }
+
+              private fun ripple(content: Drawable?): RippleDrawable =
+                  RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
+
+              private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton {
+                  val b = ImageButton(this)
+                  b.setImageResource(res)
+                  b.setColorFilter(cIcon)
+                  b.background = ripple(null)
+                  b.contentDescription = desc
+                  b.scaleType = ImageView.ScaleType.CENTER
+                  b.setOnClickListener { v -> onClick(v) }
+                  return b
+              }
+
+              private fun textBtn(label: String, onClick: () -> Unit): TextView {
+                  val t = TextView(this)
+                  t.text = label
+                  t.textSize = 16f
+                  t.setTextColor(cIcon)
+                  t.gravity = Gravity.CENTER
+                  t.background = ripple(null)
+                  t.setOnClickListener { onClick() }
+                  return t
+              }
+
+              private fun buildUi() {
+                  val match = ViewGroup.LayoutParams.MATCH_PARENT
+                  val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+
+                  root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setBackgroundColor(cSurface)
+                  root.isFocusable = true
+                  root.isFocusableInTouchMode = true
+
+                  // --- üst çubuk: adres/arama, yenile
+                  val top = LinearLayout(this)
+                  top.orientation = LinearLayout.HORIZONTAL
+                  top.gravity = Gravity.CENTER_VERTICAL
+                  top.setPadding(dp(8), dp(6), dp(4), dp(6))
+
+
+                  urlField = EditText(this)
+                  urlField.hint = "Ara veya adres yaz"
+                  urlField.setHintTextColor(cSub)
+                  urlField.setTextColor(cText)
+                  urlField.textSize = 15f
+                  urlField.isSingleLine = true
+                  urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+                  urlField.imeOptions = EditorInfo.IME_ACTION_GO
+                  urlField.setSelectAllOnFocus(true)
+                  urlField.background = shape(cField, 20)
+                  urlField.setPadding(dp(14), 0, dp(14), 0)
+                  urlField.setOnEditorActionListener { _, actionId, event ->
+                      if (actionId == EditorInfo.IME_ACTION_GO ||
+                          (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)
+                      ) {
+                          submitUrl()
+                          true
+                      } else {
+                          false
+                      }
+                  }
+                  urlField.setOnFocusChangeListener { _, hasFocus ->
+                      if (!hasFocus) syncUrlText()
+                  }
+                  val ulp = LinearLayout.LayoutParams(0, dp(40), 1f)
+                  ulp.leftMargin = dp(8)
+                  ulp.rightMargin = dp(2)
+                  top.addView(urlField, ulp)
+
+                  top.addView(
+                      iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() },
+                      LinearLayout.LayoutParams(dp(40), dp(40))
+                  )
+                  root.addView(top, LinearLayout.LayoutParams(match, wrap))
+
+                  progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+                  progress.max = 100
+                  progress.progressTintList = ColorStateList.valueOf(cAccent)
+                  progress.visibility = View.INVISIBLE
+                  root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
+
+                  // --- sayfa alanı
+                  content = FrameLayout(this)
+                  content.setBackgroundColor(cBg)
+                  root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
+
+
+                  // --- sayfada bul çubuğu
+                  findBar = LinearLayout(this)
+                  findBar.orientation = LinearLayout.HORIZONTAL
+                  findBar.gravity = Gravity.CENTER_VERTICAL
+                  findBar.setBackgroundColor(cSurface)
+                  findBar.setPadding(dp(8), dp(4), dp(4), dp(4))
+                  findBar.visibility = View.GONE
+                  findInput = EditText(this)
+                  findInput.hint = "Sayfada bul"
+                  findInput.setHintTextColor(cSub)
+                  findInput.setTextColor(cText)
+                  findInput.textSize = 15f
+                  findInput.isSingleLine = true
+                  findInput.background = shape(cField, 18)
+                  findInput.setPadding(dp(12), 0, dp(12), 0)
+                  findInput.doAfterTextChanged { text ->
+                      val t = text?.toString() ?: ""
+                      val web = currentWeb()
+                      if (web != null) {
+                          if (t.isEmpty()) {
+                              web.clearMatches()
+                              findCount.text = ""
+                          } else {
+                              web.findAllAsync(t)
+                          }
+                      }
+                  }
+                  findBar.addView(findInput, LinearLayout.LayoutParams(0, dp(36), 1f))
+                  findCount = TextView(this)
+                  findCount.setTextColor(cSub)
+                  findCount.textSize = 13f
+                  findCount.setPadding(dp(8), 0, dp(8), 0)
+                  findBar.addView(findCount, LinearLayout.LayoutParams(wrap, wrap))
+                  findBar.addView(textBtn("▲") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
+
+                  // --- alt çubuk: geri, ileri, ana sayfa, yeni sekme, sekmeler, menü
+                  val bottom = LinearLayout(this)
+                  bottom.orientation = LinearLayout.HORIZONTAL
+                  bottom.gravity = Gravity.CENTER_VERTICAL
+                  bottom.setBackgroundColor(cSurface)
+
+                  backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }
+                  fwdBtn = iconBtn(R.drawable.ic_forward, "İleri") { goForward() }
+                  val homeBtn = iconBtn(R.drawable.ic_home, "Ana sayfa") { goHome() }
+                  val addBtn = iconBtn(R.drawable.ic_add, "Yeni sekme") { openTab(null) }
+                  val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
+
+                  val tabsWrap = FrameLayout(this)
+                  tabsWrap.background = ripple(null)
+                  tabsWrap.contentDescription = "Sekmeler"
+                  tabsWrap.setOnClickListener { showTabs() }
+                  tabCount = TextView(this)
+                  tabCount.gravity = Gravity.CENTER
+                  tabCount.textSize = 12f
+                  tabCount.setTypeface(null, Typeface.BOLD)
+                  tabCount.setTextColor(cIcon)
+                  tabCount.background = shape(0, 5, cIcon, 2)
+                  tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+
+                  for (v in listOf<View>(backBtn, fwdBtn, homeBtn, addBtn, tabsWrap, menuBtn)) {
+                      bottom.addView(v, LinearLayout.LayoutParams(0, dp(52), 1f))
+                  }
+                  root.addView(bottom, LinearLayout.LayoutParams(match, wrap))
+
+                  // --- tam ekran video katmanı
+                  fullscreen = FrameLayout(this)
+                  fullscreen.setBackgroundColor(Color.BLACK)
+                  fullscreen.visibility = View.GONE
+
+                  val frame = FrameLayout(this)
+                  frame.addView(root, FrameLayout.LayoutParams(match, match))
+                  frame.addView(fullscreen, FrameLayout.LayoutParams(match, match))
+                  setContentView(frame)
+
+                  ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+                      val b = insets.getInsets(
+                          WindowInsetsCompat.Type.systemBars() or
+                              WindowInsetsCompat.Type.displayCutout() or
+                              WindowInsetsCompat.Type.ime()
+                      )
+                      v.setPadding(b.left, b.top, b.right, b.bottom)
+                      insets
+                  }
+                  root.requestFocus()
+                  updateTabCount()
+              }
+
+
+              // ------------------------------------------------------------------ açılış
+
+              private fun startBrowsing() {
+                  if (tabs.isEmpty()) {
+                      val saved = prefs.savedTabs()
+                      if (saved.isEmpty()) {
+                          openTab(null)
+                      } else {
+                          val want = prefs.savedCurrent()
+                          for (u in saved.take(12)) {
+                              val t = createTab()
+                              if (u.startsWith("http")) {
+                                  t.pendingUrl = u
+                                  t.url = u
+                                  t.title = shownUrl(u)
+                              } else {
+                                  t.pendingUrl = NEWTAB_URL
+                              }
+                          }
+                          switchTo(if (want in tabs.indices) want else 0)
+                      }
+                  }
+                  val s = startUrl
+                  startUrl = null
+                  if (s != null) openTab(s)
+              }
+
+
+
+              // ------------------------------------------------------------------ sekmeler
+
+              private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
+
+              @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
+              private fun createTab(): BTab {
+                  val web = WebView(this)
+                  val bridge = PusulaBridge(prefs)
+                  val tab = BTab(web, bridge)
+                  val s = web.settings
+                  s.javaScriptEnabled = true
+                  s.domStorageEnabled = true
+                  s.setSupportMultipleWindows(true)
+                  s.javaScriptCanOpenWindowsAutomatically = false
+                  s.setSupportZoom(true)
+                  s.builtInZoomControls = true
+                  s.displayZoomControls = false
+                  s.loadWithOverviewMode = true
+                  s.useWideViewPort = true
+                  s.allowFileAccess = false
+                  s.allowContentAccess = false
+                  s.setGeolocationEnabled(false)
+                  s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                  // "wv" işareti kalkınca Google girişi ve bazı siteler normal tarayıcı gibi davranır.
+                  val ua = s.userAgentString
+                      .replace("; wv", "")
+                      .replace(Regex("Version/\\d+\\.\\d+ "), "")
+                  s.userAgentString = ua
+                  tab.mobileUa = ua
+                  web.addJavascriptInterface(bridge, "Pusula")
+                  if (prefs.bgPlay && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                      // Siteler "sayfa görünmüyor" diye müziği durdurmasın.
+                      WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
+                  }
+                  web.setFindListener { active, total, _ ->
+                      if (tabs.getOrNull(cur) === tab) {
+                          findCount.text = if (total == 0) "0" else "${active + 1}/$total"
+                      }
+                  }
+                  web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+                      startDownload(url, userAgent, contentDisposition, mimeType)
+                  }
+                  web.webViewClient = makeClient(tab)
+                  web.webChromeClient = makeChrome(tab)
+                  tabs.add(tab)
+                  updateTabCount()
+                  return tab
+              }
+
+              /** Yeni sekme açar. [url] null ise Pusula başlangıç sayfası açılır. */
+              private fun openTab(url: String?, load: Boolean = true): BTab? {
+                  if (tabs.size >= MAX_TABS) {
+                      toast("En fazla $MAX_TABS sekme açılabilir")
+                      return null
+                  }
+                  val t = createTab()
+                  switchTo(tabs.size - 1)
+                  if (load) t.web.loadUrl(url ?: NEWTAB_URL)
+                  return t
+              }
+
+              private fun switchTo(i: Int) {
+                  if (i !in tabs.indices) return
+                  shown?.let {
+                      content.removeView(it)
+                      if (!prefs.bgPlay) it.onPause()
+                  }
+                  cur = i
+                  val t = tabs[i]
+                  shown = t.web
+                  content.addView(t.web, 0, FrameLayout.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  t.web.onResume()
+                  val p = t.pendingUrl
+                  if (p != null) {
+                      t.pendingUrl = null
+                      t.web.loadUrl(p)
+                  }
+                  closeFind()
+                  syncUi()
+              }
+
+              private fun closeTab(index: Int) {
+                  if (index !in tabs.indices) return
+                  val t = tabs[index]
+                  val wasCurrent = index == cur
+                  if (wasCurrent) {
+                      content.removeView(t.web)
+                      shown = null
+                  }
+                  t.web.stopLoading()
+                  t.web.destroy()
+                  tabs.removeAt(index)
+                  if (tabs.isEmpty()) {
+                      cur = -1
+                      openTab(null)
+                      return
+                  }
+                  if (wasCurrent) {
+                      switchTo(minOf(index, tabs.size - 1))
+                  } else if (index < cur) {
+                      cur--
+                  }
+                  updateTabCount()
+              }
+
+              private fun updateTabCount() {
+                  tabCount.text = tabs.size.toString()
+              }
+
+              private fun saveTabs() {
+                  if (tabs.isEmpty()) return
+                  val urls = ArrayList<String>()
+                  for (t in tabs) {
+                      val u = t.pendingUrl ?: t.url
+                      urls.add(if (u.startsWith("http")) u else NEWTAB_URL)
+                  }
+                  prefs.saveTabs(urls, if (cur >= 0) cur else 0)
+              }
+
+              // ------------------------------------------------------------------ gezinti
+
+              private fun shownUrl(u: String): String =
+                  if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) ""
+                  else u.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
+
+              private fun syncUrlText() {
+                  val t = tabs.getOrNull(cur)
+                  urlField.setText(if (t == null) "" else shownUrl(t.pendingUrl ?: t.url))
+              }
+
+              private fun syncUi() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  if (!urlField.hasFocus()) syncUrlText()
+                  setLoadProgress(t.progress)
+                  refreshNav()
+                  updateTabCount()
+              }
+
+              private fun setLoadProgress(p: Int) {
+                  progress.progress = p
+                  progress.visibility = if (p in 1..99) View.VISIBLE else View.INVISIBLE
+              }
+
+              private fun refreshNav() {
+                  val web = currentWeb()
+                  backBtn.alpha = if (web != null && (web.canGoBack() || tabs.size > 1)) 1f else 0.35f
+                  fwdBtn.alpha = if (web != null && web.canGoForward()) 1f else 0.35f
+              }
+
+              private fun loadInCurrent(url: String) {
+                  val t = tabs.getOrNull(cur) ?: return
+                  t.pendingUrl = null
+                  t.web.loadUrl(url)
+              }
+
+              private fun submitUrl() {
+                  val text = urlField.text.toString()
+                  loadInCurrent(resolveInput(text, Engines.get(prefs.engine)))
+                  hideKeyboard()
+                  urlField.clearFocus()
+                  root.requestFocus()
+              }
+
+              private fun goBack() {
+                  val web = currentWeb() ?: return
+                  if (web.canGoBack()) web.goBack() else if (tabs.size > 1) closeTab(cur)
+              }
+
+              private fun goForward() {
+                  val web = currentWeb() ?: return
+                  if (web.canGoForward()) web.goForward()
+              }
+
+              private fun goHome() {
+                  loadInCurrent(Engines.get(prefs.engine).home)
+              }
+
+              private fun reloadCurrent() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  if (t.progress in 1..99) t.web.stopLoading() else t.web.reload()
+              }
+
+              private fun handleBack() {
+                  val web = currentWeb()
+                  when {
+                      customView != null -> hideCustom()
+                      findBar.visibility == View.VISIBLE -> closeFind()
+                      urlField.hasFocus() -> {
+                          hideKeyboard()
+                          urlField.clearFocus()
+                          root.requestFocus()
+                      }
+                      web != null && web.canGoBack() -> web.goBack()
+                      tabs.size > 1 -> closeTab(cur)
+                      else -> finish()
+                  }
+              }
+
+              // ------------------------------------------------------------------ WebView istemcileri
+
+              private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
+
+                  override fun shouldInterceptRequest(
+                      view: WebView?,
+                      request: WebResourceRequest?
+                  ): WebResourceResponse? = request?.url?.let { loader.shouldInterceptRequest(it) }
+
+                  override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                      val u = request?.url ?: return false
+                      val scheme = u.scheme ?: return false
+                      return when (scheme) {
+                          "http", "https", "about", "blob", "data" -> false
+                          "file", "content", "javascript" -> true
+                          else -> openExternal(u.toString())
+                      }
+                  }
+
+                  override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                      val u = url ?: ""
+                      tab.bridge.trusted = u.startsWith(ASSET_PREFIX)
+                      tab.url = u
+                      tab.progress = 5
+                      if (tabs.getOrNull(cur) === tab) syncUi()
+                  }
+
+                  override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                      if (url != null && !url.startsWith("data:")) tab.url = url
+                      if (tabs.getOrNull(cur) === tab) syncUi()
+                  }
+
+                  override fun onPageFinished(view: WebView?, url: String?) {
+                      tab.progress = 100
+                      val u = url ?: return
+                      if (u.startsWith("http")) {
+                          val title = view?.title
+                          prefs.addHistory(if (title.isNullOrBlank()) u else title, u)
+                      }
+                      if (tabs.getOrNull(cur) === tab) syncUi()
+                  }
+
+                  override fun onReceivedError(
+                      view: WebView?,
+                      request: WebResourceRequest?,
+                      error: WebResourceError?
+                  ) {
+                      if (view == null || request == null || error == null) return
+                      if (!request.isForMainFrame) return
+                      val desc = error.description?.toString() ?: ""
+                      if (desc.contains("ERR_ABORTED")) return
+                      val failing = request.url.toString()
+                      view.loadDataWithBaseURL(failing, errorHtml(failing, desc), "text/html", "utf-8", failing)
+                  }
+              }
+
+              private fun makeChrome(tab: BTab): WebChromeClient = object : WebChromeClient() {
+
+                  override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                      tab.progress = newProgress
+                      if (tabs.getOrNull(cur) === tab) setLoadProgress(newProgress)
+                  }
+
+                  override fun onReceivedTitle(view: WebView?, title: String?) {
+                      if (!title.isNullOrBlank()) tab.title = title
+                  }
+
+                  override fun onCreateWindow(
+                      view: WebView?,
+                      isDialog: Boolean,
+                      isUserGesture: Boolean,
+                      resultMsg: Message?
+                  ): Boolean {
+                      if (!isUserGesture || resultMsg == null) return false
+                      val nt = openTab(null, false) ?: return false
+                      val transport = resultMsg.obj as WebView.WebViewTransport
+                      transport.webView = nt.web
+                      resultMsg.sendToTarget()
+                      return true
+                  }
+
+                  override fun onCloseWindow(window: WebView?) {
+                      handler.post {
+                          val i = tabs.indexOfFirst { it.web === window }
+                          if (i >= 0) closeTab(i)
+                      }
+                  }
+
+                  override fun onShowFileChooser(
+                      webView: WebView?,
+                      filePathCallback: ValueCallback<Array<Uri>>?,
+                      fileChooserParams: FileChooserParams?
+                  ): Boolean {
+                      fileCb?.onReceiveValue(null)
+                      fileCb = filePathCallback
+                      return try {
+                          fileLauncher.launch(fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).setType("*/*"))
+                          true
+                      } catch (e: Exception) {
+                          fileCb?.onReceiveValue(null)
+                          fileCb = null
+                          false
+                      }
+                  }
+
+                  override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                      if (view == null || customView != null) {
+                          callback?.onCustomViewHidden()
+                          return
+                      }
+                      customView = view
+                      customCb = callback
+                      fullscreen.addView(view, FrameLayout.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                      fullscreen.visibility = View.VISIBLE
+                      setBars(false)
+                  }
+
+                  override fun onHideCustomView() {
+                      hideCustom()
+                  }
+
+                  override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                      AlertDialog.Builder(this@MainActivity)
+                          .setMessage(message)
+                          .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                          .setOnCancelListener { result?.confirm() }
+                          .show()
+                      return true
+                  }
+
+                  override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                      AlertDialog.Builder(this@MainActivity)
+                          .setMessage(message)
+                          .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                          .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
+                          .setOnCancelListener { result?.cancel() }
+                          .show()
+                      return true
+                  }
+
+                  override fun onJsPrompt(
+                      view: WebView?,
+                      url: String?,
+                      message: String?,
+                      defaultValue: String?,
+                      result: JsPromptResult?
+                  ): Boolean {
+                      val input = EditText(this@MainActivity)
+                      input.setText(defaultValue ?: "")
+                      AlertDialog.Builder(this@MainActivity)
+                          .setMessage(message)
+                          .setView(input)
+                          .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm(input.text.toString()) }
+                          .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
+                          .setOnCancelListener { result?.cancel() }
+                          .show()
+                      return true
+                  }
+              }
+
+              private fun hideCustom() {
+                  val v = customView ?: return
+                  fullscreen.removeView(v)
+                  fullscreen.visibility = View.GONE
+                  customView = null
+                  customCb?.onCustomViewHidden()
+                  customCb = null
+                  setBars(true)
+              }
+
+              private fun setBars(show: Boolean) {
+                  val c = WindowInsetsControllerCompat(window, window.decorView)
+                  if (show) {
+                      c.show(WindowInsetsCompat.Type.systemBars())
+                  } else {
+                      c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                      c.hide(WindowInsetsCompat.Type.systemBars())
+                  }
+              }
+
+              private fun openExternal(url: String): Boolean {
+                  try {
+                      val i = if (url.startsWith("intent:")) {
+                          Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                      } else {
+                          Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                      }
+                      i.addCategory(Intent.CATEGORY_BROWSABLE)
+                      i.component = null
+                      i.selector = null
+                      startActivity(i)
+                  } catch (e: Exception) {
+                      toast("Bu bağlantıyı açacak uygulama bulunamadı")
+                  }
+                  return true
+              }
+
+              private fun errorHtml(url: String, desc: String): String {
+                  val bg = if (dark) "#0f1115" else "#f4f5f7"
+                  val fg = if (dark) "#e8eaed" else "#1b1f24"
+                  val note = ""
+                  val js = Html.escapeHtml("location.href=" + JSONObject.quote(url))
+                  return "<!doctype html><html><head><meta charset=\"utf-8\">" +
+                      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+                      "<title>Sayfa açılamadı</title><style>" +
+                      "body{font-family:sans-serif;margin:0;padding:32px 24px;background:" + bg + ";color:" + fg + "}" +
+                      "h1{font-size:22px}p{opacity:.75;line-height:1.5;word-break:break-word}" +
+                      "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
+                      "</style></head><body><h1>Sayfa açılamadı</h1><p>" + Html.escapeHtml(url) + "</p><p>" +
+                      Html.escapeHtml(desc) + "</p>" + note +
+                      "<button onclick=\"" + js + "\">Tekrar dene</button></body></html>"
+              }
+
+              // ------------------------------------------------------------------ indirme
+
+              private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) {
+                  if (!url.startsWith("http")) {
+                      toast("Bu indirme türü desteklenmiyor")
+                      return
+                  }
+                  try {
+                      val name = URLUtil.guessFileName(url, cd, mime)
+                      val req = DownloadManager.Request(Uri.parse(url))
+                      if (mime != null) req.setMimeType(mime)
+                      val cookie = CookieManager.getInstance().getCookie(url)
+                      if (cookie != null) req.addRequestHeader("Cookie", cookie)
+                      if (ua != null) req.addRequestHeader("User-Agent", ua)
+                      req.setTitle(name)
+                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                      if (Build.VERSION.SDK_INT >= 29) {
+                          req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+                      } else {
+                          req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
+                      }
+                      (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+                      toast("İndirme başladı: $name")
+                  } catch (e: Exception) {
+                      toast("İndirme başlatılamadı")
+                  }
+              }
+
+              // ------------------------------------------------------------------ menü ve pencereler
+
+              private fun toast(msg: String) {
+                  Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+              }
+
+              private fun hideKeyboard() {
+                  val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                  imm.hideSoftInputFromWindow(root.windowToken, 0)
+              }
+
+              private fun showMenu(anchor: View) {
+                  val t = tabs.getOrNull(cur) ?: return
+                  val pm = PopupMenu(this, anchor)
+                  val m = pm.menu
+                  val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
+                  m.add(0, 1, 0, "Yeni sekme")
+                  m.add(0, 2, 1, if (marked) "Yer imini kaldır" else "Yer imi ekle")
+                  m.add(0, 3, 2, "Yer imleri")
+                  m.add(0, 4, 3, "Geçmiş")
+                  m.add(0, 5, 4, "Sayfada bul")
+                  val desk = m.add(0, 6, 5, "Masaüstü sitesi")
+                  desk.isCheckable = true
+                  desk.isChecked = t.desktop
+                  m.add(0, 7, 6, "Paylaş")
+                  m.add(0, 9, 8, "Ayarlar")
+                  pm.setOnMenuItemClickListener { item ->
+                      when (item.itemId) {
+                          1 -> openTab(null)
+                          2 -> toggleBookmark()
+                          3 -> showBookmarks()
+                          4 -> showHistory()
+                          5 -> openFind()
+                          6 -> toggleDesktop()
+                          7 -> shareCurrent()
+                          9 -> showSettings()
+                      }
+                      true
+                  }
+                  pm.show()
+              }
+
+              private fun toggleBookmark() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  if (!t.url.startsWith("http")) {
+                      toast("Bu sayfa yer imi olarak eklenemez")
+                      return
+                  }
+                  val added = prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url)
+                  toast(if (added) "Yer imi eklendi" else "Yer imi kaldırıldı")
+              }
+
+              private fun showBookmarks() {
+                  showEntries("Yer imleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null)
+              }
+
+              private fun showHistory() {
+                  showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) },
+                      Pair<String, () -> Unit>("Temizle", { prefs.clearHistory() }))
+              }
+
+              private fun showEntries(
+                  title: String,
+                  list: List<Prefs.Entry>,
+                  onDelete: (Prefs.Entry) -> Unit,
+                  neutral: Pair<String, () -> Unit>?
+              ) {
+                  if (list.isEmpty()) {
+                      toast("Liste boş")
+                      return
+                  }
+                  val labels = list.map { (if (it.title.isBlank()) it.url else it.title) + "\n" + shownUrl(it.url) }
+                  val lv = ListView(this)
+                  lv.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
+                  val b = AlertDialog.Builder(this)
+                      .setTitle(title)
+                      .setView(lv)
+                      .setNegativeButton("Kapat", null)
+                  if (neutral != null) {
+                      b.setNeutralButton(neutral.first) { _, _ -> neutral.second() }
+                  }
+                  val d = b.create()
+                  lv.setOnItemClickListener { _, _, pos, _ ->
+                      d.dismiss()
+                      loadInCurrent(list[pos].url)
+                  }
+                  lv.setOnItemLongClickListener { _, _, pos, _ ->
+                      AlertDialog.Builder(this)
+                          .setMessage("Listeden silinsin mi?")
+                          .setPositiveButton("Sil") { _, _ ->
+                              onDelete(list[pos])
+                              d.dismiss()
+                          }
+                          .setNegativeButton("Vazgeç", null)
+                          .show()
+                      true
+                  }
+                  d.show()
+                  toast("Silmek için basılı tutun")
+              }
+
+              private fun openFind() {
+                  findBar.visibility = View.VISIBLE
+                  findInput.setText("")
+                  findCount.text = ""
+                  findInput.requestFocus()
+                  val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                  imm.showSoftInput(findInput, 0)
+              }
+
+              private fun closeFind() {
+                  if (findBar.visibility != View.VISIBLE) return
+                  findBar.visibility = View.GONE
+                  currentWeb()?.clearMatches()
+                  hideKeyboard()
+                  root.requestFocus()
+              }
+
+              private fun toggleDesktop() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  t.desktop = !t.desktop
+                  val s = t.web.settings
+                  if (t.desktop) {
+                      val chrome = Regex("Chrome/[\\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0"
+                      s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
+                  } else {
+                      s.userAgentString = t.mobileUa
+                  }
+                  t.web.reload()
+              }
+
+              private fun shareCurrent() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  if (!t.url.startsWith("http")) {
+                      toast("Paylaşılacak bir sayfa yok")
+                      return
+                  }
+                  val i = Intent(Intent.ACTION_SEND)
+                  i.type = "text/plain"
+                  i.putExtra(Intent.EXTRA_TEXT, t.url)
+                  startActivity(Intent.createChooser(i, "Paylaş"))
+              }
+
+              private fun showTabs() {
+                  val box = LinearLayout(this)
+                  box.orientation = LinearLayout.VERTICAL
+                  box.setPadding(dp(8), dp(8), dp(8), dp(8))
+                  val scroll = ScrollView(this)
+                  scroll.addView(box)
+                  val d = AlertDialog.Builder(this)
+                      .setTitle("Sekmeler")
+                      .setView(scroll)
+                      .setPositiveButton("Yeni sekme") { _, _ -> openTab(null) }
+                      .setNeutralButton("Hepsini kapat") { _, _ -> closeAllTabs() }
+                      .setNegativeButton("Kapat", null)
+                      .create()
+                  fillTabs(box, d)
+                  d.show()
+              }
+
+              private fun fillTabs(box: LinearLayout, d: AlertDialog) {
+                  box.removeAllViews()
+                  for (i in tabs.indices) {
+                      val t = tabs[i]
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.HORIZONTAL
+                      row.gravity = Gravity.CENTER_VERTICAL
+                      row.background = shape(if (i == cur) cField else 0, 10)
+                      row.setPadding(dp(12), dp(6), dp(4), dp(6))
+                      row.setOnClickListener {
+                          d.dismiss()
+                          switchTo(i)
+                      }
+                      val label = TextView(this)
+                      val url = t.pendingUrl ?: t.url
+                      val name = if (t.title.isBlank()) shownUrl(url) else t.title
+                      label.text = (if (name.isEmpty()) "Yeni sekme" else name) + "\n" + shownUrl(url)
+                      label.textSize = 14f
+                      label.maxLines = 2
+                      label.setTextColor(cText)
+                      if (i == cur) label.setTypeface(null, Typeface.BOLD)
+                      row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                      row.addView(textBtn("✕") {
+                          closeTab(i)
+                          fillTabs(box, d)
+                      }, LinearLayout.LayoutParams(dp(44), dp(44)))
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      lp.bottomMargin = dp(4)
+                      box.addView(row, lp)
+                  }
+              }
+
+              private fun closeAllTabs() {
+                  while (tabs.size > 1) closeTab(tabs.size - 1)
+                  val t = tabs.getOrNull(0) ?: return
+                  t.web.clearHistory()
+                  loadInCurrent(NEWTAB_URL)
+              }
+
+
+              // ------------------------------------------------------------------ ayarlar
+
+              private fun showSettings() {
+                  val eng = Engines.get(prefs.engine)
+                  val items = arrayOf(
+                      "Arama motoru: " + eng.name,
+                      "Arka planda çalma (müzik/video): " + (if (prefs.bgPlay) "açık" else "kapalı"),
+                      "Geçmişi temizle",
+                      "Çerezleri ve önbelleği temizle",
+                      "Hakkında"
+                  )
+                  AlertDialog.Builder(this)
+                      .setTitle("Ayarlar")
+                      .setItems(items) { _, which ->
+                          when (which) {
+                              0 -> chooseEngine()
+                              1 -> {
+                                  prefs.bgPlay = !prefs.bgPlay
+                                  toast("Arka planda çalma: " + (if (prefs.bgPlay) "açık" else "kapalı") + ". Uygulamayı kapatıp açınca tam geçerli olur.")
+                              }
+                              2 -> {
+                                  prefs.clearHistory()
+                                  toast("Geçmiş temizlendi")
+                              }
+                              3 -> clearBrowsingData()
+                              4 -> AlertDialog.Builder(this)
+                                  .setTitle("Pusula")
+                                  .setMessage("Hafif ve sade bir tarayıcı. Sekmeler, yer imleri, geçmiş, indirme ve arka planda müzik çalma içerir.")
+                                  .setPositiveButton(android.R.string.ok, null)
+                                  .show()
+                          }
+                      }
+                      .setNegativeButton("Kapat", null)
+                      .show()
+              }
+
+              private fun chooseEngine() {
+                  val names = Engines.all.map { it.name }.toTypedArray()
+                  val sel = Engines.all.indexOfFirst { it.id == prefs.engine }.coerceAtLeast(0)
+                  AlertDialog.Builder(this)
+                      .setTitle("Arama motoru")
+                      .setSingleChoiceItems(names, sel) { dlg, which ->
+                          prefs.engine = Engines.all[which].id
+                          dlg.dismiss()
+                      }
+                      .show()
+              }
+
+              private fun clearBrowsingData() {
+                  CookieManager.getInstance().removeAllCookies(null)
+                  CookieManager.getInstance().flush()
+                  WebStorage.getInstance().deleteAllData()
+                  for (t in tabs) t.web.clearCache(true)
+                  toast("Çerezler ve önbellek temizlendi")
+              }
+
+              private companion object {
+                  const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
+                  const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
+                  const val MAX_TABS = 20
+                  const val KEEP_PLAYING_JS =
+                      "(function(){try{" +
+                          "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
+                          "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
+                          "document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation()},true);" +
+                          "}catch(e){}})();"
+
+              }
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.PendingIntent
+          import android.app.Service
+          import android.content.Intent
+          import android.content.pm.ServiceInfo
+          import android.os.Build
+          import android.os.IBinder
+          import androidx.core.app.NotificationCompat
+          import androidx.core.app.ServiceCompat
+
+          /**
+           * Uygulama arka plana geçince çalışır. Bildirim göstererek Android'in uygulamayı kapatmasını
+           * önler; böylece sayfadaki müzik/video sesi devam eder. Uygulamaya dönünce durdurulur.
+           */
+          class PlaybackService : Service() {
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      nm.createNotificationChannel(
+                          NotificationChannel(CHANNEL, "Arka planda çalma", NotificationManager.IMPORTANCE_LOW)
+                      )
+                  }
+                  val open = PendingIntent.getActivity(
+                      this, 0, Intent(this, MainActivity::class.java),
+                      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                  )
+                  val n: Notification = NotificationCompat.Builder(this, CHANNEL)
+                      .setSmallIcon(R.drawable.ic_notif)
+                      .setContentTitle("Pusula arka planda çalışıyor")
+                      .setContentText("Sesi durdurmak için uygulamaya dönüp sayfayı kapatın")
+                      .setContentIntent(open)
+                      .setOngoing(true)
+                      .build()
+                  try {
+                      if (Build.VERSION.SDK_INT >= 29) {
+                          ServiceCompat.startForeground(this, 1002, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                      } else {
+                          startForeground(1002, n)
+                      }
+                  } catch (e: Exception) {
+                      stopSelf()
+                  }
+                  return START_NOT_STICKY
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+
+              private companion object {
+                  const val CHANNEL = "playback"
+              }
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.content.Context
+          import android.net.Uri
+          import org.json.JSONArray
+          import org.json.JSONObject
+
+          /** Arama motorları. */
+          object Engines {
+              class E(val id: String, val name: String, val search: String, val home: String)
+
+              val all: List<E> = listOf(
+                  E("google", "Google", "https://www.google.com/search?q=%s", "https://www.google.com/"),
+                  E("ddg", "DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com/"),
+                  E("bing", "Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com/"),
+                  E("yandex", "Yandex", "https://yandex.com.tr/search/?text=%s", "https://yandex.com.tr/")
+              )
+
+              fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
+          }
+
+          private val HOST_LIKE = Regex(
+              "^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$"
+          )
+
+          /** Adres çubuğuna yazılanı adrese ya da arama adresine çevirir. */
+          fun resolveInput(raw: String, engine: Engines.E): String {
+              val t = raw.trim()
+              if (t.isEmpty()) return engine.home
+              if (t.startsWith("http://", ignoreCase = true) || t.startsWith("https://", ignoreCase = true)) return t
+              if (!t.contains(' ') && HOST_LIKE.matches(t)) return "https://" + t
+              return engine.search.replace("%s", Uri.encode(t))
+          }
+
+          /** Ayarlar, yer imleri, geçmiş ve açık sekmeler. Hepsi yalnızca telefonda saklanır. */
+          class Prefs(context: Context) {
+
+              class Entry(val title: String, val url: String)
+
+              private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
+
+              var engine: String
+                  get() = sp.getString("engine", "google") ?: "google"
+                  set(v) { sp.edit().putString("engine", v).apply() }
+
+              var bgPlay: Boolean
+                  get() = sp.getBoolean("bgPlay", true)
+                  set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
+
+              private fun readList(key: String): MutableList<Entry> {
+                  val out = ArrayList<Entry>()
+                  try {
+                      val arr = JSONArray(sp.getString(key, "[]") ?: "[]")
+                      for (i in 0 until arr.length()) {
+                          val o = arr.getJSONObject(i)
+                          out.add(Entry(o.optString("t"), o.optString("u")))
+                      }
+                  } catch (e: Exception) {
+                      // bozuk veri: boş liste
+                  }
+                  return out
+              }
+
+              private fun writeList(key: String, list: List<Entry>) {
+                  val arr = JSONArray()
+                  for (e in list) arr.put(JSONObject().put("t", e.title).put("u", e.url))
+                  sp.edit().putString(key, arr.toString()).apply()
+              }
+
+              // ---- yer imleri ----
+
+              fun bookmarks(): List<Entry> = readList("bookmarks")
+
+              fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
+
+              /** Yer imi yoksa ekler, varsa kaldırır. Eklenmişse true döner. */
+              fun toggleBookmark(title: String, url: String): Boolean {
+                  val list = readList("bookmarks")
+                  val had = list.removeAll { it.url == url }
+                  if (!had) list.add(0, Entry(title, url))
+                  writeList("bookmarks", list)
+                  return !had
+              }
+
+              fun removeBookmark(url: String) {
+                  val list = readList("bookmarks")
+                  list.removeAll { it.url == url }
+                  writeList("bookmarks", list)
+              }
+
+              // ---- geçmiş ----
+
+              fun history(): List<Entry> = readList("history")
+
+              fun addHistory(title: String, url: String) {
+                  val list = readList("history")
+                  if (list.isNotEmpty() && list[0].url == url) return
+                  list.add(0, Entry(title, url))
+                  while (list.size > 300) list.removeAt(list.size - 1)
+                  writeList("history", list)
+              }
+
+              fun removeHistory(url: String) {
+                  val list = readList("history")
+                  list.removeAll { it.url == url }
+                  writeList("history", list)
+              }
+
+              fun clearHistory() {
+                  sp.edit().putString("history", "[]").apply()
+              }
+
+              // ---- açık sekmeler ----
+
+              fun saveTabs(urls: List<String>, current: Int) {
+                  val arr = JSONArray()
+                  for (u in urls) arr.put(u)
+                  sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
+              }
+
+              fun savedTabs(): List<String> {
+                  val out = ArrayList<String>()
+                  try {
+                      val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
+                      for (i in 0 until arr.length()) out.add(arr.getString(i))
+                  } catch (e: Exception) {
+                      // bozuk veri
+                  }
+                  return out
+              }
+
+              fun savedCurrent(): Int = sp.getInt("tabCur", 0)
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.webkit.JavascriptInterface
+          import org.json.JSONArray
+          import org.json.JSONObject
+
+          /**
+           * Yeni sekme sayfasının ("Pusula" adıyla) okuduğu küçük köprü.
+           * [trusted] yalnızca kendi sayfamız yüklüyken true olur; dış siteler hiçbir şey okuyamaz.
+           */
+          class PusulaBridge(private val prefs: Prefs) {
+
+              @Volatile
+              var trusted = false
+
+              @JavascriptInterface
+              fun config(): String {
+                  if (!trusted) return "{}"
+                  val e = Engines.get(prefs.engine)
+                  val arr = JSONArray()
+                  for (b in prefs.bookmarks().take(12)) {
+                      arr.put(JSONObject().put("t", b.title).put("u", b.url))
+                  }
+                  return JSONObject()
+                      .put("engine", e.name)
+                      .put("search", e.search)
+                      .put("bookmarks", arr)
+                      .toString()
+              }
+          }
+          EOF
+          cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FF000000"
+                  android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FF000000"
+                  android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FF000000"
+                  android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FF000000"
+                  android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="96dp"
+              android:height="96dp"
+              android:viewportWidth="96"
+              android:viewportHeight="96">
+              <path
+                  android:fillColor="#1457E8"
+                  android:pathData="M20,0 H76 A20,20 0 0 1 96,20 V76 A20,20 0 0 1 76,96 H20 A20,20 0 0 1 0,76 V20 A20,20 0 0 1 20,0 Z" />
+              <path
+                  android:fillColor="#00000000"
+                  android:pathData="M48,48 m-28,0 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0"
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="6" />
+              <path
+                  android:fillColor="#FFFFFF"
+                  android:pathData="M48,24 L58,50 H38 Z" />
+              <path
+                  android:fillColor="#B3C9FF"
+                  android:pathData="M48,72 L38,46 H58 Z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FF000000"
+                  android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FFFFFFFF"
+                  android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FF000000"
+                  android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z" />
+          </vector>
+          EOF
+          cat > app/src/main/res/values-night/bools.xml <<'EOF'
+          <resources>
+              <bool name="light_bars">false</bool>
+          </resources>
+          EOF
+          cat > app/src/main/res/values-night/colors.xml <<'EOF'
+          <resources>
+              <color name="bg">#0C0F14</color>
+          </resources>
+          EOF
+          cat > app/src/main/res/values/bools.xml <<'EOF'
+          <resources>
+              <bool name="light_bars">true</bool>
+          </resources>
+          EOF
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <resources>
+              <color name="bg">#F4F5F7</color>
+          </resources>
+          EOF
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources>
+              <string name="app_name">Pusula</string>
+          </resources>
+          EOF
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+          <resources>
+              <style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar">
+                  <item name="android:windowBackground">@color/bg</item>
+                  <item name="android:statusBarColor">@android:color/transparent</item>
+                  <item name="android:navigationBarColor">@android:color/transparent</item>
+                  <item name="android:windowLightStatusBar">@bool/light_bars</item>
+              </style>
+          </resources>
+          EOF
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: 8.9 }
+      - name: APK derle
+        run: gradle assembleDebug --no-daemon
+      - name: APK yukle
+        uses: actions/upload-artifact@v4
+        with: { name: Pusula-APK, path: app/build/outputs/apk/debug/*.apk }
