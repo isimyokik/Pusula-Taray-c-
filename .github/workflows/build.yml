@@ -93,7 +93,6 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
               <application
                   android:allowBackup="false"
@@ -376,9 +375,6 @@ jobs:
               private var fileCb: ValueCallback<Array<Uri>>? = null
               private var startUrl: String? = null
 
-              private val notifLauncher =
-                  registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-
               private val fileLauncher =
                   registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
                       fileCb?.onReceiveValue(
@@ -419,7 +415,6 @@ jobs:
                       }
                   })
 
-                  askNotificationPermission()
                   val mediaFilter = IntentFilter().apply {
                       addAction(PlaybackService.ACTION_PLAY)
                       addAction(PlaybackService.ACTION_TOGGLE)
@@ -463,15 +458,6 @@ jobs:
                   handler.removeCallbacks(backgroundMediaPump)
                   stopService(Intent(this, PlaybackService::class.java))
                   shown?.onResume()
-              }
-
-              private fun askNotificationPermission() {
-                  if (Build.VERSION.SDK_INT >= 33 &&
-                      ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-                      PackageManager.PERMISSION_GRANTED
-                  ) {
-                      notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                  }
               }
 
               override fun onDestroy() {
@@ -750,10 +736,7 @@ jobs:
                   s.userAgentString = ua
                   tab.mobileUa = ua
                   web.addJavascriptInterface(bridge, "Pusula")
-                  if (prefs.bgPlay && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                      // Siteler "sayfa görünmüyor" diye müziği durdurmasın.
-                      WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
-                  }
+                  // Sayfa görünürlüğünü sahte biçimde değiştirme: bazı sitelerde medya yaşam döngüsünü bozabiliyor.
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
                           findCount.text = if (total == 0) "0" else "${active + 1}/$total"
@@ -1494,23 +1477,7 @@ jobs:
                   const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
                   const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
                   const val MAX_TABS = 20
-                  const val KEEP_PLAYING_JS =
-                      "(function(){try{" +
-                          "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
-                          "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
-                          "document.addEventListener('visibilitychange',function(e){" +
-                          "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
-                          "e.stopImmediatePropagation();},true);" +
-                          "document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation()},true);" +
-                          "document.addEventListener('freeze',function(e){e.stopImmediatePropagation()},true);" +
-                          "}catch(e){}})();"
-
-                  const val BACKGROUND_MEDIA_JS =
-                      "(function(){try{" +
-                          "document.querySelectorAll('video,audio').forEach(function(m){" +
-                          "if(!m.paused && !m.ended){m.dataset.pusulaWasPlaying='1';}" +
-                          "});" +
-                          "}catch(e){}})();"
+                  const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.ended){m.dataset.pusulaWasPlaying='1';}});}catch(e){}})();"
                   const val MEDIA_PLAY_JS = "(function(){var v=document.querySelector('video,audio');if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{var b=document.querySelector('.ytp-play-button[aria-label*=Play],.ytp-play-button[title*=Play]');if(b)b.click();}})();"
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
                   const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.pause();});})();"
@@ -1523,7 +1490,6 @@ jobs:
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
           package com.pusula.browser
 
-          import android.app.Notification
           import android.app.NotificationChannel
           import android.app.NotificationManager
           import android.app.PendingIntent
@@ -1534,77 +1500,34 @@ jobs:
           import android.os.IBinder
           import androidx.core.app.NotificationCompat
           import androidx.core.app.ServiceCompat
-                    import android.support.v4.media.session.MediaSessionCompat
-          import android.support.v4.media.session.PlaybackStateCompat
 
-          /**
-           * Uygulama arka plana geçince çalışır. Bildirim göstererek Android'in uygulamayı kapatmasını
-           * önler; böylece sayfadaki müzik/video sesi devam eder. Uygulamaya dönünce durdurulur.
+          /** Silent, minimal foreground service to keep the WebView process eligible for background playback.
+           * Android requires a foreground-service notification; this is not a media-control notification.
            */
           class PlaybackService : Service() {
-
-              private lateinit var mediaSession: MediaSessionCompat
-
-              override fun onCreate() {
-                  super.onCreate()
-                  mediaSession = MediaSessionCompat(this, "PusulaPlayback").apply {
-                      setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
-                      setCallback(object : MediaSessionCompat.Callback() {
-                          override fun onPlay() { sendBroadcast(Intent(ACTION_PLAY).setPackage(packageName)) }
-                          override fun onPause() { sendBroadcast(Intent(ACTION_PAUSE).setPackage(packageName)) }
-                          override fun onSkipToPrevious() { sendBroadcast(Intent(ACTION_PREVIOUS).setPackage(packageName)) }
-                          override fun onSkipToNext() { sendBroadcast(Intent(ACTION_NEXT).setPackage(packageName)) }
-                      })
-                      setPlaybackState(PlaybackStateCompat.Builder()
-                          .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
-                          .setState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
-                          .build())
-                      isActive = true
-                  }
-              }
-
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  when (intent?.action) {
-                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> {
-                          sendBroadcast(Intent(intent.action).setPackage(packageName))
-                      }
-                  }
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
                       nm.createNotificationChannel(
-                          NotificationChannel(CHANNEL, "Arka planda çalma", NotificationManager.IMPORTANCE_LOW)
+                          NotificationChannel(CHANNEL, "Arka planda çalışma", NotificationManager.IMPORTANCE_MIN).apply {
+                              setShowBadge(false)
+                              description = "Arka planda medya oynatımı için sistem hizmeti"
+                          }
                       )
                   }
                   val open = PendingIntent.getActivity(
                       this, 0, Intent(this, MainActivity::class.java),
                       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                   )
-                  fun mediaAction(action: String, title: String, request: Int): NotificationCompat.Action {
-                      val pi = PendingIntent.getService(
-                          this, request, Intent(this, PlaybackService::class.java).setAction(action),
-                          PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                      )
-                      val icon = when (action) {
-                          ACTION_PREVIOUS -> android.R.drawable.ic_media_previous
-                          ACTION_NEXT -> android.R.drawable.ic_media_next
-                          ACTION_PLAY, ACTION_TOGGLE -> android.R.drawable.ic_media_play
-                          else -> android.R.drawable.ic_media_pause
-                      }
-                      return NotificationCompat.Action.Builder(icon, title, pi).build()
-                  }
-                  val n: Notification = NotificationCompat.Builder(this, CHANNEL)
+                  val n = NotificationCompat.Builder(this, CHANNEL)
                       .setSmallIcon(R.drawable.ic_notif)
-                      .setContentTitle("Pusula medya oynatımı")
-                      .setContentText("YouTube ve sayfa medyası")
+                      .setContentTitle("Pusula Browser")
+                      .setContentText("Arka planda çalışıyor")
                       .setContentIntent(open)
-                      .addAction(mediaAction(ACTION_PREVIOUS, "Önceki", 11))
-                      .addAction(mediaAction(ACTION_TOGGLE, "Oynat / duraklat", 12))
-                      .addAction(mediaAction(ACTION_NEXT, "Sonraki", 14))
-                      .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
-                          .setMediaSession(mediaSession.sessionToken)
-                          .setShowActionsInCompactView(0, 1, 2))
+                      .setSilent(true)
+                      .setShowWhen(false)
                       .setOngoing(true)
-                      .setOnlyAlertOnce(true)
+                      .setCategory(NotificationCompat.CATEGORY_SERVICE)
                       .build()
                   try {
                       if (Build.VERSION.SDK_INT >= 29) {
@@ -1612,7 +1535,7 @@ jobs:
                       } else {
                           startForeground(1002, n)
                       }
-                  } catch (e: Exception) {
+                  } catch (_: Exception) {
                       stopSelf()
                   }
                   return START_NOT_STICKY
@@ -1620,22 +1543,7 @@ jobs:
 
               override fun onBind(intent: Intent?): IBinder? = null
 
-              override fun onDestroy() {
-                  if (::mediaSession.isInitialized) {
-                      mediaSession.isActive = false
-                      mediaSession.release()
-                  }
-                  super.onDestroy()
-              }
-
-              companion object {
-                  const val CHANNEL = "playback"
-                  const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
-                  const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
-                  const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
-                  const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
-                  const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
-              }
+              companion object { const val CHANNEL = "playback" }
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
@@ -1658,7 +1566,7 @@ jobs:
                   E("yandex", "Yandex", "https://yandex.com.tr/search/?text=%s", "https://yandex.com.tr/")
               )
 
-              fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
+              fn get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
           }
 
           private val HOST_LIKE = Regex(
@@ -1943,8 +1851,13 @@ jobs:
         with: { gradle-version: 8.9 }
       - name: APK derle
         run: gradle assembleDebug --no-daemon
+      - name: APK dosyasini dogrula
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -print
+          test -n "$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
       - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
           name: Pusula-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
