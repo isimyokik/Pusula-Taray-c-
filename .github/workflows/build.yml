@@ -1,4 +1,4 @@
-name: Pusula Browser source
+name: Pusula APK
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -58,8 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "1.0"
-
+                  versionName = "2.1"
               }
 
               buildTypes {
@@ -75,7 +74,6 @@ jobs:
               kotlinOptions {
                   jvmTarget = "17"
               }
-
           }
 
           dependencies {
@@ -83,7 +81,6 @@ jobs:
               implementation("androidx.appcompat:appcompat:1.7.0")
               implementation("androidx.webkit:webkit:1.12.1")
               implementation("androidx.media:media:1.7.0")
-
           }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -116,7 +113,6 @@ jobs:
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
-                      <!-- Bağlantılara tıklanınca Pusula'nın da seçenek olarak çıkması (varsayılan tarayıcı olabilmesi) için -->
                       <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
                           <category android:name="android.intent.category.DEFAULT" />
@@ -134,40 +130,87 @@ jobs:
           <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>Yeni sekme</title>
+          <title>Yeni Sekme</title>
           <style>
-            :root{--bg:#f4f5f7;--card:#fff;--text:#1b1f24;--sub:#6b7280;--line:#e3e6ea;--acc:#2f6bff}
-            @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#1a1d23;--text:#e8eaed;--sub:#9aa0a6;--line:#2a2e36}}
+            :root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff}
             *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-            body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Roboto,"Segoe UI",sans-serif;min-height:100vh}
-            main{max-width:560px;margin:0 auto;padding:44px 20px 32px}
-            h1{font-size:34px;margin:0 0 4px;text-align:center;letter-spacing:.5px}
-            .sub{text-align:center;color:var(--sub);margin:0 0 28px;font-size:14px}
-            form{display:flex;gap:8px;margin-bottom:28px}
-            input{flex:1;min-width:0;height:50px;border-radius:26px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:0 20px;font-size:16px;outline:none}
-            input:focus{border-color:var(--acc)}
-            button.go{width:50px;height:50px;border-radius:50%;border:0;background:var(--acc);color:#fff;font-size:20px}
-            h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--sub);margin:24px 4px 10px}
-            .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-            a.t{display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-size:12px;padding:12px 4px;background:var(--card);border-radius:16px;border:1px solid var(--line);text-align:center;overflow:hidden}
-            a.t i{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-weight:700;font-size:18px}
-            a.t span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            html,body{margin:0}
+            body{background:var(--bg);color:var(--text);font-family:Roboto,-apple-system,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
+            .glow{position:fixed;inset:0;pointer-events:none;
+              background:radial-gradient(420px 300px at 85% -40px,color-mix(in srgb,var(--acc) 38%,transparent),transparent 70%),
+                         radial-gradient(380px 280px at -10% 18%,color-mix(in srgb,var(--acc2) 30%,transparent),transparent 70%)}
+            main{position:relative;max-width:560px;margin:0 auto;padding:34px 18px 40px}
+            .hello{color:var(--sub);font-size:14px;margin:0 0 2px}
+            h1{font-size:40px;line-height:1.1;margin:0 0 22px;font-weight:800;letter-spacing:-.5px;
+               background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+            form{display:flex;gap:8px;margin-bottom:26px}
+            .sbox{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:54px;border-radius:27px;padding:0 18px;
+                  background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);
+                  box-shadow:0 8px 24px rgba(0,0,0,.18)}
+            .sbox:focus-within{border-color:var(--acc)}
+            .sbox input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-size:16px;outline:none;height:100%}
+            .sbox input::placeholder{color:var(--sub)}
+            button.go{width:54px;height:54px;border-radius:50%;border:0;color:#fff;font-size:22px;
+                      background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 8px 20px color-mix(in srgb,var(--acc) 45%,transparent)}
+            h2{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--sub);margin:26px 4px 12px;font-weight:700}
+            .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 8px}
+            a.t{display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-size:12px;min-width:0}
+            a.t i{width:58px;height:58px;border-radius:19px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:27px;
+                  box-shadow:0 8px 18px rgba(0,0,0,.25);color:#fff;font-weight:700}
+            a.t span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)}
+            .list{display:flex;flex-direction:column;gap:8px}
+            a.row{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);padding:11px 14px;border-radius:16px;
+                  background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid color-mix(in srgb,var(--text) 8%,transparent);min-width:0}
+            a.row b{display:block;font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            a.row small{display:block;color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            a.row .d{width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px}
+            .priv{text-align:center;padding-top:60px}
+            .priv .big{font-size:64px;margin-bottom:6px}
+            .priv h1{margin-bottom:8px}
+            .priv p{color:var(--sub);line-height:1.6;margin:0 auto 10px;max-width:30ch}
+            [hidden]{display:none!important}
           </style>
           </head>
           <body>
-          <main>
-            <h1>Pusula</h1>
-            <p class="sub" id="sub">Ara ya da adres yaz</p>
-            <form id="f"><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"><button class="go" type="submit" aria-label="Git">&#8594;</button></form>
-            <h2>Hızlı erişim</h2>
-            <div class="grid" id="pins"></div>
-            <div id="bmWrap" style="display:none"><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
+          <div class="glow"></div>
+          <main id="main">
+            <div id="home">
+              <p class="hello" id="hello"></p>
+              <h1>Pusula</h1>
+              <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">→</button></form>
+              <h2>Hızlı erişim</h2>
+              <div class="grid" id="pins"></div>
+              <div id="bmWrap" hidden><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
+              <div id="hsWrap" hidden><h2>Son ziyaretler</h2><div class="list" id="hs"></div></div>
+            </div>
+            <div class="priv" id="priv" hidden>
+              <div class="big">🕶️</div>
+              <h1>Gizli sekme</h1>
+              <p>Bu sekmede gezdiğin sayfalar geçmişe kaydedilmez ve sekmeyi kapatınca silinir.</p>
+              <p>İstersen aşağıdaki kutudan arama yapabilirsin.</p>
+              <form id="pf" style="margin-top:18px"><div class="sbox"><span>🔎</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria-label="Git">→</button></form>
+            </div>
           </main>
           <script>
           (function(){
-            var cfg = {engine:"Google", search:"https://www.google.com/search?q=%s", bookmarks:[]};
+            var cfg = {engine:"Google",search:"https://www.google.com/search?q=%s",bookmarks:[],history:[]};
             try { if (window.Pusula) { var c = JSON.parse(window.Pusula.config()); if (c && c.search) cfg = c; } } catch (e) {}
-            document.getElementById("sub").textContent = cfg.engine + " ile ara ya da adres yaz";
+            var r = document.documentElement.style;
+            if (cfg.bg) {
+              r.setProperty("--bg",cfg.bg); r.setProperty("--surface",cfg.surface); r.setProperty("--field",cfg.field);
+              r.setProperty("--text",cfg.text); r.setProperty("--sub",cfg.sub); r.setProperty("--acc",cfg.accent); r.setProperty("--acc2",cfg.accent2);
+            }
+            var isPrivate = /[?&]private=1/.test(location.search);
+            if (isPrivate) {
+              r.setProperty("--bg","#150d2b"); r.setProperty("--surface","#241447"); r.setProperty("--field","#34205f");
+              r.setProperty("--text","#f3ecff"); r.setProperty("--sub","#b7a4e6"); r.setProperty("--acc","#a46bff"); r.setProperty("--acc2","#ff5cc8");
+              document.getElementById("home").hidden = true; document.getElementById("priv").hidden = false;
+            }
+            var h = new Date().getHours();
+            var greet = h < 5 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar";
+            var day = ""; try { day = new Date().toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"}); } catch (e) {}
+            document.getElementById("hello").textContent = greet + (day ? " · " + day : "");
+            document.getElementById("q").placeholder = cfg.engine + " ile ara veya adres yaz";
 
             function go(text){
               text = (text || "").trim();
@@ -177,40 +220,46 @@ jobs:
               location.href = cfg.search.replace("%s", encodeURIComponent(text));
             }
             document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
+            document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
 
             var pins = [
-              ["Google","https://www.google.com/","#4285f4"],
-              ["YouTube","https://m.youtube.com/","#e53935"],
-              ["Vikipedi","https://tr.wikipedia.org/","#455a64"],
-              ["Haberler","https://news.google.com/?hl=tr","#1e88e5"],
-              ["Harita","https://maps.google.com/","#43a047"],
-              ["Çeviri","https://translate.google.com/","#5c6bc0"],
-              ["DuckDuckGo","https://duckduckgo.com/","#ef6c00"],
-              ["GitHub","https://github.com/","#24292f"]
+              ["YouTube","https://m.youtube.com/","▶","linear-gradient(135deg,#ff4b4b,#c4001d)"],
+              ["Ara","https://www.google.com/","🔎","linear-gradient(135deg,#4c8dff,#2457d6)"],
+              ["Müzik","https://music.youtube.com/","🎵","linear-gradient(135deg,#ff7a45,#ff2d6f)"],
+              ["Haberler","https://news.google.com/?hl=tr","📰","linear-gradient(135deg,#34c3ff,#2477ff)"],
+              ["Harita","https://maps.google.com/","🗺️","linear-gradient(135deg,#34d37a,#0f9d58)"],
+              ["Çeviri","https://translate.google.com/","🌐","linear-gradient(135deg,#8a5cff,#4a35d9)"],
+              ["Hava","https://www.google.com/search?q=hava+durumu","⛅","linear-gradient(135deg,#ffc84a,#ff8a1f)"],
+              ["GitHub","https://github.com/","🐙","linear-gradient(135deg,#59616e,#1b1f24)"]
             ];
-            function tile(label, url, color){
-              var a = document.createElement("a");
-              a.className = "t"; a.href = url;
-              var i = document.createElement("i");
-              i.style.background = color;
-              i.textContent = (label || "?").charAt(0).toUpperCase();
-              var s = document.createElement("span");
-              s.textContent = label;
-              a.appendChild(i); a.appendChild(s);
-              return a;
+            function tile(label, url, icon, bg){
+              var a = document.createElement("a"); a.className = "t"; a.href = url;
+              var i = document.createElement("i"); i.style.background = bg; i.textContent = icon;
+              var s = document.createElement("span"); s.textContent = label;
+              a.appendChild(i); a.appendChild(s); return a;
             }
             var g = document.getElementById("pins");
-            pins.forEach(function(p){ g.appendChild(tile(p[0], p[1], p[2])); });
+            pins.forEach(function(p){ g.appendChild(tile(p[0],p[1],p[2],p[3])); });
 
+            var grads = ["linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#a55eea,#6c3fc8)","linear-gradient(135deg,#fd79a8,#d63384)","linear-gradient(135deg,#5f7cff,#3949ab)","linear-gradient(135deg,#ff9f43,#e17055)"];
+            function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./,""); } catch (e) { return u; } }
             var bms = cfg.bookmarks || [];
             if (bms.length) {
-              document.getElementById("bmWrap").style.display = "block";
+              document.getElementById("bmWrap").hidden = false;
               var bg = document.getElementById("bms");
-              var colors = ["#00897b","#8e24aa","#d81b60","#3949ab","#f4511e","#6d4c41"];
-              bms.forEach(function(b, n){
-                var host = b.u;
-                try { host = new URL(b.u).hostname.replace(/^www\./, ""); } catch (e) {}
-                bg.appendChild(tile((b.t && b.t.length < 18) ? b.t : host, b.u, colors[n % colors.length]));
+              bms.forEach(function(b,n){ var host = hostOf(b.u); bg.appendChild(tile((b.t && b.t.length < 14) ? b.t : host, b.u, host.charAt(0).toUpperCase(), grads[n % grads.length])); });
+            }
+            var hs = cfg.history || [];
+            if (hs.length) {
+              document.getElementById("hsWrap").hidden = false;
+              var hl = document.getElementById("hs");
+              hs.forEach(function(x,n){
+                var a = document.createElement("a"); a.className = "row"; a.href = x.u;
+                var d = document.createElement("span"); d.className = "d"; d.style.background = grads[n % grads.length]; d.textContent = hostOf(x.u).charAt(0).toUpperCase();
+                var w = document.createElement("div"); w.style.minWidth = "0";
+                var b = document.createElement("b"); b.textContent = x.t || hostOf(x.u);
+                var s = document.createElement("small"); s.textContent = hostOf(x.u);
+                w.appendChild(b); w.appendChild(s); a.appendChild(d); a.appendChild(w); hl.appendChild(a);
               });
             }
           })();
@@ -222,13 +271,14 @@ jobs:
           package com.pusula.browser
 
           import android.annotation.SuppressLint
-          import android.Manifest
+          import android.app.Dialog
           import android.app.DownloadManager
+          import android.graphics.Matrix
+          import android.view.Window
           import android.content.BroadcastReceiver
           import android.content.Context
           import android.content.Intent
           import android.content.IntentFilter
-          import android.content.pm.PackageManager
           import android.content.res.ColorStateList
           import android.content.res.Configuration
           import android.graphics.Bitmap
@@ -255,7 +305,6 @@ jobs:
           import android.view.inputmethod.EditorInfo
           import android.view.inputmethod.InputMethodManager
           import android.webkit.CookieManager
-          import android.webkit.JsPromptResult
           import android.webkit.JsResult
           import android.webkit.URLUtil
           import android.webkit.ValueCallback
@@ -267,7 +316,6 @@ jobs:
           import android.webkit.WebView
           import android.webkit.WebViewClient
           import android.widget.ArrayAdapter
-          import android.widget.Button
           import android.widget.EditText
           import android.widget.FrameLayout
           import android.widget.ImageButton
@@ -292,20 +340,29 @@ jobs:
           import androidx.webkit.WebViewAssetLoader
           import androidx.webkit.WebViewCompat
           import androidx.webkit.WebViewFeature
+          import org.json.JSONArray
           import org.json.JSONObject
           import java.io.ByteArrayInputStream
 
           class MainActivity : AppCompatActivity() {
 
-              /** Bir sekme: kendi WebView'ı, başlığı ve adresi vardır. */
               private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
-                  var title: String = "Yeni sekme"
+                  var title: String = "Yeni Sekme"
                   var url: String = ""
                   var pendingUrl: String? = null
                   var desktop: Boolean = false
                   var mobileUa: String = ""
                   var progress: Int = 100
                   var preview: Bitmap? = null
+              }
+
+              private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
+
+              /** Arka plana atılınca WebView'a "hâlâ görünüyorum" dedirtir; YouTube sesi kesilmez. */
+              private class BgWebView(c: Context) : WebView(c) {
+                  override fun onWindowVisibilityChanged(visibility: Int) {
+                      if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
+                  }
               }
 
               private val tabs = ArrayList<BTab>()
@@ -316,37 +373,34 @@ jobs:
               private lateinit var loader: WebViewAssetLoader
               private val handler = Handler(Looper.getMainLooper())
               private var appInBackground = false
+
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
-                      val js = when (intent?.action) {
+                      val act = intent?.action ?: return
+                      val js = when (act) {
                           PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
                           PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
                           PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
                           else -> return
                       }
-                      // Oynat/durdur ve parça atlama yalnızca seçili sekmeye gider; aksi halde
-                      // her WebView komutu alıp sesi kesebilir veya birden fazla videoyu başlatabilir.
-                      val targets = if (intent.action == PlaybackService.ACTION_PAUSE) tabs.toList()
+                      val targets = if (act == PlaybackService.ACTION_PAUSE) tabs.toList()
                                     else listOfNotNull(tabs.getOrNull(cur))
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
                       }
                   }
               }
+
               private val backgroundMediaPump = object : Runnable {
                   override fun run() {
                       if (!appInBackground || !prefs.bgPlay) return
-                      // Medya başka sekmede çalıyor olabilir. Yeni sekmeye geçildiğinde de
-                      // bütün WebView'larda çalan medyayı kontrol et.
-                      tabs.toList().forEach { t ->
-                          try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
-                      }
+                      val t = tabs.getOrNull(cur)
+                      try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
                       handler.postDelayed(this, 1200L)
                   }
               }
 
-              // arayüz
               private lateinit var root: LinearLayout
               private lateinit var content: FrameLayout
               private lateinit var fullscreen: FrameLayout
@@ -360,7 +414,6 @@ jobs:
               private lateinit var findInput: EditText
               private lateinit var findCount: TextView
 
-              // renkler
               private var dark = false
               private var cBg = 0
               private var cSurface = 0
@@ -368,7 +421,9 @@ jobs:
               private var cText = 0
               private var cSub = 0
               private var cIcon = 0
-              private val cAccent = 0xFF2F6BFF.toInt()
+              private var cAccent = 0
+              private var cAccent2 = 0
+              private lateinit var topBar: LinearLayout
 
               private var customView: View? = null
               private var customCb: WebChromeClient.CustomViewCallback? = null
@@ -383,8 +438,6 @@ jobs:
                       fileCb = null
                   }
 
-              // ------------------------------------------------------------------ yaşam döngüsü
-
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   prefs = Prefs(this)
@@ -392,14 +445,12 @@ jobs:
                       .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
                       .build()
 
-                  dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-                      Configuration.UI_MODE_NIGHT_YES
-                  cBg = if (dark) 0xFF0F1115.toInt() else 0xFFF4F5F7.toInt()
-                  cSurface = if (dark) 0xFF1A1D23.toInt() else 0xFFFFFFFF.toInt()
-                  cField = if (dark) 0xFF2A2E36.toInt() else 0xFFEDEFF3.toInt()
-                  cText = if (dark) 0xFFE8EAED.toInt() else 0xFF1B1F24.toInt()
-                  cSub = if (dark) 0xFF9AA0A6.toInt() else 0xFF6B7280.toInt()
-                  cIcon = if (dark) 0xFFD5D8DD.toInt() else 0xFF3C4350.toInt()
+                  val pal = Themes.get(prefs.theme)
+                  dark = pal.dark
+                  cBg = pal.bg; cSurface = pal.surface; cField = pal.field
+                  cText = pal.text; cSub = pal.sub; cIcon = pal.icon
+                  cAccent = pal.accent; cAccent2 = pal.accent2
+                  window.setBackgroundDrawable(ColorDrawable(cBg))
 
                   WindowCompat.setDecorFitsSystemWindows(window, false)
                   buildUi()
@@ -410,9 +461,7 @@ jobs:
                   startUrl = intent?.dataString
 
                   onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-                      override fun handleOnBackPressed() {
-                          handleBack()
-                      }
+                      override fun handleOnBackPressed() { handleBack() }
                   })
 
                   val mediaFilter = IntentFilter().apply {
@@ -437,15 +486,12 @@ jobs:
                   saveTabs()
                   CookieManager.getInstance().flush()
                   if (prefs.bgPlay) {
-                      // WebView'ı pause etme; hizmet süreci canlı tutar ve JS oynatımı yeniden dener.
                       appInBackground = true
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
                       try {
                           ContextCompat.startForegroundService(this, Intent(this, PlaybackService::class.java))
-                      } catch (e: Exception) {
-                          // Android arka plan hizmetini reddederse WebView yine de pause edilmez.
-                      }
+                      } catch (_: Exception) { }
                   } else {
                       appInBackground = true
                       shown?.onPause()
@@ -463,28 +509,17 @@ jobs:
               override fun onDestroy() {
                   try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
                   handler.removeCallbacks(backgroundMediaPump)
-                  for (t in tabs) {
-                      try {
-                          t.web.destroy()
-                      } catch (e: Exception) {
-                          // yok say
-                      }
-                  }
+                  for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
                   super.onDestroy()
               }
 
-              // ------------------------------------------------------------------ arayüz kurulumu
-
               private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
-
-              private fun shape(color: Int, radiusDp: Int, stroke: Int = 0, strokeDp: Int = 0): GradientDrawable {
+              private fun shape(color: Int, radiusDp: Int): GradientDrawable {
                   val g = GradientDrawable()
                   g.setColor(color)
                   g.cornerRadius = dp(radiusDp).toFloat()
-                  if (stroke != 0) g.setStroke(dp(strokeDp), stroke)
                   return g
               }
-
               private fun ripple(content: Drawable?): RippleDrawable =
                   RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
 
@@ -516,27 +551,40 @@ jobs:
 
                   root = LinearLayout(this)
                   root.orientation = LinearLayout.VERTICAL
-                  root.setBackgroundColor(cSurface)
+                  root.setBackgroundColor(cBg)
                   root.isFocusable = true
                   root.isFocusableInTouchMode = true
 
-                  // --- üst çubuk: adres/arama, yenile
-                  val top = LinearLayout(this)
-                  top.orientation = LinearLayout.HORIZONTAL
-                  top.gravity = Gravity.CENTER_VERTICAL
-                  top.setPadding(dp(8), dp(6), dp(4), dp(6))
-
+                  topBar = LinearLayout(this)
+                  topBar.orientation = LinearLayout.HORIZONTAL
+                  topBar.gravity = Gravity.CENTER_VERTICAL
+                  topBar.setPadding(dp(10), dp(8), dp(10), dp(8))
+                  topBar.setBackgroundColor(cBg)
 
                   privateBadge = TextView(this)
-                  privateBadge.text = "● GİZLİ MOD"
+                  privateBadge.text = "🕶 GİZLİ"
                   privateBadge.textSize = 11f
                   privateBadge.setTypeface(null, Typeface.BOLD)
                   privateBadge.setTextColor(Color.WHITE)
                   privateBadge.gravity = Gravity.CENTER
-                  privateBadge.setPadding(dp(8), 0, dp(8), 0)
-                  privateBadge.background = shape(0xFF7C3AED.toInt(), 12)
+                  privateBadge.setPadding(dp(10), 0, dp(10), 0)
+                  privateBadge.background = shape(0xFF8B3DFF.toInt(), 16)
                   privateBadge.visibility = View.GONE
-                  top.addView(privateBadge, LinearLayout.LayoutParams(wrap, dp(30)))
+                  val blp = LinearLayout.LayoutParams(wrap, dp(32))
+                  blp.rightMargin = dp(8)
+                  topBar.addView(privateBadge, blp)
+
+                  val pill = LinearLayout(this)
+                  pill.orientation = LinearLayout.HORIZONTAL
+                  pill.gravity = Gravity.CENTER_VERTICAL
+                  pill.background = shape(cSurface, 24)
+                  pill.elevation = dp(3).toFloat()
+
+                  val lead = TextView(this)
+                  lead.text = "🔎"
+                  lead.textSize = 15f
+                  lead.gravity = Gravity.CENTER
+                  pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
 
                   urlField = EditText(this)
                   urlField.hint = "Ara veya adres yaz"
@@ -547,45 +595,30 @@ jobs:
                   urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
                   urlField.imeOptions = EditorInfo.IME_ACTION_GO
                   urlField.setSelectAllOnFocus(true)
-                  urlField.background = shape(cField, 20)
-                  urlField.setPadding(dp(14), 0, dp(14), 0)
+                  urlField.background = null
+                  urlField.setPadding(0, 0, 0, 0)
                   urlField.setOnEditorActionListener { _, actionId, event ->
-                      if (actionId == EditorInfo.IME_ACTION_GO ||
-                          (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)
-                      ) {
-                          submitUrl()
-                          true
-                      } else {
-                          false
-                      }
+                      if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) {
+                          submitUrl(); true
+                      } else false
                   }
-                  urlField.setOnFocusChangeListener { _, hasFocus ->
-                      if (!hasFocus) syncUrlText()
-                  }
-                  val ulp = LinearLayout.LayoutParams(0, dp(40), 1f)
-                  ulp.leftMargin = dp(8)
-                  ulp.rightMargin = dp(2)
-                  top.addView(urlField, ulp)
-
-                  top.addView(
-                      iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() },
-                      LinearLayout.LayoutParams(dp(40), dp(40))
-                  )
-                  root.addView(top, LinearLayout.LayoutParams(match, wrap))
+                  urlField.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) syncUrlText() }
+                  pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f))
+                  pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
+                  topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
+                  root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
 
                   progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
                   progress.max = 100
                   progress.progressTintList = ColorStateList.valueOf(cAccent)
+                  progress.progressBackgroundTintList = ColorStateList.valueOf(cBg)
                   progress.visibility = View.INVISIBLE
                   root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
 
-                  // --- sayfa alanı
                   content = FrameLayout(this)
                   content.setBackgroundColor(cBg)
                   root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
 
-
-                  // --- sayfada bul çubuğu
                   findBar = LinearLayout(this)
                   findBar.orientation = LinearLayout.HORIZONTAL
                   findBar.gravity = Gravity.CENTER_VERTICAL
@@ -599,40 +632,46 @@ jobs:
                   findInput.textSize = 15f
                   findInput.isSingleLine = true
                   findInput.background = shape(cField, 18)
-                  findInput.setPadding(dp(12), 0, dp(12), 0)
+                  findInput.setPadding(dp(14), 0, dp(14), 0)
                   findInput.doAfterTextChanged { text ->
                       val t = text?.toString() ?: ""
                       val web = currentWeb()
                       if (web != null) {
-                          if (t.isEmpty()) {
-                              web.clearMatches()
-                              findCount.text = ""
-                          } else {
-                              web.findAllAsync(t)
-                          }
+                          if (t.isEmpty()) { web.clearMatches(); findCount.text = "" }
+                          else { web.findAllAsync(t) }
                       }
                   }
                   findBar.addView(findInput, LinearLayout.LayoutParams(0, dp(36), 1f))
                   findCount = TextView(this)
-                  findCount.setTextColor(cSub)
-                  findCount.textSize = 13f
-                  findCount.setPadding(dp(8), 0, dp(8), 0)
+                  findCount.setTextColor(cSub); findCount.textSize = 13f; findCount.setPadding(dp(8), 0, dp(8), 0)
                   findBar.addView(findCount, LinearLayout.LayoutParams(wrap, wrap))
                   findBar.addView(textBtn("▲") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
                   findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40)))
                   findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
                   root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
 
-                  // --- alt çubuk: geri, ileri, ana sayfa, yeni sekme, sekmeler, menü
+                  val dock = LinearLayout(this)
+                  dock.orientation = LinearLayout.VERTICAL
+                  dock.setBackgroundColor(cBg)
+                  dock.setPadding(dp(12), dp(6), dp(12), dp(8))
+                  dock.clipToPadding = false
+                  dock.clipChildren = false
+
                   val bottom = LinearLayout(this)
                   bottom.orientation = LinearLayout.HORIZONTAL
                   bottom.gravity = Gravity.CENTER_VERTICAL
-                  bottom.setBackgroundColor(cSurface)
+                  bottom.background = shape(cSurface, 30)
+                  bottom.elevation = dp(8).toFloat()
+                  bottom.setPadding(dp(6), dp(4), dp(6), dp(4))
 
                   backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }
                   fwdBtn = iconBtn(R.drawable.ic_forward, "İleri") { goForward() }
-                  val homeBtn = iconBtn(R.drawable.ic_home, "Ana sayfa") { goHome() }
-                  val addBtn = iconBtn(R.drawable.ic_add, "Yeni sekme") { openTab(null) }
+                  val homeBtn = iconBtn(R.drawable.ic_home, "Ana Sayfa") { goHome() }
+                  homeBtn.setColorFilter(Color.WHITE)
+                  val hg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
+                  hg.shape = GradientDrawable.OVAL
+                  homeBtn.background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), hg, null)
+                  val addBtn = iconBtn(R.drawable.ic_add, "Yeni Sekme") { openTab(null) }
                   val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
 
                   val tabsWrap = FrameLayout(this)
@@ -640,19 +679,24 @@ jobs:
                   tabsWrap.contentDescription = "Sekmeler"
                   tabsWrap.setOnClickListener { showTabs() }
                   tabCount = TextView(this)
-                  tabCount.gravity = Gravity.CENTER
-                  tabCount.textSize = 12f
+                  tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f
                   tabCount.setTypeface(null, Typeface.BOLD)
                   tabCount.setTextColor(cIcon)
-                  tabCount.background = shape(0, 5, cIcon, 2)
+                  val tcBg = GradientDrawable()
+                  tcBg.setColor(0)
+                  tcBg.cornerRadius = dp(7).toFloat()
+                  tcBg.setStroke(dp(2), cIcon)
+                  tabCount.background = tcBg
                   tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
 
-                  for (v in listOf<View>(backBtn, fwdBtn, homeBtn, addBtn, tabsWrap, menuBtn)) {
-                      bottom.addView(v, LinearLayout.LayoutParams(0, dp(52), 1f))
-                  }
-                  root.addView(bottom, LinearLayout.LayoutParams(match, wrap))
+                  for (v in listOf<View>(backBtn, fwdBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f))
+                  val hlp = LinearLayout.LayoutParams(dp(48), dp(48))
+                  hlp.leftMargin = dp(4); hlp.rightMargin = dp(4)
+                  bottom.addView(homeBtn, hlp)
+                  for (v in listOf<View>(addBtn, tabsWrap, menuBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f))
+                  dock.addView(bottom, LinearLayout.LayoutParams(match, wrap))
+                  root.addView(dock, LinearLayout.LayoutParams(match, wrap))
 
-                  // --- tam ekran video katmanı
                   fullscreen = FrameLayout(this)
                   fullscreen.setBackgroundColor(Color.BLACK)
                   fullscreen.visibility = View.GONE
@@ -663,20 +707,13 @@ jobs:
                   setContentView(frame)
 
                   ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-                      val b = insets.getInsets(
-                          WindowInsetsCompat.Type.systemBars() or
-                              WindowInsetsCompat.Type.displayCutout() or
-                              WindowInsetsCompat.Type.ime()
-                      )
+                      val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
                       v.setPadding(b.left, b.top, b.right, b.bottom)
                       insets
                   }
                   root.requestFocus()
                   updateTabCount()
               }
-
-
-              // ------------------------------------------------------------------ açılış
 
               private fun startBrowsing() {
                   if (tabs.isEmpty()) {
@@ -687,31 +724,21 @@ jobs:
                           val want = prefs.savedCurrent()
                           for (u in saved.take(12)) {
                               val t = createTab()
-                              if (u.startsWith("http")) {
-                                  t.pendingUrl = u
-                                  t.url = u
-                                  t.title = shownUrl(u)
-                              } else {
-                                  t.pendingUrl = NEWTAB_URL
-                              }
+                              if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) }
+                              else { t.pendingUrl = NEWTAB_URL }
                           }
                           switchTo(if (want in tabs.indices) want else 0)
                       }
                   }
-                  val s = startUrl
-                  startUrl = null
+                  val s = startUrl; startUrl = null
                   if (s != null) openTab(s)
               }
-
-
-
-              // ------------------------------------------------------------------ sekmeler
 
               private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
 
               @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
               private fun createTab(incognito: Boolean = false): BTab {
-                  val web = WebView(this)
+                  val web = BgWebView(this)
                   val bridge = PusulaBridge(prefs)
                   val tab = BTab(web, bridge, incognito)
                   val s = web.settings
@@ -729,14 +756,17 @@ jobs:
                   s.allowContentAccess = false
                   s.setGeolocationEnabled(false)
                   s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                  // "wv" işareti kalkınca Google girişi ve bazı siteler normal tarayıcı gibi davranır.
-                  val ua = s.userAgentString
-                      .replace("; wv", "")
-                      .replace(Regex("Version/\\d+\\.\\d+ "), "")
+
+                  val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), "")
                   s.userAgentString = ua
                   tab.mobileUa = ua
                   web.addJavascriptInterface(bridge, "Pusula")
-                  // Sayfa görünürlüğünü sahte biçimde değiştirme: bazı sitelerde medya yaşam döngüsünü bozabiliyor.
+
+                  if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                      if (prefs.bgPlay) WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
+                      if (prefs.adBlock) WebViewCompat.addDocumentStartJavaScript(web, STABLE_AD_BLOCKER_JS, setOf("*"))
+                  }
+
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
                           findCount.text = if (total == 0) "0" else "${active + 1}/$total"
@@ -752,15 +782,11 @@ jobs:
                   return tab
               }
 
-              /** Yeni sekme açar. [url] null ise Pusula başlangıç sayfası açılır. */
               private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? {
-                  if (tabs.size >= MAX_TABS) {
-                      toast("En fazla $MAX_TABS sekme açılabilir")
-                      return null
-                  }
+                  if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme açılabilir"); return null }
                   val t = createTab(incognito)
                   switchTo(tabs.size - 1)
-                  if (load) t.web.loadUrl(url ?: NEWTAB_URL)
+                  if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL))
                   return t
               }
 
@@ -769,21 +795,26 @@ jobs:
                   shown?.let {
                       tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }
                       content.removeView(it)
-                      if (!prefs.bgPlay) it.onPause()
                   }
+                  for (idx in tabs.indices) {
+                      if (idx != i) {
+                          try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {}
+                      }
+                  }
+
                   cur = i
                   val t = tabs[i]
                   shown = t.web
-                  content.addView(t.web, 0, FrameLayout.LayoutParams(
-                      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                   t.web.onResume()
+
+                  try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
+
                   val p = t.pendingUrl
-                  if (p != null) {
-                      t.pendingUrl = null
-                      t.web.loadUrl(p)
-                  }
+                  if (p != null) { t.pendingUrl = null; t.web.loadUrl(p) }
                   closeFind()
                   privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE
+                  topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg)
                   syncUi()
               }
 
@@ -791,37 +822,21 @@ jobs:
                   if (index !in tabs.indices) return
                   val t = tabs[index]
                   val wasCurrent = index == cur
-                  if (wasCurrent) {
-                      content.removeView(t.web)
-                      shown = null
-                  }
-                  t.web.stopLoading()
-                  t.web.clearHistory()
-                  t.web.clearCache(true)
-                  t.web.destroy()
+                  if (wasCurrent) { content.removeView(t.web); shown = null }
+                  t.web.stopLoading(); t.web.clearHistory(); t.web.clearCache(true); t.web.destroy()
                   tabs.removeAt(index)
                   if (t.incognito) {
-                      // WebView verileri süreç içinde ortaktır; kapanışta gizli oturum verilerini temizle.
                       CookieManager.getInstance().removeAllCookies(null)
                       CookieManager.getInstance().flush()
                       WebStorage.getInstance().deleteAllData()
                   }
-                  if (tabs.isEmpty()) {
-                      cur = -1
-                      openTab(null)
-                      return
-                  }
-                  if (wasCurrent) {
-                      switchTo(minOf(index, tabs.size - 1))
-                  } else if (index < cur) {
-                      cur--
-                  }
+                  if (tabs.isEmpty()) { cur = -1; openTab(null); return }
+                  if (wasCurrent) switchTo(minOf(index, tabs.size - 1))
+                  else if (index < cur) cur--
                   updateTabCount()
               }
 
-              private fun updateTabCount() {
-                  tabCount.text = tabs.size.toString()
-              }
+              private fun updateTabCount() { tabCount.text = tabs.size.toString() }
 
               private fun saveTabs() {
                   if (tabs.isEmpty()) return
@@ -833,8 +848,6 @@ jobs:
                   }
                   prefs.saveTabs(urls, 0)
               }
-
-              // ------------------------------------------------------------------ gezinti
 
               private fun shownUrl(u: String): String =
                   if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) ""
@@ -873,9 +886,7 @@ jobs:
               private fun submitUrl() {
                   val text = urlField.text.toString()
                   loadInCurrent(resolveInput(text, Engines.get(prefs.engine)))
-                  hideKeyboard()
-                  urlField.clearFocus()
-                  root.requestFocus()
+                  hideKeyboard(); urlField.clearFocus(); root.requestFocus()
               }
 
               private fun goBack() {
@@ -883,15 +894,8 @@ jobs:
                   if (web.canGoBack()) web.goBack() else if (tabs.size > 1) closeTab(cur)
               }
 
-              private fun goForward() {
-                  val web = currentWeb() ?: return
-                  if (web.canGoForward()) web.goForward()
-              }
-
-              private fun goHome() {
-                  loadInCurrent(Engines.get(prefs.engine).home)
-              }
-
+              private fun goForward() { val web = currentWeb() ?: return; if (web.canGoForward()) web.goForward() }
+              private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
               private fun reloadCurrent() {
                   val t = tabs.getOrNull(cur) ?: return
                   if (t.progress in 1..99) t.web.stopLoading() else t.web.reload()
@@ -902,18 +906,13 @@ jobs:
                   when {
                       customView != null -> hideCustom()
                       findBar.visibility == View.VISIBLE -> closeFind()
-                      urlField.hasFocus() -> {
-                          hideKeyboard()
-                          urlField.clearFocus()
-                          root.requestFocus()
-                      }
+                      urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
                       web != null && web.canGoBack() -> web.goBack()
                       tabs.size > 1 -> closeTab(cur)
                       else -> finish()
                   }
               }
 
-              // Basit URL tabanlı reklam/izleyici engeli. Sunucu taraflı reklamları engelleme garantisi vermez.
               private fun shouldBlockAd(uri: Uri): Boolean {
                   val host = (uri.host ?: "").lowercase()
                   val path = (uri.encodedPath ?: "").lowercase()
@@ -921,23 +920,18 @@ jobs:
                       "doubleclick.net", "googlesyndication.com", "googleadservices.com",
                       "adservice.google.com", "adnxs.com", "adsrvr.org", "adform.net",
                       "adcolony.com", "taboola.com", "outbrain.com", "scorecardresearch.com",
-                      "amazon-adsystem.com", "criteo.com", "hotjar.com"
+                      "amazon-adsystem.com", "criteo.com", "hotjar.com", "pagead2.googlesyndication.com"
                   )
                   if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true
                   return path.contains("/ads/") || path.contains("/adserver/") ||
-                      path.contains("/pagead/") || path.contains("/advertisement/")
+                      path.contains("/pagead/") || path.contains("/advertisement/") ||
+                      path.contains("/api/stats/ads")
               }
 
-              // ------------------------------------------------------------------ WebView istemcileri
-
               private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
-
-                  override fun shouldInterceptRequest(
-                      view: WebView?,
-                      request: WebResourceRequest?
-                  ): WebResourceResponse? {
+                  override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                       val uri = request?.url ?: return null
-                      if (prefs.adBlock && shouldBlockAd(uri)) {
+                      if (prefs.adBlock && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) {
                           return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                       }
                       return loader.shouldInterceptRequest(uri)
@@ -979,11 +973,7 @@ jobs:
                       }
                   }
 
-                  override fun onReceivedError(
-                      view: WebView?,
-                      request: WebResourceRequest?,
-                      error: WebResourceError?
-                  ) {
+                  override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                       if (view == null || request == null || error == null) return
                       if (!request.isForMainFrame) return
                       val desc = error.description?.toString() ?: ""
@@ -994,22 +984,12 @@ jobs:
               }
 
               private fun makeChrome(tab: BTab): WebChromeClient = object : WebChromeClient() {
-
                   override fun onProgressChanged(view: WebView?, newProgress: Int) {
                       tab.progress = newProgress
                       if (tabs.getOrNull(cur) === tab) setLoadProgress(newProgress)
                   }
-
-                  override fun onReceivedTitle(view: WebView?, title: String?) {
-                      if (!title.isNullOrBlank()) tab.title = title
-                  }
-
-                  override fun onCreateWindow(
-                      view: WebView?,
-                      isDialog: Boolean,
-                      isUserGesture: Boolean,
-                      resultMsg: Message?
-                  ): Boolean {
+                  override fun onReceivedTitle(view: WebView?, title: String?) { if (!title.isNullOrBlank()) tab.title = title }
+                  override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
                       if (!isUserGesture || resultMsg == null) return false
                       val nt = openTab(null, false) ?: return false
                       val transport = resultMsg.obj as WebView.WebViewTransport
@@ -1017,102 +997,41 @@ jobs:
                       resultMsg.sendToTarget()
                       return true
                   }
-
                   override fun onCloseWindow(window: WebView?) {
-                      handler.post {
-                          val i = tabs.indexOfFirst { it.web === window }
-                          if (i >= 0) closeTab(i)
-                      }
+                      handler.post { val i = tabs.indexOfFirst { it.web === window }; if (i >= 0) closeTab(i) }
                   }
-
-                  override fun onShowFileChooser(
-                      webView: WebView?,
-                      filePathCallback: ValueCallback<Array<Uri>>?,
-                      fileChooserParams: FileChooserParams?
-                  ): Boolean {
-                      fileCb?.onReceiveValue(null)
-                      fileCb = filePathCallback
+                  override fun onShowFileChooser(webView: WebView?, filePathCallback: ValueCallback<Array<Uri>>?, fileChooserParams: FileChooserParams?): Boolean {
+                      fileCb?.onReceiveValue(null); fileCb = filePathCallback
                       return try {
                           fileLauncher.launch(fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).setType("*/*"))
                           true
-                      } catch (e: Exception) {
-                          fileCb?.onReceiveValue(null)
-                          fileCb = null
-                          false
-                      }
+                      } catch (_: Exception) { fileCb?.onReceiveValue(null); fileCb = null; false }
                   }
-
                   override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                      if (view == null || customView != null) {
-                          callback?.onCustomViewHidden()
-                          return
-                      }
-                      customView = view
-                      customCb = callback
-                      fullscreen.addView(view, FrameLayout.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                      if (view == null || customView != null) { callback?.onCustomViewHidden(); return }
+                      customView = view; customCb = callback
+                      fullscreen.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                       fullscreen.visibility = View.VISIBLE
                       setBars(false)
                   }
-
-                  override fun onHideCustomView() {
-                      hideCustom()
-                  }
-
+                  override fun onHideCustomView() { hideCustom() }
                   override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
-                      AlertDialog.Builder(this@MainActivity)
-                          .setMessage(message)
-                          .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
-                          .setOnCancelListener { result?.confirm() }
-                          .show()
-                      return true
-                  }
-
-                  override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
-                      AlertDialog.Builder(this@MainActivity)
-                          .setMessage(message)
-                          .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
-                          .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
-                          .setOnCancelListener { result?.cancel() }
-                          .show()
-                      return true
-                  }
-
-                  override fun onJsPrompt(
-                      view: WebView?,
-                      url: String?,
-                      message: String?,
-                      defaultValue: String?,
-                      result: JsPromptResult?
-                  ): Boolean {
-                      val input = EditText(this@MainActivity)
-                      input.setText(defaultValue ?: "")
-                      AlertDialog.Builder(this@MainActivity)
-                          .setMessage(message)
-                          .setView(input)
-                          .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm(input.text.toString()) }
-                          .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
-                          .setOnCancelListener { result?.cancel() }
-                          .show()
+                      AlertDialog.Builder(this@MainActivity).setMessage(message).setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }.setOnCancelListener { result?.confirm() }.show()
                       return true
                   }
               }
 
               private fun hideCustom() {
                   val v = customView ?: return
-                  fullscreen.removeView(v)
-                  fullscreen.visibility = View.GONE
-                  customView = null
-                  customCb?.onCustomViewHidden()
-                  customCb = null
+                  fullscreen.removeView(v); fullscreen.visibility = View.GONE
+                  customView = null; customCb?.onCustomViewHidden(); customCb = null
                   setBars(true)
               }
 
               private fun setBars(show: Boolean) {
                   val c = WindowInsetsControllerCompat(window, window.decorView)
-                  if (show) {
-                      c.show(WindowInsetsCompat.Type.systemBars())
-                  } else {
+                  if (show) { c.show(WindowInsetsCompat.Type.systemBars()) }
+                  else {
                       c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                       c.hide(WindowInsetsCompat.Type.systemBars())
                   }
@@ -1120,44 +1039,25 @@ jobs:
 
               private fun openExternal(url: String): Boolean {
                   try {
-                      val i = if (url.startsWith("intent:")) {
-                          Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
-                      } else {
-                          Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                      }
-                      i.addCategory(Intent.CATEGORY_BROWSABLE)
-                      i.component = null
-                      i.selector = null
+                      val i = if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                      i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null
                       startActivity(i)
-                  } catch (e: Exception) {
-                      toast("Bu bağlantıyı açacak uygulama bulunamadı")
-                  }
+                  } catch (_: Exception) { toast("Bağlantı açılamadı") }
                   return true
               }
 
               private fun errorHtml(url: String, desc: String): String {
-                  val bg = if (dark) "#0f1115" else "#f4f5f7"
-                  val fg = if (dark) "#e8eaed" else "#1b1f24"
-                  val note = ""
+                  val bg = String.format("#%06X", 0xFFFFFF and cBg)
+                  val fg = String.format("#%06X", 0xFFFFFF and cText)
                   val js = Html.escapeHtml("location.href=" + JSONObject.quote(url))
-                  return "<!doctype html><html><head><meta charset=\"utf-8\">" +
-                      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-                      "<title>Sayfa açılamadı</title><style>" +
-                      "body{font-family:sans-serif;margin:0;padding:32px 24px;background:" + bg + ";color:" + fg + "}" +
-                      "h1{font-size:22px}p{opacity:.75;line-height:1.5;word-break:break-word}" +
+                  return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+                      "<style>body{font-family:sans-serif;margin:0;padding:32px 24px;background:$bg;color:$fg}h1{font-size:22px}p{opacity:.75}" +
                       "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
-                      "</style></head><body><h1>Sayfa açılamadı</h1><p>" + Html.escapeHtml(url) + "</p><p>" +
-                      Html.escapeHtml(desc) + "</p>" + note +
-                      "<button onclick=\"" + js + "\">Tekrar dene</button></body></html>"
+                      "</style></head><body><h1>Yüklenemedi</h1><p>$url</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
               }
 
-              // ------------------------------------------------------------------ indirme
-
               private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) {
-                  if (!url.startsWith("http")) {
-                      toast("Bu indirme türü desteklenmiyor")
-                      return
-                  }
+                  if (!url.startsWith("http")) return
                   try {
                       val name = URLUtil.guessFileName(url, cd, mime)
                       val req = DownloadManager.Request(Uri.parse(url))
@@ -1167,136 +1067,120 @@ jobs:
                       if (ua != null) req.addRequestHeader("User-Agent", ua)
                       req.setTitle(name)
                       req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                      if (Build.VERSION.SDK_INT >= 29) {
-                          req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-                      } else {
-                          req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
-                      }
+                      if (Build.VERSION.SDK_INT >= 29) req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+                      else req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
                       (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
-                      toast("İndirme başladı: $name")
-                  } catch (e: Exception) {
-                      toast("İndirme başlatılamadı")
-                  }
+                      toast("İndiriliyor: $name")
+                  } catch (_: Exception) { toast("İndirilemedi") }
               }
 
-              // ------------------------------------------------------------------ menü ve pencereler
-
-              private fun toast(msg: String) {
-                  Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-              }
-
+              private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
               private fun hideKeyboard() {
                   val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                   imm.hideSoftInputFromWindow(root.windowToken, 0)
               }
 
-              private fun showMenu(anchor: View) {
+              private fun sheetWindow(d: Dialog, view: View, full: Boolean) {
+                  d.requestWindowFeature(Window.FEATURE_NO_TITLE)
+                  d.setContentView(view)
+                  d.window?.let { w ->
+                      w.setBackgroundDrawable(ColorDrawable(if (full) cBg else Color.TRANSPARENT))
+                      w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, if (full) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT)
+                      if (!full) w.setGravity(Gravity.BOTTOM)
+                  }
+              }
+
+              private fun showMenu(@Suppress("UNUSED_PARAMETER") anchor: View) {
                   val t = tabs.getOrNull(cur) ?: return
-                  val pm = PopupMenu(this, anchor)
-                  val m = pm.menu
                   val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
-                  m.add(0, 1, 0, "Yeni sekme")
-                  m.add(0, 10, 1, "Yeni gizli sekme")
-                  m.add(0, 2, 2, if (marked) "Yer imini kaldır" else "Yer imi ekle")
-                  m.add(0, 3, 3, "Yer imleri")
-                  m.add(0, 4, 4, "Geçmiş")
-                  m.add(0, 5, 5, "Sayfada bul")
-                  val desk = m.add(0, 6, 6, "Masaüstü sitesi")
-                  desk.isCheckable = true
-                  desk.isChecked = t.desktop
-                  m.add(0, 7, 7, "Paylaş")
-                  m.add(0, 9, 9, "Ayarlar")
-                  pm.setOnMenuItemClickListener { item ->
-                      when (item.itemId) {
-                          1 -> openTab(null)
-                          10 -> openTab(null, true, true)
-                          2 -> toggleBookmark()
-                          3 -> showBookmarks()
-                          4 -> showHistory()
-                          5 -> openFind()
-                          6 -> toggleDesktop()
-                          7 -> shareCurrent()
-                          9 -> showSettings()
+                  val d = Dialog(this)
+                  val items = listOf(
+                      SheetItem("➕", "Yeni sekme", false) { openTab(null) },
+                      SheetItem("🕶️", "Gizli sekme", false) { openTab(null, true, true) },
+                      SheetItem(if (marked) "⭐" else "☆", if (marked) "İmi kaldır" else "Yer imi ekle", marked) {
+                          prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
+                      },
+                      SheetItem("🔖", "Yer imleri", false) { showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) },
+                      SheetItem("🕘", "Geçmiş", false) { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) },
+                      SheetItem("🔍", "Sayfada bul", false) { openFind() },
+                      SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() },
+                      SheetItem("📤", "Paylaş", false) { shareCurrent() },
+                      SheetItem("🎨", "Tema", false) { chooseTheme() },
+                      SheetItem("⚙️", "Ayarlar", false) { showSettings() }
+                  )
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(14), dp(10), dp(14), dp(22))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val handle = View(this)
+                  handle.background = shape(cField, 3)
+                  val hlp = LinearLayout.LayoutParams(dp(42), dp(5))
+                  hlp.gravity = Gravity.CENTER_HORIZONTAL; hlp.bottomMargin = dp(14)
+                  col.addView(handle, hlp)
+                  for (rowItems in items.chunked(4)) {
+                      val lr = LinearLayout(this)
+                      lr.orientation = LinearLayout.HORIZONTAL
+                      for (item in rowItems) {
+                          val cell = LinearLayout(this)
+                          cell.orientation = LinearLayout.VERTICAL
+                          cell.gravity = Gravity.CENTER_HORIZONTAL
+                          cell.setPadding(0, dp(8), 0, dp(8))
+                          cell.background = ripple(null)
+                          val ic = TextView(this)
+                          ic.text = item.icon; ic.textSize = 22f; ic.gravity = Gravity.CENTER
+                          ic.setTextColor(cText)
+                          ic.background = if (item.on) {
+                              val g = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
+                              g.cornerRadius = dp(19).toFloat(); g
+                          } else shape(cField, 19)
+                          cell.addView(ic, LinearLayout.LayoutParams(dp(56), dp(56)))
+                          val lb = TextView(this)
+                          lb.text = item.label; lb.textSize = 11.5f; lb.gravity = Gravity.CENTER
+                          lb.maxLines = 2; lb.setTextColor(cText)
+                          lb.setPadding(dp(2), dp(6), dp(2), 0)
+                          cell.addView(lb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                          cell.setOnClickListener { d.dismiss(); item.act() }
+                          lr.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                       }
-                      true
+                      for (k in rowItems.size until 4) lr.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+                      col.addView(lr, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                   }
-                  pm.show()
+                  sheetWindow(d, col, false)
+                  d.show()
               }
 
-              private fun toggleBookmark() {
-                  val t = tabs.getOrNull(cur) ?: return
-                  if (!t.url.startsWith("http")) {
-                      toast("Bu sayfa yer imi olarak eklenemez")
-                      return
-                  }
-                  val added = prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url)
-                  toast(if (added) "Yer imi eklendi" else "Yer imi kaldırıldı")
-              }
-
-              private fun showBookmarks() {
-                  showEntries("Yer imleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null)
-              }
-
-              private fun showHistory() {
-                  showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) },
-                      Pair<String, () -> Unit>("Temizle", { prefs.clearHistory() }))
-              }
-
-              private fun showEntries(
-                  title: String,
-                  list: List<Prefs.Entry>,
-                  onDelete: (Prefs.Entry) -> Unit,
-                  neutral: Pair<String, () -> Unit>?
-              ) {
-                  if (list.isEmpty()) {
-                      toast("Liste boş")
-                      return
-                  }
+              private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
+                  if (list.isEmpty()) { toast("Liste boş"); return }
                   val labels = list.map { (if (it.title.isBlank()) it.url else it.title) + "\n" + shownUrl(it.url) }
                   val lv = ListView(this)
                   lv.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
-                  val b = AlertDialog.Builder(this)
-                      .setTitle(title)
-                      .setView(lv)
-                      .setNegativeButton("Kapat", null)
-                  if (neutral != null) {
-                      b.setNeutralButton(neutral.first) { _, _ -> neutral.second() }
-                  }
+                  val b = AlertDialog.Builder(this).setTitle(title).setView(lv).setNegativeButton("Kapat", null)
+                  if (neutral != null) b.setNeutralButton(neutral.first) { _, _ -> neutral.second() }
                   val d = b.create()
-                  lv.setOnItemClickListener { _, _, pos, _ ->
-                      d.dismiss()
-                      loadInCurrent(list[pos].url)
-                  }
+                  lv.setOnItemClickListener { _, _, pos, _ -> d.dismiss(); loadInCurrent(list[pos].url) }
                   lv.setOnItemLongClickListener { _, _, pos, _ ->
-                      AlertDialog.Builder(this)
-                          .setMessage("Listeden silinsin mi?")
-                          .setPositiveButton("Sil") { _, _ ->
-                              onDelete(list[pos])
-                              d.dismiss()
-                          }
-                          .setNegativeButton("Vazgeç", null)
-                          .show()
+                      AlertDialog.Builder(this).setMessage("Silinsin mi?").setPositiveButton("Sil") { _, _ ->
+                          onDelete(list[pos]); d.dismiss()
+                      }.setNegativeButton("İptal", null).show()
                       true
                   }
                   d.show()
-                  toast("Silmek için basılı tutun")
               }
 
               private fun openFind() {
-                  findBar.visibility = View.VISIBLE
-                  findInput.setText("")
-                  findCount.text = ""
+                  findBar.visibility = View.VISIBLE; findInput.setText(""); findCount.text = ""
                   findInput.requestFocus()
-                  val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                  imm.showSoftInput(findInput, 0)
+                  (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(findInput, 0)
               }
 
               private fun closeFind() {
                   if (findBar.visibility != View.VISIBLE) return
-                  findBar.visibility = View.GONE
-                  currentWeb()?.clearMatches()
-                  hideKeyboard()
-                  root.requestFocus()
+                  findBar.visibility = View.GONE; currentWeb()?.clearMatches()
+                  hideKeyboard(); root.requestFocus()
               }
 
               private fun toggleDesktop() {
@@ -1306,163 +1190,176 @@ jobs:
                   if (t.desktop) {
                       val chrome = Regex("Chrome/[\\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0"
                       s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
-                  } else {
-                      s.userAgentString = t.mobileUa
-                  }
+                  } else { s.userAgentString = t.mobileUa }
                   t.web.reload()
               }
 
               private fun shareCurrent() {
                   val t = tabs.getOrNull(cur) ?: return
-                  if (!t.url.startsWith("http")) {
-                      toast("Paylaşılacak bir sayfa yok")
-                      return
-                  }
-                  val i = Intent(Intent.ACTION_SEND)
-                  i.type = "text/plain"
-                  i.putExtra(Intent.EXTRA_TEXT, t.url)
-                  startActivity(Intent.createChooser(i, "Paylaş"))
+                  if (!t.url.startsWith("http")) return
+                  startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), "Paylaş"))
               }
 
               private fun capturePreview(tab: BTab) {
                   try {
-                      val w = tab.web.width
-                      val h = tab.web.height
+                      val w = tab.web.width; val h = tab.web.height
                       if (w <= 0 || h <= 0) return
-                      val bmp = Bitmap.createBitmap(320, 200, Bitmap.Config.RGB_565)
-                      val canvas = Canvas(bmp)
-                      canvas.scale(320f / w, 200f / h)
-                      tab.web.draw(canvas)
-                      tab.preview?.recycle()
-                      tab.preview = bmp
-                  } catch (_: Exception) { }
+                      val sc = 360f / w
+                      val bh = (h * sc).toInt().coerceIn(1, 700)
+                      val bmp = Bitmap.createBitmap(360, bh, Bitmap.Config.RGB_565)
+                      val canvas = Canvas(bmp); canvas.scale(sc, sc)
+                      tab.web.draw(canvas); tab.preview = bmp
+                  } catch (_: Exception) {}
+              }
+
+              private fun pillBtn(label: String, colors: IntArray, onClick: () -> Unit): TextView {
+                  val t = TextView(this)
+                  t.text = label; t.textSize = 14f; t.setTypeface(null, Typeface.BOLD)
+                  t.setTextColor(Color.WHITE); t.gravity = Gravity.CENTER
+                  val g = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors)
+                  g.cornerRadius = dp(24).toFloat()
+                  t.background = g
+                  t.setOnClickListener { onClick() }
+                  return t
               }
 
               private fun showTabs() {
                   tabs.getOrNull(cur)?.let { capturePreview(it) }
-                  val box = LinearLayout(this)
-                  box.orientation = LinearLayout.VERTICAL
-                  box.setPadding(dp(8), dp(8), dp(8), dp(8))
+                  val d = Dialog(this)
+                  val rootV = LinearLayout(this)
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(12), dp(34), dp(12), dp(16))
+
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  head.setPadding(dp(6), 0, dp(6), dp(8))
+                  val title = TextView(this)
+                  title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
+                  head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  val done = textBtn("Bitti") { d.dismiss() }
+                  done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
+                  head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
+                  rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  val grid = LinearLayout(this)
+                  grid.orientation = LinearLayout.VERTICAL
                   val scroll = ScrollView(this)
-                  scroll.addView(box)
-                  val d = AlertDialog.Builder(this)
-                      .setTitle("Sekmeler")
-                      .setView(scroll)
-                      .setPositiveButton("Yeni sekme") { _, _ -> openTab(null) }
-                      .setNeutralButton("Gizli sekme") { _, _ -> openTab(null, true, true) }
-                      .setNegativeButton("Kapat", null)
-                      .create()
-                  fillTabs(box, d)
+                  scroll.addView(grid)
+                  rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+                  val actions = LinearLayout(this)
+                  actions.orientation = LinearLayout.HORIZONTAL
+                  actions.setPadding(0, dp(10), 0, 0)
+                  val b1 = pillBtn("＋  Yeni sekme", intArrayOf(cAccent, cAccent2)) { d.dismiss(); openTab(null) }
+                  val b2 = pillBtn("🕶  Gizli sekme", intArrayOf(0xFF6D2BD9.toInt(), 0xFFC026D3.toInt())) { d.dismiss(); openTab(null, true, true) }
+                  val l1 = LinearLayout.LayoutParams(0, dp(48), 1f); l1.rightMargin = dp(6)
+                  val l2 = LinearLayout.LayoutParams(0, dp(48), 1f); l2.leftMargin = dp(6)
+                  actions.addView(b1, l1); actions.addView(b2, l2)
+                  rootV.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  fillTabs(grid, title, d)
+                  sheetWindow(d, rootV, true)
                   d.show()
               }
 
-              private fun fillTabs(box: LinearLayout, d: AlertDialog) {
-                  box.removeAllViews()
-                  for (i in tabs.indices) {
-                      val t = tabs[i]
+              private fun fillTabs(grid: LinearLayout, title: TextView, d: Dialog) {
+                  grid.removeAllViews()
+                  title.text = "Sekmeler · " + tabs.size
+                  for (rowStart in 0 until tabs.size step 2) {
                       val row = LinearLayout(this)
                       row.orientation = LinearLayout.HORIZONTAL
-                      row.gravity = Gravity.CENTER_VERTICAL
-                      row.background = shape(if (i == cur) cField else 0, 10)
-                      row.setPadding(dp(12), dp(6), dp(4), dp(6))
-                      row.setOnClickListener {
-                          d.dismiss()
-                          switchTo(i)
+                      for (i in rowStart until minOf(rowStart + 2, tabs.size)) {
+                          val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                          lp.setMargins(dp(5), dp(5), dp(5), dp(5))
+                          row.addView(tabCard(i, grid, title, d), lp)
                       }
-                      // Sekme ön izlemesi: WebView'ın o anki görüntüsünü küçük bir bitmap olarak göster.
-                      val preview = ImageView(this)
-                      preview.scaleType = ImageView.ScaleType.CENTER_CROP
-                      preview.background = shape(cField, 6)
-                      preview.contentDescription = "${t.title} ön izlemesi"
-                      val thumbW = dp(104)
-                      val thumbH = dp(66)
-                      try {
-                          if (t.preview == null) capturePreview(t)
-                          t.preview?.let { preview.setImageBitmap(it) }
-                      } catch (_: Exception) { }
-                      val previewLp = LinearLayout.LayoutParams(thumbW, thumbH)
-                      previewLp.marginEnd = dp(10)
-                      row.addView(preview, previewLp)
-                      val label = TextView(this)
-                      val url = t.pendingUrl ?: t.url
-                      val name = if (t.title.isBlank()) shownUrl(url) else t.title
-                      label.text = (if (t.incognito) "🟣 GİZLİ MOD · " else "") + (if (name.isEmpty()) "Yeni sekme" else name) + "\n" + shownUrl(url)
-                      label.textSize = 14f
-                      label.maxLines = 2
-                      label.setTextColor(cText)
-                      if (i == cur) label.setTypeface(null, Typeface.BOLD)
-                      row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                      row.addView(textBtn("✕") {
-                          closeTab(i)
-                          fillTabs(box, d)
-                      }, LinearLayout.LayoutParams(dp(44), dp(44)))
-                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                      lp.bottomMargin = dp(4)
-                      box.addView(row, lp)
+                      if (rowStart + 1 >= tabs.size) row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+                      grid.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                   }
               }
 
-              private fun closeAllTabs() {
-                  while (tabs.size > 1) closeTab(tabs.size - 1)
-                  val t = tabs.getOrNull(0) ?: return
-                  t.web.clearHistory()
-                  loadInCurrent(NEWTAB_URL)
+              private fun tabCard(i: Int, grid: LinearLayout, title: TextView, d: Dialog): View {
+                  val t = tabs[i]
+                  val card = LinearLayout(this)
+                  card.orientation = LinearLayout.VERTICAL
+                  card.setPadding(dp(8), dp(4), dp(8), dp(8))
+                  val bg = GradientDrawable()
+                  bg.setColor(if (t.incognito) 0xFF2B1A55.toInt() else cSurface)
+                  bg.cornerRadius = dp(20).toFloat()
+                  if (i == cur) bg.setStroke(dp(2), if (t.incognito) 0xFFA46BFF.toInt() else cAccent)
+                  card.background = bg
+                  card.setOnClickListener { d.dismiss(); switchTo(i) }
+
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  val label = TextView(this)
+                  val name = if (t.title.isBlank() || t.title == "Yeni Sekme") shownUrl(t.pendingUrl ?: t.url).ifEmpty { "Yeni sekme" } else t.title
+                  label.text = (if (t.incognito) "🕶 " else "") + name
+                  label.textSize = 12.5f; label.maxLines = 1
+                  label.ellipsize = android.text.TextUtils.TruncateAt.END
+                  label.setTextColor(if (t.incognito) 0xFFF3ECFF.toInt() else cText)
+                  if (i == cur) label.setTypeface(null, Typeface.BOLD)
+                  label.setPadding(dp(4), 0, 0, 0)
+                  head.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  head.addView(textBtn("✕") { closeTab(i); fillTabs(grid, title, d) }, LinearLayout.LayoutParams(dp(34), dp(34)))
+                  card.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  val img = ImageView(this)
+                  img.scaleType = ImageView.ScaleType.MATRIX
+                  img.background = shape(if (t.incognito) 0xFF3A2470.toInt() else cField, 14)
+                  img.clipToOutline = true
+                  val bmp = t.preview
+                  if (bmp != null) {
+                      img.setImageBitmap(bmp)
+                      img.post {
+                          val sc = img.width.toFloat() / bmp.width
+                          val m = Matrix(); m.setScale(sc, sc)
+                          img.imageMatrix = m
+                      }
+                  }
+                  card.addView(img, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(170)))
+                  return card
               }
 
-
-              // ------------------------------------------------------------------ ayarlar
-
               private fun showSettings() {
-                  val eng = Engines.get(prefs.engine)
                   val items = arrayOf(
-                      "Arama motoru: " + eng.name,
-                      "Arka planda çalma: " + (if (prefs.bgPlay) "açık" else "kapalı"),
-                      "Reklam engelleme: " + (if (prefs.adBlock) "açık" else "kapalı"),
-                      "Yeni gizli sekme aç",
-                      "Geçmişi temizle",
-                      "Çerezleri ve önbelleği temizle",
-                      "Hakkında"
+                      "Tema: " + Themes.get(prefs.theme).name,
+                      "Arama Motoru: " + Engines.get(prefs.engine).name,
+                      "Arka Planda Çalma: " + (if (prefs.bgPlay) "Açık" else "Kapalı"),
+                      "Reklam Engelleyici: " + (if (prefs.adBlock) "Açık" else "Kapalı"),
+                      "Geçmişi Temizle", "Önbelleği Temizle"
                   )
-                  AlertDialog.Builder(this)
-                      .setTitle("Ayarlar")
-                      .setItems(items) { _, which ->
-                          when (which) {
-                              0 -> chooseEngine()
-                              1 -> {
-                                  prefs.bgPlay = !prefs.bgPlay
-                                  toast("Arka planda çalma: " + (if (prefs.bgPlay) "açık" else "kapalı") + ". Uygulamayı kapatıp açınca tam geçerli olur.")
-                              }
-                              2 -> {
-                                  prefs.adBlock = !prefs.adBlock
-                                  toast("Reklam engelleme " + (if (prefs.adBlock) "açıldı" else "kapatıldı") + ". Bazı reklamlar görünmeye devam edebilir.")
-                              }
-                              3 -> openTab(null, true, true)
-                              4 -> {
-                                  prefs.clearHistory()
-                                  toast("Geçmiş temizlendi")
-                              }
-                              5 -> clearBrowsingData()
-                              6 -> AlertDialog.Builder(this)
-                                  .setTitle("Pusula")
-                                  .setMessage("Hafif ve sade bir tarayıcı. Sekmeler, yer imleri, geçmiş, indirme ve arka planda müzik çalma içerir.")
-                                  .setPositiveButton(android.R.string.ok, null)
-                                  .show()
-                          }
+                  AlertDialog.Builder(this).setTitle("Ayarlar").setItems(items) { _, which ->
+                      when (which) {
+                          0 -> chooseTheme()
+                          1 -> chooseEngine()
+                          2 -> { prefs.bgPlay = !prefs.bgPlay; toast("Arka plan ayarı değişti (yeni sekmelerde geçerli)") }
+                          3 -> { prefs.adBlock = !prefs.adBlock; toast("Reklam engelleyici değişti (yeni sekmelerde geçerli)") }
+                          4 -> { prefs.clearHistory(); toast("Geçmiş temizlendi") }
+                          5 -> { clearBrowsingData(); toast("Önbellek temizlendi") }
                       }
-                      .setNegativeButton("Kapat", null)
-                      .show()
+                  }.setNegativeButton("Kapat", null).show()
+              }
+
+              private fun chooseTheme() {
+                  val names = Themes.all.map { it.name }.toTypedArray()
+                  val sel = Themes.all.indexOfFirst { it.id == prefs.theme }.coerceAtLeast(0)
+                  AlertDialog.Builder(this).setTitle("Tema").setSingleChoiceItems(names, sel) { dlg, which ->
+                      prefs.theme = Themes.all[which].id
+                      dlg.dismiss()
+                      recreate()
+                  }.show()
               }
 
               private fun chooseEngine() {
                   val names = Engines.all.map { it.name }.toTypedArray()
                   val sel = Engines.all.indexOfFirst { it.id == prefs.engine }.coerceAtLeast(0)
-                  AlertDialog.Builder(this)
-                      .setTitle("Arama motoru")
-                      .setSingleChoiceItems(names, sel) { dlg, which ->
-                          prefs.engine = Engines.all[which].id
-                          dlg.dismiss()
-                      }
-                      .show()
+                  AlertDialog.Builder(this).setTitle("Arama Motoru").setSingleChoiceItems(names, sel) { dlg, which ->
+                      prefs.engine = Engines.all[which].id; dlg.dismiss()
+                  }.show()
               }
 
               private fun clearBrowsingData() {
@@ -1470,21 +1367,102 @@ jobs:
                   CookieManager.getInstance().flush()
                   WebStorage.getInstance().deleteAllData()
                   for (t in tabs) t.web.clearCache(true)
-                  toast("Çerezler ve önbellek temizlendi")
               }
 
               private companion object {
                   const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
                   const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
                   const val MAX_TABS = 20
-                  const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.ended){m.dataset.pusulaWasPlaying='1';}});}catch(e){}})();"
-                  const val MEDIA_PLAY_JS = "(function(){var v=document.querySelector('video,audio');if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{var b=document.querySelector('.ytp-play-button[aria-label*=Play],.ytp-play-button[title*=Play]');if(b)b.click();}})();"
+
+                  const val KEEP_PLAYING_JS =
+                      "(function(){try{" +
+                          "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
+                          "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
+                          "document.addEventListener('visibilitychange',function(e){" +
+                          "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
+                          "e.stopImmediatePropagation();},true);" +
+                          "}catch(e){}})();"
+
+                  // YouTube reklamlarını oynatıcı verisinden temizler; ağ isteklerini engellemez (oynatıcı takılmaz).
+                  const val STABLE_AD_BLOCKER_JS =
+                      "(function(){" +
+                      "if(location.hostname.indexOf('youtube.com')<0)return;" +
+                      "var K=['adPlacements','playerAds','adSlots','adBreakHeartbeatParams'];" +
+                      "function clean(o){try{if(!o||typeof o!=='object')return o;" +
+                      "for(var i=0;i<K.length;i++){if(K[i] in o){try{delete o[K[i]];}catch(e){}}}" +
+                      "if(o.playerResponse)clean(o.playerResponse);if(o.response)clean(o.response);}catch(e){}return o;}" +
+                      "var P=JSON.parse;JSON.parse=function(){return clean(P.apply(this,arguments));};" +
+                      "try{var v;Object.defineProperty(window,'ytInitialPlayerResponse',{configurable:true," +
+                      "get:function(){return v;},set:function(x){clean(x);v=x;}});}catch(e){}" +
+                      "var F=window.fetch;if(F){window.fetch=function(){var a=arguments,u='';" +
+                      "try{u=typeof a[0]==='string'?a[0]:(a[0]&&a[0].url)||'';}catch(e){}" +
+                      "var p=F.apply(this,a);" +
+                      "if(u.indexOf('/youtubei/v1/player')<0&&u.indexOf('/youtubei/v1/next')<0)return p;" +
+                      "return p.then(function(r){try{return r.clone().text().then(function(t){try{" +
+                      "var j=JSON.parse(t);var hd=new Headers(r.headers);hd.delete('content-length');" +
+                      "return new Response(JSON.stringify(j),{status:r.status,statusText:r.statusText,headers:hd});" +
+                      "}catch(e){return r;}},function(){return r;});}catch(e){return r;}});};}" +
+                      "var muted=false;" +
+                      "setInterval(function(){try{" +
+                      "var pl=document.querySelector('.html5-video-player');var vd=document.querySelector('video');" +
+                      "var ad=pl&&pl.classList.contains('ad-showing');" +
+                      "if(ad&&vd){if(!muted){vd.muted=true;muted=true;}if(isFinite(vd.duration)&&vd.duration>0){vd.currentTime=vd.duration;}}" +
+                      "else if(muted&&vd){vd.muted=false;muted=false;}" +
+                      "var b=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytp-ad-overlay-close-button');" +
+                      "if(b)b.click();}catch(e){}},300);" +
+                      "})();"
+
+                  const val BACKGROUND_MEDIA_JS =
+                      "(function(){try{" +
+                          "document.querySelectorAll('video,audio').forEach(function(m){" +
+                          "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                          "});" +
+                          "}catch(e){}})();"
+
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
-                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.pause();});})();"
+                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){m.pause();m.dataset.pusulaWasPlaying='';}});})();"
                   const val MEDIA_PREVIOUS_JS = "(function(){var b=document.querySelector('.ytp-prev-button');if(b)b.click();})();"
                   const val MEDIA_NEXT_JS = "(function(){var b=document.querySelector('.ytp-next-button');if(b)b.click();})();"
-
               }
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
+          package com.pusula.browser
+
+          /** Uygulama renk temaları. */
+          class Palette(
+              val id: String,
+              val name: String,
+              val dark: Boolean,
+              val bg: Int,
+              val surface: Int,
+              val field: Int,
+              val text: Int,
+              val sub: Int,
+              val icon: Int,
+              val accent: Int,
+              val accent2: Int
+          )
+
+          object Themes {
+              private fun c(v: Long): Int = v.toInt()
+
+              val all: List<Palette> = listOf(
+                  Palette("gece", "Gece Mavisi", true,
+                      c(0xFF0B1020), c(0xFF131B33), c(0xFF1D2848), c(0xFFEAF0FF), c(0xFF8FA0C8), c(0xFFC9D6FF), c(0xFF4C8DFF), c(0xFF8A5CFF)),
+                  Palette("mor", "Mor Gece", true,
+                      c(0xFF120B1F), c(0xFF1A1230), c(0xFF2A1F4A), c(0xFFF1EAFF), c(0xFFA99BCF), c(0xFFD8C8FF), c(0xFF9B6BFF), c(0xFFFF5CA8)),
+                  Palette("orman", "Orman", true,
+                      c(0xFF08140F), c(0xFF0E1F17), c(0xFF173126), c(0xFFE6F7EE), c(0xFF86B8A0), c(0xFFBFE8D3), c(0xFF2ED47A), c(0xFF1BC5C5)),
+                  Palette("gunbatimi", "Gün Batımı", true,
+                      c(0xFF1A0F0F), c(0xFF241414), c(0xFF3A2020), c(0xFFFFEDE6), c(0xFFC9988A), c(0xFFFFD2C2), c(0xFFFF7A45), c(0xFFFF3D77)),
+                  Palette("acik", "Açık", false,
+                      c(0xFFF2F4F9), c(0xFFFFFFFF), c(0xFFE8ECF5), c(0xFF151A26), c(0xFF667089), c(0xFF3A4560), c(0xFF3D6BFF), c(0xFF7A5CFF)),
+                  Palette("okyanus", "Okyanus", false,
+                      c(0xFFEAF6FA), c(0xFFFFFFFF), c(0xFFDDEFF5), c(0xFF0F2530), c(0xFF5A7886), c(0xFF2A4E5E), c(0xFF0EA5C6), c(0xFF2F6BFF))
+              )
+
+              fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
@@ -1501,55 +1479,40 @@ jobs:
           import androidx.core.app.NotificationCompat
           import androidx.core.app.ServiceCompat
 
-          /** Silent, minimal foreground service to keep the WebView process eligible for background playback.
-           * Android requires a foreground-service notification; this is not a media-control notification.
-           */
           class PlaybackService : Service() {
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> {
+                          sendBroadcast(Intent(intent.action).setPackage(packageName))
+                      }
+                  }
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
-                      nm.createNotificationChannel(
-                          NotificationChannel(CHANNEL, "Arka planda çalışma", NotificationManager.IMPORTANCE_MIN).apply {
-                              setShowBadge(false)
-                              description = "Arka planda medya oynatımı için sistem hizmeti"
-                          }
-                      )
+                      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Oynatıcı", NotificationManager.IMPORTANCE_LOW))
                   }
-                  val open = PendingIntent.getActivity(
-                      this, 0, Intent(this, MainActivity::class.java),
-                      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                  )
+                  val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                   val n = NotificationCompat.Builder(this, CHANNEL)
                       .setSmallIcon(R.drawable.ic_notif)
-                      .setContentTitle("Pusula Browser")
-                      .setContentText("Arka planda çalışıyor")
+                      .setContentTitle("Pusula Medya Oynatıcı")
+                      .setContentText("Arka Planda Çalışıyor")
                       .setContentIntent(open)
-                      .setSilent(true)
-                      .setShowWhen(false)
                       .setOngoing(true)
-                      .setCategory(NotificationCompat.CATEGORY_SERVICE)
                       .build()
                   try {
                       if (Build.VERSION.SDK_INT >= 29) {
                           ServiceCompat.startForeground(this, 1002, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-                      } else {
-                          startForeground(1002, n)
-                      }
-                  } catch (_: Exception) {
-                      stopSelf()
-                  }
+                      } else { startForeground(1002, n) }
+                  } catch (_: Exception) { stopSelf() }
                   return START_NOT_STICKY
               }
-
               override fun onBind(intent: Intent?): IBinder? = null
-
-              companion object { 
+              companion object {
                   const val CHANNEL = "playback"
-                  const val ACTION_PLAY = "com.pusula.browser.action.PLAY"
-                  const val ACTION_TOGGLE = "com.pusula.browser.action.TOGGLE"
-                  const val ACTION_PAUSE = "com.pusula.browser.action.PAUSE"
-                  const val ACTION_PREVIOUS = "com.pusula.browser.action.PREVIOUS"
-                  const val ACTION_NEXT = "com.pusula.browser.action.NEXT"
+                  const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
+                  const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
+                  const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
+                  const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
+                  const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
               }
           }
           EOF
@@ -1560,53 +1523,39 @@ jobs:
           import android.net.Uri
           import org.json.JSONArray
           import org.json.JSONObject
-          import java.io.ByteArrayInputStream
 
-          /** Arama motorları. */
           object Engines {
               class E(val id: String, val name: String, val search: String, val home: String)
-
-              val all: List<E> = listOf(
+              val all = listOf(
                   E("google", "Google", "https://www.google.com/search?q=%s", "https://www.google.com/"),
                   E("ddg", "DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com/"),
-                  E("bing", "Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com/"),
-                  E("yandex", "Yandex", "https://yandex.com.tr/search/?text=%s", "https://yandex.com.tr/")
+                  E("bing", "Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com/")
               )
-
               fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
           }
 
-          private val HOST_LIKE = Regex(
-              "^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$"
-          )
+          val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$")
 
-          /** Adres çubuğuna yazılanı adrese ya da arama adresine çevirir. */
           fun resolveInput(raw: String, engine: Engines.E): String {
               val t = raw.trim()
               if (t.isEmpty()) return engine.home
-              if (t.startsWith("http://", ignoreCase = true) || t.startsWith("https://", ignoreCase = true)) return t
+              if (t.startsWith("http://", true) || t.startsWith("https://", true)) return t
               if (!t.contains(' ') && HOST_LIKE.matches(t)) return "https://" + t
               return engine.search.replace("%s", Uri.encode(t))
           }
 
-          /** Ayarlar, yer imleri, geçmiş ve açık sekmeler. Hepsi yalnızca telefonda saklanır. */
           class Prefs(context: Context) {
-
               class Entry(val title: String, val url: String)
-
               private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
 
-              var engine: String
-                  get() = sp.getString("engine", "google") ?: "google"
-                  set(v) { sp.edit().putString("engine", v).apply() }
-
-              var bgPlay: Boolean
-                  get() = sp.getBoolean("bgPlay", true)
-                  set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
-
-              var adBlock: Boolean
-                  get() = sp.getBoolean("adBlock", true)
-                  set(v) { sp.edit().putBoolean("adBlock", v).apply() }
+              var engine: String get() = sp.getString("engine", "google") ?: "google"
+                set(v) { sp.edit().putString("engine", v).apply() }
+              var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
+                set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
+              var theme: String get() = sp.getString("theme", "gece") ?: "gece"
+                set(v) { sp.edit().putString("theme", v).apply() }
+              var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
+                set(v) { sp.edit().putBoolean("adBlock", v).apply() }
 
               private fun readList(key: String): MutableList<Entry> {
                   val out = ArrayList<Entry>()
@@ -1616,25 +1565,16 @@ jobs:
                           val o = arr.getJSONObject(i)
                           out.add(Entry(o.optString("t"), o.optString("u")))
                       }
-                  } catch (e: Exception) {
-                      // bozuk veri: boş liste
-                  }
+                  } catch (_: Exception) {}
                   return out
               }
-
               private fun writeList(key: String, list: List<Entry>) {
                   val arr = JSONArray()
                   for (e in list) arr.put(JSONObject().put("t", e.title).put("u", e.url))
                   sp.edit().putString(key, arr.toString()).apply()
               }
-
-              // ---- yer imleri ----
-
               fun bookmarks(): List<Entry> = readList("bookmarks")
-
               fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
-
-              /** Yer imi yoksa ekler, varsa kaldırır. Eklenmişse true döner. */
               fun toggleBookmark(title: String, url: String): Boolean {
                   val list = readList("bookmarks")
                   val had = list.removeAll { it.url == url }
@@ -1642,54 +1582,30 @@ jobs:
                   writeList("bookmarks", list)
                   return !had
               }
-
-              fun removeBookmark(url: String) {
-                  val list = readList("bookmarks")
-                  list.removeAll { it.url == url }
-                  writeList("bookmarks", list)
-              }
-
-              // ---- geçmiş ----
-
+              fun removeBookmark(url: String) { val l = readList("bookmarks"); l.removeAll { it.url == url }; writeList("bookmarks", l) }
               fun history(): List<Entry> = readList("history")
-
               fun addHistory(title: String, url: String) {
-                  val list = readList("history")
-                  if (list.isNotEmpty() && list[0].url == url) return
-                  list.add(0, Entry(title, url))
-                  while (list.size > 300) list.removeAt(list.size - 1)
-                  writeList("history", list)
+                  val l = readList("history")
+                  if (l.isNotEmpty() && l[0].url == url) return
+                  l.add(0, Entry(title, url))
+                  while (l.size > 300) l.removeAt(l.size - 1)
+                  writeList("history", l)
               }
-
-              fun removeHistory(url: String) {
-                  val list = readList("history")
-                  list.removeAll { it.url == url }
-                  writeList("history", list)
-              }
-
-              fun clearHistory() {
-                  sp.edit().putString("history", "[]").apply()
-              }
-
-              // ---- açık sekmeler ----
-
+              fun removeHistory(url: String) { val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l) }
+              fun clearHistory() { sp.edit().putString("history", "[]").apply() }
               fun saveTabs(urls: List<String>, current: Int) {
                   val arr = JSONArray()
                   for (u in urls) arr.put(u)
                   sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
               }
-
               fun savedTabs(): List<String> {
                   val out = ArrayList<String>()
                   try {
                       val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
                       for (i in 0 until arr.length()) out.add(arr.getString(i))
-                  } catch (e: Exception) {
-                      // bozuk veri
-                  }
+                  } catch (_: Exception) {}
                   return out
               }
-
               fun savedCurrent(): Int = sp.getInt("tabCur", 0)
           }
           EOF
@@ -1699,149 +1615,69 @@ jobs:
           import android.webkit.JavascriptInterface
           import org.json.JSONArray
           import org.json.JSONObject
-          import java.io.ByteArrayInputStream
 
-          /**
-           * Yeni sekme sayfasının ("Pusula" adıyla) okuduğu küçük köprü.
-           * [trusted] yalnızca kendi sayfamız yüklüyken true olur; dış siteler hiçbir şey okuyamaz.
-           */
+          /** Yeni sekme sayfasının okuduğu bilgiler. Yalnızca kendi sayfamız yüklüyken cevap verir. */
           class PusulaBridge(private val prefs: Prefs) {
+              @Volatile var trusted = false
 
-              @Volatile
-              var trusted = false
+              private fun hex(v: Int): String = "#%06X".format(0xFFFFFF and v)
 
               @JavascriptInterface
               fun config(): String {
                   if (!trusted) return "{}"
                   val e = Engines.get(prefs.engine)
-                  val arr = JSONArray()
-                  for (b in prefs.bookmarks().take(12)) {
-                      arr.put(JSONObject().put("t", b.title).put("u", b.url))
-                  }
+                  val th = Themes.get(prefs.theme)
+                  val bm = JSONArray()
+                  for (b in prefs.bookmarks().take(8)) bm.put(JSONObject().put("t", b.title).put("u", b.url))
+                  val hs = JSONArray()
+                  for (h in prefs.history().take(6)) hs.put(JSONObject().put("t", h.title).put("u", h.url))
                   return JSONObject()
                       .put("engine", e.name)
                       .put("search", e.search)
-                      .put("bookmarks", arr)
+                      .put("bookmarks", bm)
+                      .put("history", hs)
+                      .put("dark", th.dark)
+                      .put("bg", hex(th.bg))
+                      .put("surface", hex(th.surface))
+                      .put("field", hex(th.field))
+                      .put("text", hex(th.text))
+                      .put("sub", hex(th.sub))
+                      .put("accent", hex(th.accent))
+                      .put("accent2", hex(th.accent2))
                       .toString()
               }
           }
           EOF
           cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp"
-              android:height="24dp"
-              android:viewportWidth="24"
-              android:viewportHeight="24">
-              <path
-                  android:fillColor="#FF000000"
-                  android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp"
-              android:height="24dp"
-              android:viewportWidth="24"
-              android:viewportHeight="24">
-              <path
-                  android:fillColor="#FF000000"
-                  android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z" />
-          </vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp"
-              android:height="24dp"
-              android:viewportWidth="24"
-              android:viewportHeight="24">
-              <path
-                  android:fillColor="#FF000000"
-                  android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z" />
-          </vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp"
-              android:height="24dp"
-              android:viewportWidth="24"
-              android:viewportHeight="24">
-              <path
-                  android:fillColor="#FF000000"
-                  android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z" />
-          </vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="96dp"
-              android:height="96dp"
-              android:viewportWidth="96"
-              android:viewportHeight="96">
-              <path
-                  android:fillColor="#1457E8"
-                  android:pathData="M20,0 H76 A20,20 0 0 1 96,20 V76 A20,20 0 0 1 76,96 H20 A20,20 0 0 1 0,76 V20 A20,20 0 0 1 20,0 Z" />
-              <path
-                  android:fillColor="#00000000"
-                  android:pathData="M48,48 m-28,0 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0"
-                  android:strokeColor="#FFFFFF"
-                  android:strokeWidth="6" />
-              <path
-                  android:fillColor="#FFFFFF"
-                  android:pathData="M48,24 L58,50 H38 Z" />
-              <path
-                  android:fillColor="#B3C9FF"
-                  android:pathData="M48,72 L38,46 H58 Z" />
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+              <path android:fillColor="#1457E8" android:pathData="M20,0 H76 A20,20 0 0 1 96,20 V76 A20,20 0 0 1 76,96 H20 A20,20 0 0 1 0,76 V20 A20,20 0 0 1 20,0 Z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M48,24 L58,50 H38 Z"/>
           </vector>
           EOF
           cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp"
-              android:height="24dp"
-              android:viewportWidth="24"
-              android:viewportHeight="24">
-              <path
-                  android:fillColor="#FF000000"
-                  android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z" />
-          </vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp"
-              android:height="24dp"
-              android:viewportWidth="24"
-              android:viewportHeight="24">
-              <path
-                  android:fillColor="#FFFFFFFF"
-                  android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z" />
-          </vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="24dp"
-              android:height="24dp"
-              android:viewportWidth="24"
-              android:viewportHeight="24">
-              <path
-                  android:fillColor="#FF000000"
-                  android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z" />
-          </vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
           EOF
-          cat > app/src/main/res/values-night/bools.xml <<'EOF'
-          <resources>
-              <bool name="light_bars">false</bool>
-          </resources>
-          EOF
-          printf '%s\n' '<resources>' '    <color name="bg">#0C0F14</color>' '</resources>' > app/src/main/res/values-night/colors.xml
-          cat > app/src/main/res/values/bools.xml <<'EOF'
-          <resources>
-              <bool name="light_bars">true</bool>
-          </resources>
-          EOF
-          printf '%s\n' '<resources>' '    <color name="bg">#F4F5F7</color>' '</resources>' > app/src/main/res/values/colors.xml
           cat > app/src/main/res/values/strings.xml <<'EOF'
-          <resources>
-              <string name="app_name">Pusula</string>
-          </resources>
+          <resources><string name="app_name">Pusula Medya</string></resources>
           EOF
           cat > app/src/main/res/values/themes.xml <<'EOF'
           <resources>
@@ -1849,22 +1685,21 @@ jobs:
                   <item name="android:windowBackground">@color/bg</item>
                   <item name="android:statusBarColor">@android:color/transparent</item>
                   <item name="android:navigationBarColor">@android:color/transparent</item>
-                  <item name="android:windowLightStatusBar">@bool/light_bars</item>
               </style>
           </resources>
+          EOF
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <resources><color name="bg">#0F1115</color></resources>
           EOF
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 8.9 }
       - name: APK derle
         run: gradle assembleDebug --no-daemon
-      - name: APK dosyasini dogrula
-        run: |
-          find app/build/outputs/apk -type f -name '*.apk' -print
-          test -n "$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
       - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
           name: Pusula-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
