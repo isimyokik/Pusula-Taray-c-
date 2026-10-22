@@ -60,8 +60,8 @@ jobs:
                   applicationId = "com.pusula.player"
                   minSdk = 24
                   targetSdk = 35
-                  versionCode = 35
-                  versionName = "3.5-Stable"
+                  versionCode = 36
+                  versionName = "3.6-Stable"
               }
 
               buildTypes {
@@ -131,7 +131,7 @@ jobs:
               xmlns:app="http://schemas.android.com/apk/res-auto"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
-              android:orientation="VERTICAL"
+              android:orientation="vertical"
               android:background="#0F1115">
 
               <androidx.media3.ui.PlayerView
@@ -296,7 +296,6 @@ jobs:
                       }
                   }
 
-                  // Açılışta trend videoları getir
                   performSearch("Trend Müzikler")
               }
 
