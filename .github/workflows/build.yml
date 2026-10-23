@@ -1,33 +1,43 @@
-name: Pusula‑Çalışan‑Temel‑Derleme
+name: Pusula APK
 on:
   push:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Java‑17 kurulumu
+
+      - name: Java‑17 ayarla
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Proje yapısını oluştur
+
+      - name: Android SDK bileşenlerini yükle
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Proje dosyalarını oluştur
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
-          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values‑night gradle/wrapper
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
+
           cat > build.gradle.kts <<'EOF'
           plugins {
-              id("com.android.application") version "8.5.0" apply false
-              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
           }
           EOF
+
           cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF‑8
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           kotlin.code.style=official
           EOF
+
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
               repositories {
@@ -46,8 +56,7 @@ jobs:
           rootProject.name = "Pusula"
           include(":app")
           EOF
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
+
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -55,20 +64,17 @@ jobs:
           }
           android {
               namespace = "com.pusula.browser"
-              compileSdk = 34
+              compileSdk = 35
               defaultConfig {
                   applicationId = "com.pusula.browser"
                   minSdk = 24
-                  targetSdk = 34
+                  targetSdk = 35
                   versionCode = 1
-                  versionName = "2.4‑stable‑base"
+                  versionName = "2.4‑fix‑pip‑ad"
               }
               buildTypes {
                   release {
                       isMinifyEnabled = false
-                  }
-                  debug {
-                      isDebuggable = true
                   }
               }
               compileOptions {
@@ -80,20 +86,20 @@ jobs:
               }
           }
           dependencies {
-              implementation("androidx.core:core‑ktx:1.13.1")
+              implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.appcompat:appcompat:1.7.0")
-              implementation("androidx.webkit:webkit:1.11.0")
+              implementation("androidx.webkit:webkit:1.12.1")
               implementation("androidx.media:media:1.7.0")
           }
           EOF
-          # AndroidManifest.xml
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <?xml version="1.0" encoding="utf‑8"?>
+          <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses‑permission android:name="android.permission.INTERNET" />
-              <uses‑permission android:name="android.permission.POST_NOTIFICATIONS" />
-              <uses‑permission android:name="android.permission.FOREGROUND_SERVICE" />
-              <uses‑permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
               <application
                   android:allowBackup="false"
                   android:icon="@drawable/ic_launcher"
@@ -110,568 +116,78 @@ jobs:
                       android:exported="true"
                       android:launchMode="singleTask"
                       android:supportsPictureInPicture="true"
-                      android:windowSoftInputMode="adjustResize|stateHidden">
-                      <intent‑filter>
+                      android:windowSoftInputMode="adjustResize">
+                      <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
-                      </intent‑filter>
-                      <intent‑filter>
+                      </intent-filter>
+                      <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.APP_BROWSER" />
                           <category android:name="android.intent.category.DEFAULT" />
-                      </intent‑filter>
-                      <intent‑filter>
+                      </intent-filter>
+                      <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
                           <category android:name="android.intent.category.DEFAULT" />
                           <category android:name="android.intent.category.BROWSABLE" />
                           <data android:scheme="http" />
                           <data android:scheme="https" />
-                          <data android:mimeType="text/html" />
-                          <data android:mimeType="application/xhtml+xml" />
-                      </intent‑filter>
-                      <intent‑filter>
-                          <action android:name="android.intent.action.VIEW" />
-                          <category android:name="android.intent.category.DEFAULT" />
-                          <category android:name="android.intent.category.BROWSABLE" />
-                          <data android:scheme="http" />
-                          <data android:scheme="https" />
-                      </intent‑filter>
+                      </intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
-          # Diğer temel Kotlin sınıfları (Prefs, Themes, PusulaBridge, PlaybackService)
-          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
-          package com.pusula.browser
-          import android.content.Context
-          import android.content.SharedPreferences
-          class Prefs(ctx: Context) {
-              private val sp = ctx.getSharedPreferences("pusula_prefs", Context.MODE_PRIVATE)
-              var theme: String
-                  get() = sp.getString("theme","default") ?: "default"
-                  set(v) = sp.edit().putString("theme",v).apply()
-              var bgPlay: Boolean
-                  get() = sp.getBoolean("bg_play",true)
-                  set(v) = sp.edit().putBoolean("bg_play",v).apply()
-              var barBottom: Boolean
-                  get() = sp.getBoolean("bar_bottom",false)
-                  set(v) = sp.edit().putBoolean("bar_bottom",v).apply()
-              var askedNotif: Boolean
-                  get() = sp.getBoolean("asked_notif",false)
-                  set(v) = sp.edit().putBoolean("asked_notif",v).apply()
-              var clearOnExit: Boolean
-                  get() = sp.getBoolean("clear_exit",false)
-                  set(v) = sp.edit().putBoolean("clear_exit",v).apply()
-              var adBlock: Boolean
-                  get() = sp.getBoolean("adblock",true)
-                  set(v) = sp.edit().putBoolean("adblock",v).apply()
-              var startMode: String
-                  get() = sp.getString("start_mode","last") ?: "last"
-                  set(v) = sp.edit().putString("start_mode",v).apply()
-              var engine: String
-                  get() = sp.getString("engine","google") ?: "google"
-                  set(v) = sp.edit().putString("engine",v).apply()
-              fun saveTabs(urls:List<String>,current:Int)=sp.edit().putStringSet("tabs",urls.toSet()).putInt("cur_tab",current).apply()
-              fun savedTabs():List<String> = sp.getStringSet("tabs",emptySet())?.toList() ?: emptyList()
-              fun savedCurrent():Int = sp.getInt("cur_tab",0)
-              fun clearHistory()=sp.edit().remove("history").apply()
-              fun addHistory(title:String,url:String){}
-          }
-          EOF
-          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
-          package com.pusula.browser
-          data class Palette(val dark:Boolean,val bg:Int,val surface:Int,val field:Int,val text:Int,val sub:Int,val icon:Int,val accent:Int,val accent2:Int)
-          object Themes {
-              fun get(id:String):Palette = Palette(true,0xFF0b1020.toInt(),0xFF131b33.toInt(),0xFF1d2848.toInt(),0xFFeaf0ff.toInt(),0xFF8fa0c8.toInt(),0xFFc5cde2.toInt(),0xFF4c8dff.toInt(),0xFF8a5cff.toInt())
-          }
-          EOF
-          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
-          package com.pusula.browser
-          import android.webkit.JavascriptInterface
-          class PusulaBridge(private val prefs:Prefs) {
-              var trusted=false
-              @JavascriptInterface fun config():String = "{}"
-              @JavascriptInterface fun savePins(json:String) {}
-          }
-          EOF
-          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
-          package com.pusula.browser
-          import android.app.NotificationChannel
-          import android.app.NotificationManager
-          import android.app.PendingIntent
-          import android.content.Intent
-          import android.os.Build
-          import android.app.Service
-          import android.os.IBinder
-          import androidx.core.app.NotificationCompat
-          class PlaybackService : Service() {
-              companion object {
-                  const val CH_ID = "pusula_media"
-                  const val ACTION_PLAY = "com.pusula.action.PLAY"
-                  const val ACTION_PAUSE = "com.pusula.action.PAUSE"
-                  const val ACTION_TOGGLE = "com.pusula.action.TOGGLE"
-                  const val ACTION_PREVIOUS = "com.pusula.action.PREVIOUS"
-                  const val ACTION_NEXT = "com.pusula.action.NEXT"
-                  var running = false
-                  fun stop(ctx:Context) { ctx.stopService(Intent(ctx,PlaybackService::class.java)) }
-                  fun update(ctx:Context,playing:Boolean,title:String,artist:String) {
-                      val i = Intent(ctx,PlaybackService::class.java)
-                      i.putExtra("play",playing);i.putExtra("title",title);i.putExtra("artist",artist)
-                      if(Build.VERSION.SDK_INT>=26) ctx.startForegroundService(i) else ctx.startService(i)
-                  }
-              }
-              private var currPlaying=false;private var currTitle="";private var currArtist=""
-              override fun onCreate() {
-                  super.onCreate();running=true
-                  if(Build.VERSION.SDK_INT>=26) {
-                      val ch = NotificationChannel(CH_ID,"Medya",NotificationManager.IMPORTANCE_LOW)
-                      getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
-                  }
-              }
-              override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
-                  super.onStartCommand(intent,flags,startId)
-                  intent?.let { currPlaying=it.getBooleanExtra("play",false);currTitle=it.getStringExtra("title")?:"";currArtist=it.getStringExtra("artist")?:"" }
-                  val pi = PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                  val n = NotificationCompat.Builder(this,CH_ID)
-                      .setContentIntent(pi)
-                      .setSmallIcon(android.R.drawable.ic_media_play)
-                      .setContentTitle(if(currTitle.isBlank())"Pusula Tarayıcı"else currTitle)
-                      .setContentText(currArtist)
-                      .setOngoing(currPlaying).build()
-                  startForeground(1001,n)
-                  return START_STICKY
-              }
-              override fun onDestroy() { running=false;super.onDestroy() }
-              override fun onBind(intent:Intent?):IBinder? = null
-          }
-          EOF
-          # Ana aktivite ve diğer sabit tanımlar (kısmi kesik kısım tamamlandı, eksik sabitler eklendi)
-          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
-          package com.pusula.browser
-          import android.annotation.SuppressLint
-          import android.app.Dialog
-          import android.app.PendingIntent
-          import android.graphics.Matrix
-          import android.view.Window
-          import android.content.BroadcastReceiver
-          import android.content.Context
-          import android.content.Intent
-          import android.content.IntentFilter
-          import android.content.res.ColorStateList
-          import android.content.res.Configuration
-          import android.graphics.Bitmap
-          import android.graphics.Canvas
-          import android.graphics.Color
-          import android.graphics.Typeface
-          import android.graphics.drawable.ColorDrawable
-          import android.graphics.drawable.Drawable
-          import android.graphics.drawable.GradientDrawable
-          import android.graphics.drawable.RippleDrawable
-          import android.net.Uri
-          import android.os.Build
-          import android.os.Bundle
-          import android.os.Environment
-          import android.os.Handler
-          import android.os.Looper
-          import android.os.Message
-          import android.text.Html
-          import android.text.InputType
-          import android.view.Gravity
-          import android.view.KeyEvent
-          import android.view.View
-          import android.view.ViewGroup
-          import android.view.inputmethod.EditorInfo
-          import android.view.inputmethod.InputMethodManager
-          import android.webkit.CookieManager
-          import android.webkit.JsResult
-          import android.webkit.URLUtil
-          import android.webkit.ValueCallback
-          import android.webkit.WebChromeClient
-          import android.webkit.WebResourceError
-          import android.webkit.WebResourceRequest
-          import android.webkit.WebResourceResponse
-          import android.webkit.WebStorage
-          import android.webkit.WebView
-          import android.webkit.WebViewClient
-          import android.widget.EditText
-          import android.widget.FrameLayout
-          import android.widget.ImageButton
-          import android.widget.ImageView
-          import android.widget.LinearLayout
-          import android.widget.ProgressBar
-          import android.widget.ScrollView
-          import android.widget.TextView
-          import android.widget.Toast
-          import androidx.activity.OnBackPressedCallback
-          import androidx.activity.result.contract.ActivityResultContracts
-          import androidx.appcompat.app.AppCompatActivity
-          import androidx.appcompat.widget.SwitchCompat
-          import androidx.core.content.ContextCompat
-          import androidx.core.view.ViewCompat
-          import androidx.core.view.WindowCompat
-          import androidx.core.view.WindowInsetsCompat
-          import androidx.core.view.WindowInsetsControllerCompat
-          import androidx.core.widget.doAfterTextChanged
-          import androidx.webkit.WebViewAssetLoader
-          import org.json.JSONArray
-          import org.json.JSONObject
-          import java.io.ByteArrayInputStream
-          const val ASSET_PREFIX = "file:///android_asset/"
-          const val NEWTAB_URL = ASSET_PREFIX + "newtab.html"
-          const val MAX_TABS = 12
-          const val MEDIA_STATE_JS = "(function(){var v=document.querySelector('video,audio');if(!v)return null;return JSON.stringify({p:!v.paused,t:v.title||v.src.split('/').pop()||'',a:''});})()"
-          const val MEDIA_TOGGLE_JS = "(function(){var v=document.querySelector('video,audio');if(v){if(v.paused)v.play();else v.pause();}})()"
-          const val MEDIA_PAUSE_JS = "(function(){var v=document.querySelector('video,audio');if(v&&!v.paused)v.pause();})()"
-          const val MEDIA_PREVIOUS_JS = "(function(){var v=document.querySelector('video,audio');if(v)v.currentTime=Math.max(0,v.currentTime‑10);})()"
-          const val MEDIA_NEXT_JS = "(function(){var v=document.querySelector('video,audio');if(v)v.currentTime+=10;})()"
-          const val BACKGROUND_MEDIA_JS = "(function(){var v=document.querySelector('video,audio');if(v&&!v.paused)v.play();})()"
-          const val PIP_ON_JS = "(function(){})()"
-          const val PIP_OFF_JS = "(function(){})()"
-          const val LANDSCAPE_VIDEO_JS = "(function(){})()"
-          const val PORTRAIT_VIDEO_JS = "(function(){})()"
-          object Engines {
-              fun get(id:String):SearchEngine=when(id){
-                  "google"->SearchEngine("Google","https://www.google.com/search?q=%s","https://google.com")
-                  else->SearchEngine("Google","https://www.google.com/search?q=%s","https://google.com")
-              }
-          }
-          data class SearchEngine(val name:String,val search:String,val home:String)
-          fun resolveInput(text:String,e:SearchEngine):String{
-              val t=text.trim()
-              if(t.isEmpty()) return NEWTAB_URL
-              if(Regex("^https?://",RegexOption.IGNORE_CASE).matches(t)) return t
-              if(Regex("^([a‑z0‑9‑]+\\.)+[a‑z]{2,}([:/?#].*)?$",RegexOption.IGNORE_CASE).matches(t)) return "https://$t"
-              return e.search.replace("%s",java.net.URLEncoder.encode(t,"UTF‑8"))
-          }
-          fun errorHtml(url:String,msg:String):String{
-              return """<html><body style="background:#0b1020;color:#eaf0ff;padding:24px;font‑family:sans‑serif"><h2>Yükleme Hatası</h2><p>$msg</p><p><a href="$url" style="color:#4c8dff">Yeniden dene</a></p></body></html>"""
-          }
-          fun hideKeyboard(act:android.app.Activity){
-              val imm=act.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-              imm.hideSoftInputFromWindow(act.window.decorView.windowToken,0)
-          }
-          class MainActivity : AppCompatActivity() {
-              private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
-                  var title: String = "Yeni Sekme"
-                  var url: String = ""
-                  var pendingUrl: String? = null
-                  var desktop: Boolean = false
-                  var mobileUa: String = ""
-                  var progress: Int = 100
-                  var preview: Bitmap? = null
-              }
-              private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
-              private class BgWebView(c: Context) : WebView(c) {
-                  override fun onWindowVisibilityChanged(visibility: Int) {
-                      if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
-                  }
-              }
-              private val tabs = ArrayList<BTab>()
-              private var cur = -1
-              private var shown: WebView? = null
-              private lateinit var prefs: Prefs
-              private lateinit var loader: WebViewAssetLoader
-              private val handler = Handler(Looper.getMainLooper())
-              private var appInBackground = false
-              private var hasMedia = false
-              private var lastPlaying = false
-              private var lastTitle = ""
-              private var lastArtist = ""
-              private lateinit var dockBar: LinearLayout
-              private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
-              private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-              private val mediaStatePoll = object : Runnable {
-                  override fun run() { pollMedia(); handler.postDelayed(this, 1500L) }
-              }
-              private fun pollMedia() {
-                  val t = tabs.getOrNull(cur) ?: return
-                  try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
-              }
-              private fun onMediaState(raw: String?) {
-                  var has = false; var playing = false; var title = ""; var artist = ""
-                  try {
-                      if (raw != null && raw != "null" && raw != "\"\"") {
-                          val inner = JSONArray("[" + raw + "]").getString(0)
-                          if (inner.isNotEmpty()) {
-                              val o = JSONObject(inner)
-                              has = true; playing = o.optBoolean("p"); title = o.optString("t"); artist = o.optString("a")
-                          }
-                      }
-                  } catch (_: Exception) { return }
-                  if (!has) {
-                      if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
-                      return
-                  }
-                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
-                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
-                  if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
-              }
-              private fun pipAction(code: Int, icon: Int, label: String, action: String): android.app.RemoteAction {
-                  val pi = PendingIntent.getBroadcast(this, code, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-                  return android.app.RemoteAction(android.graphics.drawable.Icon.createWithResource(this, icon), label, label, pi)
-              }
-              private fun enterPip() {
-                  if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
-                  try {
-                      shown?.onResume()
-                      val b = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9))
-                      if (Build.VERSION.SDK_INT >= 26) {
-                          val acts = ArrayList<android.app.RemoteAction>()
-                          acts.add(pipAction(11, android.R.drawable.ic_media_previous, "Önceki", PlaybackService.ACTION_PREVIOUS))
-                          acts.add(pipAction(12, android.R.drawable.ic_media_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
-                          acts.add(pipAction(13, android.R.drawable.ic_media_next, "Sonraki", PlaybackService.ACTION_NEXT))
-                          b.setActions(acts)
-                      }
-                      enterPictureInPictureMode(b.build())
-                  } catch (_: Exception) { toast("Küçük pencere açılamadı") }
-              }
-              private fun onPipChanged(pip: Boolean) {}
-              override fun onUserLeaveHint() { super.onUserLeaveHint() }
-              override fun onConfigurationChanged(newConfig: Configuration) { super.onConfigurationChanged(newConfig) }
-              private val mediaControlReceiver = object : BroadcastReceiver() {
-                  override fun onReceive(context: Context?, intent: Intent?) {
-                      val act = intent?.action ?: return
-                      val js = when (act) {
-                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
-                          PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
-                          PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
-                          PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
-                          else -> return
-                      }
-                      val targets = listOfNotNull(tabs.getOrNull(cur))
-                      targets.forEach { t -> try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { } }
-                  }
-              }
-              private val backgroundMediaPump = object : Runnable { override fun run() {} }
-              private lateinit var root: LinearLayout
-              private lateinit var content: FrameLayout
-              private lateinit var fullscreen: FrameLayout
-              private lateinit var urlField: EditText
-              private lateinit var progress: ProgressBar
-              private lateinit var backBtn: ImageButton
-              private lateinit var fwdBtn: ImageButton
-              private lateinit var tabCount: TextView
-              private lateinit var privateBadge: TextView
-              private lateinit var findBar: LinearLayout
-              private lateinit var findInput: EditText
-              private lateinit var findCount: TextView
-              private var dark = false
-              private var cBg = 0; private var cSurface = 0; private var cField = 0; private var cText = 0
-              private var cSub = 0; private var cIcon = 0; private var cAccent = 0; private var cAccent2 = 0
-              private lateinit var topBar: LinearLayout
-              private var customView: View? = null
-              private var customCb: WebChromeClient.CustomViewCallback? = null
-              private var fileCb: ValueCallback<Array<Uri>>? = null
-              private var startUrl: String? = null
-              private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  prefs = Prefs(this)
-                  loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
-                  loadPalette()
-                  WindowCompat.setDecorFitsSystemWindows(window, false)
-                  buildUi()
-                  startUrl = intent?.dataString
-                  onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) { override fun handleOnBackPressed() { handleBack() } })
-                  val mediaFilter = IntentFilter().apply {
-                      addAction(PlaybackService.ACTION_PLAY); addAction(PlaybackService.ACTION_TOGGLE)
-                      addAction(PlaybackService.ACTION_PAUSE); addAction(PlaybackService.ACTION_PREVIOUS); addAction(PlaybackService.ACTION_NEXT)
-                  }
-                  ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
-                  startBrowsing()
-                  handler.postDelayed(mediaStatePoll, 1500L)
-              }
-              override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); val u=intent.dataString?:return; openTab(u) }
-              override fun onPause() { super.onPause() }
-              override fun onResume() { super.onResume() }
-              override fun onDestroy() {
-                  try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
-                  handler.removeCallbacks(mediaStatePoll); PlaybackService.stop(this)
-                  for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
-                  super.onDestroy()
-              }
-              private fun loadPalette() {
-                  val pal = Themes.get(prefs.theme)
-                  dark = pal.dark; cBg = pal.bg; cSurface = pal.surface; cField = pal.field
-                  cText = pal.text; cSub = pal.sub; cIcon = pal.icon; cAccent = pal.accent; cAccent2 = pal.accent2
-                  window.setBackgroundDrawable(ColorDrawable(cBg))
-              }
-              private fun applyTheme() {}
-              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
-              private fun shape(color: Int, radiusDp: Int): GradientDrawable {
-                  val g = GradientDrawable(); g.setColor(color); g.cornerRadius = dp(radiusDp).toFloat(); return g
-              }
-              private fun ripple(content: Drawable?): RippleDrawable = RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
-              private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton {
-                  val b = ImageButton(this); b.setImageResource(res); b.setColorFilter(cIcon); b.background = ripple(null)
-                  b.contentDescription = desc; b.scaleType = ImageView.ScaleType.CENTER; b.setOnClickListener { v -> onClick(v) }; return b
-              }
-              private fun textBtn(label: String, onClick: () -> Unit): TextView {
-                  val t = TextView(this); t.text = label; t.textSize = 16f; t.setTextColor(cIcon); t.gravity = Gravity.CENTER
-                  t.background = ripple(null); t.setOnClickListener { onClick() }; return t
-              }
-              private fun buildUi() {
-                  val match = ViewGroup.LayoutParams.MATCH_PARENT; val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
-                  root = LinearLayout(this); root.orientation = LinearLayout.VERTICAL; root.setBackgroundColor(cBg)
-                  topBar = LinearLayout(this); topBar.orientation = LinearLayout.HORIZONTAL; topBar.gravity = Gravity.CENTER_VERTICAL
-                  topBar.setPadding(dp(10), dp(8), dp(10), dp(8)); topBar.setBackgroundColor(cBg)
-                  privateBadge = TextView(this); privateBadge.text = "🕶 GİZLİ"; privateBadge.textSize = 11f; privateBadge.setTypeface(null, Typeface.BOLD)
-                  privateBadge.setTextColor(Color.WHITE); privateBadge.gravity = Gravity.CENTER; privateBadge.setPadding(dp(10),0,dp(10),0)
-                  privateBadge.background = shape(0xFF8B3DFF.toInt(),16); privateBadge.visibility = View.GONE
-                  val pill = LinearLayout(this); pill.orientation = LinearLayout.HORIZONTAL; pill.gravity = Gravity.CENTER_VERTICAL
-                  pill.background = shape(cSurface,24); pill.elevation = dp(3).toFloat()
-                  val lead = TextView(this); lead.text = "🔎"; lead.textSize = 15f; lead.gravity = Gravity.CENTER
-                  pill.addView(lead,LinearLayout.LayoutParams(dp(42),dp(46)))
-                  urlField = EditText(this); urlField.hint = "Ara veya adres yaz"; urlField.setHintTextColor(cSub); urlField.setTextColor(cText)
-                  urlField.textSize = 15f; urlField.isSingleLine = true; urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-                  urlField.imeOptions = EditorInfo.IME_ACTION_GO; urlField.setSelectAllOnFocus(true); urlField.background = null
-                  urlField.setOnEditorActionListener { _, actionId, event ->
-                      if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) { submitUrl(); true } else false
-                  }
-                  pill.addView(urlField,LinearLayout.LayoutParams(0,dp(46),1f))
-                  progress = ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.max = 100
-                  progress.progressTintList = ColorStateList.valueOf(cAccent); progress.progressBackgroundTintList = ColorStateList.valueOf(cBg)
-                  progress.visibility = View.INVISIBLE
-                  content = FrameLayout(this); content.setBackgroundColor(cBg)
-                  root.addView(topBar,LinearLayout.LayoutParams(match,wrap)); root.addView(progress,LinearLayout.LayoutParams(match,dp(3)))
-                  root.addView(content,LinearLayout.LayoutParams(match,0,1f))
-                  findBar = LinearLayout(this); findBar.orientation = LinearLayout.HORIZONTAL; findBar.gravity = Gravity.CENTER_VERTICAL
-                  findBar.setBackgroundColor(cSurface); findBar.setPadding(dp(8),dp(4),dp(4),dp(4)); findBar.visibility = View.GONE
-                  findInput = EditText(this); findInput.hint = "Sayfada bul"; findInput.setHintTextColor(cSub); findInput.setTextColor(cText)
-                  findInput.textSize = 15f; findInput.isSingleLine = true; findInput.background = shape(cField,18)
-                  findBar.addView(findInput,LinearLayout.LayoutParams(0,dp(36),1f))
-                  findCount = TextView(this); findCount.setTextColor(cSub); findCount.textSize = 13f; findBar.addView(findCount,LinearLayout.LayoutParams(wrap,wrap))
-                  root.addView(findBar,LinearLayout.LayoutParams(match,wrap))
-                  dockBar = LinearLayout(this); dockBar.orientation = LinearLayout.VERTICAL; dockBar.setBackgroundColor(cBg)
-                  val bottom = LinearLayout(this); bottom.orientation = LinearLayout.HORIZONTAL; bottom.gravity = Gravity.CENTER_VERTICAL
-                  bottom.background = shape(cSurface,30); bottom.elevation = dp(8).toFloat(); bottom.setPadding(dp(6),dp(4),dp(6),dp(4))
-                  backBtn = iconBtn(android.R.drawable.ic_menu_revert,"Geri"){goBack()}
-                  fwdBtn = iconBtn(android.R.drawable.ic_menu_send,"İleri"){goForward()}
-                  val homeBtn = iconBtn(android.R.drawable.ic_input_add,"Ana Sayfa"){goHome()}
-                  val addBtn = iconBtn(android.R.drawable.ic_input_add,"Yeni Sekme"){openTab(null)}
-                  val menuBtn = iconBtn(android.R.drawable.ic_menu_more,"Menü"){}
-                  val tabsWrap = FrameLayout(this); tabsWrap.contentDescription = "Sekmeler"; tabsWrap.setOnClickListener{showTabs()}
-                  tabCount = TextView(this); tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f; tabCount.setTypeface(null,Typeface.BOLD); tabCount.setTextColor(cIcon)
-                  tabsWrap.addView(tabCount,FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER))
-                  listOf<View>(backBtn,fwdBtn).forEach{bottom.addView(it,LinearLayout.LayoutParams(0,dp(48),1f))}
-                  listOf<View>(homeBtn,addBtn,tabsWrap,menuBtn).forEach{bottom.addView(it,LinearLayout.LayoutParams(0,dp(48),1f))}
-                  dockBar.addView(bottom,LinearLayout.LayoutParams(match,wrap)); root.addView(dockBar,LinearLayout.LayoutParams(match,wrap))
-                  fullscreen = FrameLayout(this); fullscreen.setBackgroundColor(Color.BLACK); fullscreen.visibility = View.GONE
-                  val frame = FrameLayout(this); frame.addView(root,FrameLayout.LayoutParams(match,match)); frame.addView(fullscreen,FrameLayout.LayoutParams(match,match))
-                  setContentView(frame); updateTabCount()
-              }
-              private fun startBrowsing() { if(tabs.isEmpty()) openTab(null); val s=startUrl;startUrl=null;if(s!=null)openTab(s) }
-              private fun currentWeb(): WebView? = if(cur in tabs.indices) tabs[cur].web else null
-              @SuppressLint("SetJavaScriptEnabled","AddJavascriptInterface")
-              private fun createTab(incognito: Boolean = false): BTab {
-                  val web = BgWebView(this); val bridge = PusulaBridge(prefs); val tab = BTab(web,bridge,incognito)
-                  val s = web.settings; s.javaScriptEnabled=true; s.domStorageEnabled=true; s.mediaPlaybackRequiresUserGesture=false
-                  s.setSupportMultipleWindows=true; s.javaScriptCanOpenWindowsAutomatically=false; s.setSupportZoom=true
-                  s.builtInZoomControls=true; s.displayZoomControls=false; s.loadWithOverviewMode=true; s.useWideViewPort=true
-                  s.allowFileAccess=false; s.allowContentAccess=false; s.setGeolocationEnabled=false
-                  s.mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                  val ua = s.userAgentString.replace("; wv","").replace(Regex("Version/\\d+\\.\\d+ "),"")
-                  s.userAgentString=ua; tab.mobileUa=ua; web.addJavascriptInterface(bridge,"Pusula")
-                  web.webViewClient = makeClient(tab); web.webChromeClient = makeChrome(tab); tabs.add(tab); updateTabCount()
-                  return tab
-              }
-              private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? {
-                  if(tabs.size>=MAX_TABS){toast("En fazla $MAX_TABS sekme açılabilir");return null}
-                  val t=createTab(incognito); switchTo(tabs.size‑1); if(load) t.web.loadUrl(url ?: if(incognito) "$NEWTAB_URL?private=1" else NEWTAB_URL); return t
-              }
-              private fun switchTo(i: Int) {
-                  if(i !in tabs.indices) return; shown?.let{content.removeView(it)}; cur=i; val t=tabs[i]; shown=t.web
-                  content.addView(t.web,0,FrameLayout.LayoutParams(-1,-1)); t.web.onResume(); syncUi()
-              }
-              private fun closeTab(index: Int) {
-                  if(index !in tabs.indices) return; val t=tabs[index]; t.web.stopLoading(); t.web.destroy(); tabs.removeAt(index)
-                  if(tabs.isEmpty()){cur=-1;openTab(null);return}; if(index<=cur)cur‑=1; switchTo(if(cur>=0)cur else 0); updateTabCount()
-              }
-              private fun updateTabCount(){tabCount.text = tabs.size.toString()}
-              private fun saveTabs(){}
-              private fun shownUrl(u:String):String=if(u.isEmpty()||u.startsWith(ASSET_PREFIX))"" else u.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
-              private fun syncUrlText(){val t=tabs.getOrNull(cur);urlField.setText(if(t==null)"" else shownUrl(t.pendingUrl ?: t.url))}
-              private fun syncUi(){val t=tabs.getOrNull(cur)?:return;if(!urlField.hasFocus())syncUrlText();refreshNav()}
-              private fun setLoadProgress(p:Int){progress.progress=p;progress.visibility=if(p in 1..99)View.VISIBLE else View.INVISIBLE}
-              private fun refreshNav(){val web=currentWeb();backBtn.alpha=if(web!=null&&web.canGoBack())1f else 0.35f;fwdBtn.alpha=if(web!=null&&web.canGoForward())1f else 0.35f}
-              private fun loadInCurrent(url:String){val t=tabs.getOrNull(cur)?:return;t.pendingUrl=null;t.web.loadUrl(url)}
-              private fun submitUrl(){val text=urlField.text.toString();loadInCurrent(resolveInput(text,Engines.get(prefs.engine)));hideKeyboard(this);urlField.clearFocus()}
-              private fun goBack(){val web=currentWeb()?:return;if(web.canGoBack())web.goBack()else if(tabs.size>1)closeTab(cur)}
-              private fun goForward(){val web=currentWeb()?:return;if(web.canGoForward())web.goForward()}
-              private fun goHome(){loadInCurrent(Engines.get(prefs.engine).home)}
-              private fun reloadCurrent(){val t=tabs.getOrNull(cur)?:return;t.web.reload()}
-              private fun handleBack(){val web=currentWeb();when{web!=null&&web.canGoBack()->web.goBack();tabs.size>1->closeTab(cur);else->finish()}}
-              private fun shouldBlockAd(uri:Uri):Boolean{return false}
-              private fun makeClient(tab:BTab):WebViewClient=object:WebViewClient(){
-                  override fun shouldInterceptRequest(view:WebView?,request:WebResourceRequest?):WebResourceResponse?{
-                      val uri=request?.url?:return null;return loader.shouldInterceptRequest(uri)
-                  }
-                  override fun shouldOverrideUrlLoading(view:WebView?,request:WebResourceRequest?):Boolean{return false}
-                  override fun onPageStarted(view:WebView?,url:String?,favicon:Bitmap?){val u=url?:"";tab.url=u;tab.progress=5;syncUi()}
-                  override fun onPageFinished(view:WebView?,url:String?){tab.progress=100;syncUi()}
-              }
-              private fun makeChrome(tab:BTab):WebChromeClient=object:WebChromeClient(){
-                  override fun onProgressChanged(view:WebView?,newProgress:Int){tab.progress=newProgress;setLoadProgress(newProgress)}
-              }
-              private fun toast(m:String)=Toast.makeText(this,m,Toast.LENGTH_SHORT).show()
-              private fun hideCustom(){}
-              private fun closeFind(){}
-              private fun showMenu(v:View){}
-              private fun showTabs(){}
-              private fun startDownload(url:String,ua:String,disp:String,mime:String){}
-              private fun openExternal(u:String){}
-              private fun capturePreview(tab:BTab){}
-              private fun clearBrowsingData(){}
-          }
-          EOF
-          # Yeni‑sekme HTML
+
           cat > app/src/main/assets/newtab.html <<'EOF'
           <!doctype html>
           <html lang="tr">
           <head>
-          <meta charset="utf‑8">
-          <meta name="viewport" content="width=device‑width,initial‑scale=1">
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
           <title>Yeni Sekme</title>
           <style>
             :root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff}
-            *{box‑sizing:border‑box;-webkit‑tap‑highlight‑color:transparent}
+            *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
             html,body{margin:0}
-            body{background:var(--bg);color:var(--text);font‑family:Roboto,‑apple‑system,"Segoe UI",sans‑serif;min‑height:100vh;overflow‑x:hidden}
-            .glow{position:fixed;inset:0;pointer‑events:none;
-              background:radial‑gradient(420px 300px at 85% ‑40px,color‑mix(in srgb,var(--acc) 38%,transparent),transparent 70%),
-                         radial‑gradient(380px 280px at ‑10% 18%,color‑mix(in srgb,var(--acc2) 30%,transparent),transparent 70%)}
-            main{position:relative;max‑width:560px;margin:0 auto;padding:34px 18px 40px}
-            .hello{color:var(--sub);font‑size:14px;margin:0 0 2px}
-            h1{font‑size:40px;line‑height:1.1;margin:0 0 22px;font‑weight:800;letter‑spacing:‑.5px;
-               background:linear‑gradient(90deg,var(--acc),var(--acc2));‑webkit‑background‑clip:text;background‑clip:text;color:transparent}
-            form{display:flex;gap:8px;margin‑bottom:26px}
-            .sbox{flex:1;min‑width:0;display:flex;align‑items:center;gap:10px;height:54px;border‑radius:27px;padding:0 18px;
-                  background:color‑mix(in srgb,var(--surface) 88%,transparent);border:1px solid color‑mix(in srgb,var(--text) 12%,transparent);
-                  box‑shadow:0 8px 24px rgba(0,0,0,.18)}
-            .sbox:focus‑within{border‑color:var(--acc)}
-            .sbox input{flex:1;min‑width:0;border:0;background:transparent;color:var(--text);font‑size:16px;outline:none;height:100%}
+            body{background:var(--bg);color:var(--text);font-family:Roboto,-apple-system,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
+            .glow{position:fixed;inset:0;pointer-events:none;background:radial-gradient(420px 300px at 85% -40px,color-mix(in srgb,var(--acc) 38%,transparent),transparent 70%),radial-gradient(380px 280px at -10% 18%,color-mix(in srgb,var(--acc2) 30%,transparent),transparent 70%)}
+            main{position:relative;max-width:560px;margin:0 auto;padding:34px 18px 40px}
+            .hello{color:var(--sub);font-size:14px;margin:0 0 2px}
+            h1{font-size:40px;line-height:1.1;margin:0 0 22px;font-weight:800;letter-spacing:-0.5px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+            form{display:flex;gap:8px;margin-bottom:26px}
+            .sbox{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:54px;border-radius:27px;padding:0 18px;background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);box-shadow:0 8px 24px rgba(0,0,0,.18)}
+            .sbox:focus-within{border-color:var(--acc)}
+            .sbox input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-size:16px;outline:none;height:100%}
             .sbox input::placeholder{color:var(--sub)}
-            button.go{width:54px;height:54px;border‑radius:50%;border:0;color:#fff;font‑size:22px;
-                      background:linear‑gradient(135deg,var(--acc),var(--acc2));box‑shadow:0 8px 20px color‑mix(in srgb,var(--acc) 45%,transparent)}
-            h2{font‑size:12px;text‑transform:uppercase;letter‑spacing:.12em;color:var(--sub);margin:26px 4px 12px;font‑weight:700}
-            .grid{display:grid;grid‑template‑columns:repeat(4,1fr);gap:12px 8px}
-            a.t{display:flex;flex‑direction:column;align‑items:center;gap:8px;text‑decoration:none;color:var(--text);font‑size:12px;min‑width:0}
-            a.t i{width:58px;height:58px;border‑radius:19px;display:flex;align‑items:center;justify‑content:center;font‑style:normal;font‑size:27px;
-                  box‑shadow:0 8px 18px rgba(0,0,0,.25);color:#fff;font‑weight:700}
-            a.t span{max‑width:100%;overflow:hidden;text‑overflow:ellipsis;white‑space:nowrap;color:var(--sub)}
-            .list{display:flex;flex‑direction:column;gap:8px}
-            a.row{display:flex;align‑items:center;gap:12px;text‑decoration:none;color:var(--text);padding:11px 14px;border‑radius:16px;
-                  background:color‑mix(in srgb,var(--surface) 90%,transparent);border:1px solid color‑mix(in srgb,var(--text) 8%,transparent);min‑width:0}
-            a.row b{display:block;font‑weight:500;font‑size:14px;overflow:hidden;text‑overflow:ellipsis;white‑space:nowrap}
-            a.row small{display:block;color:var(--sub);font‑size:12px;overflow:hidden;text‑overflow:ellipsis;white‑space:nowrap}
-            a.row .d{width:34px;height:34px;border‑radius:11px;flex:none;display:flex;align‑items:center;justify‑content:center;color:#fff;font‑weight:700;font‑size:14px}
-            .priv{text‑align:center;padding‑top:60px}
-            .priv .big{font‑size:64px;margin‑bottom:6px}
-            .priv h1{margin‑bottom:8px}
-            .priv p{color:var(--sub);line‑height:1.6;margin:0 auto 10px;max‑width:30ch}
-            a.t{‑webkit‑touch‑callout:none;‑webkit‑user‑select:none;user‑select:none;transition:transform .15s}
-            a.t.drag{transform:scale(1.14);opacity:.85;z‑index:5}
-            a.t.add i{background:transparent!important;border:2px dashed color‑mix(in srgb,var(--sub) 70%,transparent);box‑shadow:none;color:var(--sub);font‑size:30px;font‑weight:400}
+            button.go{width:54px;height:54px;border-radius:50%;border:0;color:#fff;font-size:22px;background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 8px 20px color-mix(in srgb,var(--acc) 45%,transparent)}
+            h2{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--sub);margin:26px 4px 12px;font-weight:700}
+            .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 8px}
+            a.t{display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-size:12px;min-width:0}
+            a.t i{width:58px;height:58px;border-radius:19px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:27px;box-shadow:0 8px 18px rgba(0,0,0,.25);color:#fff;font-weight:700}
+            a.t span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)}
+            .list{display:flex;flex-direction:column;gap:8px}
+            a.row{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);padding:11px 14px;border-radius:16px;background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid color-mix(in srgb,var(--text) 8%,transparent);min-width:0}
+            a.row b{display:block;font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            a.row small{display:block;color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            a.row .d{width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px}
+            .priv{text-align:center;padding-top:60px}
+            .priv .big{font-size:64px;margin-bottom:6px}
+            .priv h1{margin-bottom:8px}
+            .priv p{color:var(--sub);line-height:1.6;margin:0 auto 10px;max-width:30ch}
+            a.t{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transition:transform .15s}
+            a.t.drag{transform:scale(1.14);opacity:.85;z-index:5}
+            a.t.add i{background:transparent!important;border:2px dashed color-mix(in srgb,var(--sub) 70%,transparent);box-shadow:none;color:var(--sub);font-size:30px;font-weight:400}
+            .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+            .sheet{width:100%;max-width:560px;background:var(--surface);border-radius:26px 26px 0 0;padding:20px 18px 26px;box-shadow:0 -10px 40px rgba(0,0,0,.4)}
+            .sheet h3{margin:0 0 14px;font-size:18px}
+            .sheet label{display:block;font-size:12px;color:var(--sub);margin:10px 4px 5px}
+            .sheet input{width:100%;height:46px;border-radius:14px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);background:var(--field);color:var(--text);font-size:16px;padding:0 14px;outline:none}
+            .sheet input:focus{border-color:var(--acc)}
+            .btns{display:flex;gap:10px;margin-top:18px}
+            .btns button{flex:1;height:48px;border-radius:24px;border:0;font-size:15px;font-weight:700;color:var(--text);background:var(--field)}
+            .btns button.pri{color:#fff;background:linear-gradient(135deg,var(--acc),var(--acc2))}
+            .btns button.dng{color:#fff;background:linear-gradient(135deg,#ff5a5f,#d6245a)}
+            [hidden]{display:none!important}
           </style>
           </head>
           <body>
@@ -680,31 +196,265 @@ jobs:
             <div id="home">
               <p class="hello" id="hello"></p>
               <h1>Rota</h1>
-              <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria‑label="Git">→</button></form>
+              <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">→</button></form>
               <h2>Hızlı erişim</h2>
               <div class="grid" id="pins"></div>
+              <div id="bmWrap" hidden><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
+              <div id="hsWrap" hidden><h2>Son ziyaretler</h2><div class="list" id="hs"></div></div>
+            </div>
+            <div class="priv" id="priv" hidden>
+              <div class="big">🕶️</div>
+              <h1>Gizli sekme</h1>
+              <p>Bu sekmede gezdiğin sayfalar geçmişe kaydedilmez ve sekmeyi kapatınca silinir.</p>
+              <form id="pf" style="margin-top:18px"><div class="sbox"><span>🔎</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria-label="Git">→</button></form>
             </div>
           </main>
           <script>
           (function(){
-            var cfg = {engine:"Google",search:"https://www.google.com/search?q=%s",bookmarks:[],history:[]};
-            var isPrivate = /[?&]private=1/.test(location.search);
-            var h = new Date().getHours();
-            var greet = h < 5 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar";
-            document.getElementById("hello").textContent = greet;
-            function go(text){
-              text = (text || "").trim();
-              if (!text) return;
-              if (/^https?:\/\//i.test(text)) { location.href = text; return; }
-              if (!/\s/.test(text) && /^([a‑z0‑9‑]+\.)+[a‑z]{2,}([:\/?#].*)?$/i.test(text)) { location.href = "https://" + text; return; }
-              location.href = cfg.search.replace("%s", encodeURIComponent(text));
-            }
-            document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
-            var G = ["linear‑gradient(135deg,#ff4b4b,#c4001d)","linear‑gradient(135deg,#4c8dff,#2457d6)","linear‑gradient(135deg,#ff7a45,#ff2d6f)","linear‑gradient(135deg,#34c3ff,#2477ff)","linear‑gradient(135deg,#34d37a,#0f9d58)","linear‑gradient(135deg,#8a5cff,#4a35d9)","linear‑gradient(135deg,#ffc84a,#ff8a1f)","linear‑gradient(135deg,#00b894,#00796b)","linear‑gradient(135deg,#fd79a8,#d63384)"];
-            var pins = [
-              {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
-              {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
-              {t:"Müzik",u:"https://music.youtube.com/",e:"🎵",g:2},
-              {t:"Haberler",u:"https://news.google.com/?hl=tr",e:"📰",g:3},
-              {t:"Harita",u:"https://maps.google.com/",e:"🗺️",g:4},
-              {t:"Wikipedia",u:"https://tr.wikipedia.org/",e:"📚",g:5},
+            var cfg={engine:"Google",search:"https://www.google.com/search?q=%s",bookmarks:[],history:[]};
+            try{if(window.Pusula){var c=JSON.parse(window.Pusula.config());if(c&&c.search)cfg=c;}}catch(e){}
+            var r=document.documentElement.style;
+            if(cfg.bg){r.setProperty("--bg",cfg.bg);r.setProperty("--surface",cfg.surface);r.setProperty("--field",cfg.field);r.setProperty("--text",cfg.text);r.setProperty("--sub",cfg.sub);r.setProperty("--acc",cfg.accent);r.setProperty("--acc2",cfg.accent2);}
+            var isPrivate=/[?&]private=1/.test(location.search);
+            if(isPrivate){r.setProperty("--bg","#150d2b");r.setProperty("--surface","#241447");r.setProperty("--field","#34205f");r.setProperty("--text","#f3ecff");r.setProperty("--sub","#b7a4e6");r.setProperty("--acc","#a46bff");r.setProperty("--acc2","#ff5cc8");document.getElementById("home").hidden=true;document.getElementById("priv").hidden=false;}
+            var h=new Date().getHours();
+            var greet=h<5?"İyi geceler":h<12?"Günaydın":h<18?"İyi günler":"İyi akşamlar";
+            var day="";try{day=new Date().toLocaleDateString("tr‑TR",{weekday:"long",day:"numeric",month:"long"});}catch(e){}
+            document.getElementById("hello").textContent=greet+(day?" · "+day:"");
+            document.getElementById("q").placeholder=cfg.engine+" ile ara veya adres yaz";
+            function go(t){t=(t||"").trim();if(!t)return;if(/^https?:\/\//i.test(t)){location.href=t;return;}if(!/\s/.test(t)&&/^([a-z0‑9‑]+\.)+[a-z]{2,}/i.test(t)){location.href="https://"+t;return;}location.href=cfg.search.replace("%s",encodeURIComponent(t));}
+            document.getElementById("f").addEventListener("submit",e=>{e.preventDefault();go(document.getElementById("q").value);});
+            document.getElementById("pf").addEventListener("submit",e=>{e.preventDefault();go(document.getElementById("pq").value);});
+            var G=["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
+            var pins=(cfg.pins&&Array.isArray(cfg.pins))?cfg.pins:[{t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},{t:"Google",u:"https://www.google.com/",e:"🔎",g:1},{t:"Müzik",u:"https://music.youtube.com/",e:"🎵",g:2},{t:"Haberler",u:"https://news.google.com/?hl=tr",e:"📰",g:3},{t:"Harita",u:"https://www.google.com/maps",e:"🗺️",g:4},{t:"Vikipedi",u:"https://tr.wikipedia.org/",e:"📚",g:5},{t:"Çeviri",u:"https://translate.google.com/",e:"🌐",g:6}];
+            function save(){try{if(window.Pusula&&window.Pusula.savePins)window.Pusula.savePins(JSON.stringify(pins));}catch(e){}}
+            function tile(l,u,i,b){var a=document.createElement("a");a.className="t";a.href=u;var ic=document.createElement("i");ic.style.background=b;ic.textContent=i;var s=document.createElement("span");s.textContent=l;a.appendChild(ic);a.appendChild(s);return a;}
+            var gEl=document.getElementById("pins");var suppress=false;
+            function render(){gEl.innerHTML="";pins.forEach((p,n)=>{var a=tile(p.t,p.u,p.e||(p.t||"?")[0].toUpperCase(),G[p.g??n%G.length]);a.dataset.n=n;attachDrag(a);gEl.appendChild(a);});var plus=tile("Ekle","#","+","none");plus.classList.add("add");plus.addEventListener("click",e=>{e.preventDefault();openEditor(-1);});gEl.appendChild(plus);}
+            function closeSheet(){var o=document.getElementById("ov");if(o)o.remove();}
+            function sheet(html){closeSheet();var o=document.createElement("div");o.className="sheet‑bg";o.id="ov";o.innerHTML='<div class="sheet">'+html+"</div>";var t0=performance.now();o.addEventListener("click",e=>{if(e.target===o&&performance.now()-t0>600)closeSheet();});document.body.appendChild(o);return o;}
+            function esc(x){return(String(x)??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]||c));}
+            function openEditor(idx){var p=idx>=0?pins[idx]:{t:"",u:"",e:""};var o=sheet('<h3>'+(idx>=0?"Kısayolu düzenle":"Yeni kısayol")+'</h3><label>Başlık</label><input id="ft" value="'+esc(p.t)+'" placeholder="Örn: Vikipedi"><label>Adres</label><input id="fu" value="'+esc(p.u)+'" placeholder="örn: tr.wikipedia.org" autocapitalize="off"><label>İkon (emoji)</label><input id="fe" value="'+esc(p.e)+'" maxlength="4" placeholder="📚"><div class="btns"><button id="fc">İptal</button><button class="pri" id="fs">Kaydet</button></div>');o.querySelector("#fc").onclick=closeSheet;o.querySelector("#fs").onclick=()=>{var t=o.querySelector("#ft").value.trim();var uRaw=o.querySelector("#fu").value.trim();var e=o.querySelector("#fe").value.trim();if(!uRaw){o.querySelector("#fu").focus();return;}var u=uRaw;if(!/^https?:\/\//i.test(u))u="https://"+u;if(!t)t=u.replace(/^https?:\/\/(www\.)?/,"").split("/")[0];if(idx>=0){pins[idx].t=t;pins[idx].u=u;pins[idx].e=e;}else{pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});}save();closeSheet();render();};}
+            function openActions(idx){var o=sheet('<h3>'+esc(pins[idx].t)+'</h3><div class="btns" style="margin‑top:4px"><button id="ae">Düzenle</button><button class="dng" id="ad">Sil</button></div><div class="btns" style="margin‑top:10px"><button id="ac">Kapat</button></div>');o.querySelector("#ac").onclick=closeSheet;o.querySelector("#ae").onclick=()=>{closeSheet();openEditor(idx);};o.querySelector("#ad").onclick=()=>{pins.splice(idx,1);save();closeSheet();render();};}
+            function attachDrag(a){var timer=null,dragging=false,sx=0,sy=0,moved=false;a.addEventListener("contextmenu",e=>e.preventDefault());a.addEventListener("click",e=>{if(suppress){e.preventDefault();e.stopPropagation();}});a.addEventListener("touchstart",e=>{var t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;dragging=false;clearTimeout(timer);timer=setTimeout(()=>{dragging=true;suppress=true;a.classList.add("drag");try{if(navigator.vibrate)navigator.vibrate(15);}catch(x){}},420);},{passive:true});a.addEventListener("touchmove",e=>{var t=e.touches[0];if(!dragging){if(Math.abs(t.clientX‑sx)>10||Math.abs(t.clientY‑sy)>10)clearTimeout(timer);return;}e.preventDefault();if(Math.abs(t.clientX‑sx)>6||Math.abs(t.clientY‑sy)>6)moved=true;a.style.pointerEvents="none";var el=document.elementFromPoint(t.clientX,t.clientY);var tgt=el&&el.closest?el.closest(".t"):null;if(tgt&&tgt!==a&&!tgt.classList.contains("add")&&tgt.parentNode===gEl){var kids=Array.from(gEl.children);var ai=kids.indexOf(a),ti=kids.indexOf(tgt);if(ai<ti)gEl.insertBefore(a,tgt.nextSibling);else gEl.insertBefore(a,tgt);}},{passive:false});function end(e){clearTimeout(timer);if(!dragging)return;try{if(e&&e.cancelable)e.preventDefault();}catch(x){}dragging=false;a.classList.remove("drag");if(moved){var order=[];Array.from(gEl.children).forEach(c=>{if(c.dataset.n!=null&&c.dataset.n!=="")order.push(pins[Number(c.dataset.n)]);});pins=order;save();render();}else{var ni=Number(a.dataset.n);openActions(ni);}setTimeout(()=>{suppress=false;},350);}a.addEventListener("touchend",end);a.addEventListener("touchcancel",end);}
+            render();
+          })();
+          </script>
+          </body>
+          </html>
+          EOF
+
+          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.annotation.SuppressLint
+          import android.app.PendingIntent
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.res.ColorStateList
+          import android.content.res.Configuration
+          import android.graphics.Bitmap
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.RippleDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.os.Message
+          import android.view.Gravity
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.ViewGroup
+          import android.view.inputmethod.EditorInfo
+          import android.webkit.*
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.ImageButton
+          import android.widget.LinearLayout
+          import android.widget.ProgressBar
+          import android.widget.TextView
+          import android.widget.Toast
+          import androidx.activity.OnBackPressedCallback
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.content.ContextCompat
+          import androidx.core.view.ViewCompat
+          import androidx.core.view.WindowInsetsCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+          import androidx.core.widget.doOnTextChanged
+          import androidx.webkit.WebViewAssetLoader
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.ByteArrayInputStream
+
+          class MainActivity : AppCompatActivity() {
+
+              private const val MAX_TABS = 12
+              private const val ASSET_PREFIX = "file:///android_asset/"
+              private const val NEWTAB_URL = "${ASSET_PREFIX}newtab.html"
+
+              private const val MEDIA_STATE_JS = """(function(){var v=document.querySelector('video,audio');if(!v)return null;return JSON.stringify({p:!v.paused,t:v.title||'',a:v.artist||''});})()"""
+              private const val MEDIA_TOGGLE_JS = "var v=document.querySelector('video,audio');if(v)v.paused?v.play():v.pause();"
+              private const val MEDIA_PAUSE_JS = "var v=document.querySelector('video,audio');if(v)v.pause();"
+              private const val MEDIA_PREV_JS = ""
+              private const val MEDIA_NEXT_JS = ""
+              private const val BG_MEDIA_JS = ""
+              private const val PIP_ON_JS = ""
+              private const val PIP_OFF_JS = ""
+              private const val LANDSCAPE_VIDEO_JS = ""
+              private const val PORTRAIT_VIDEO_JS = ""
+
+              private const val YOUTUBE_ADFIX_JS = """
+              (function(){let obs;function run(){const skip=document.querySelector('.ytp‑ad‑skip‑button,.ytp‑ad‑skip‑button‑modern');const adOverlayClose=document.querySelector('.ytp‑ad‑overlay‑close‑button');const vid=document.querySelector('video');const adActive=document.querySelector('.ad‑showing,.ytp‑ad‑player‑overlay');if(skip)skip.click();if(adOverlayClose)adOverlayClose.click();if(vid&&adActive){if(!vid.muted)vid.muted=true;document.querySelectorAll('.ytp‑caption‑renderer,.ytp‑ad‑caption,.ytp‑subtitles‑renderer').forEach(el=>{el.style.display='none';});const ccBtn=document.querySelector('.ytp‑subtitles‑button');if(ccBtn&&ccBtn.getAttribute('aria‑pressed')==='true')ccBtn.click();}}function startObs(){if(obs)return;obs=new MutationObserver(()=>run());obs.observe(document.body,{childList:true,subtree:true,attributes:true});run();}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startObs);else startObs();})();
+              """
+
+              private var isInPipNow = false
+              private var hasMedia = false
+              private var lastPlaying = false
+              private var lastTitle = ""
+              private var lastArtist = ""
+
+              private inner class Tab(val web: WebView)
+              private val tabs = mutableListOf<Tab>()
+              private var curTabIndex = -1
+              private lateinit var mainContainer: FrameLayout
+              private lateinit var topBar: LinearLayout
+              private lateinit var dockBar: LinearLayout
+              private lateinit var urlEt: EditText
+              private lateinit var progressBar: ProgressBar
+
+              private val handler = Handler(Looper.getMainLooper())
+              private var mediaPollRunnable: Runnable? = null
+
+              private fun toast(msg: String) = runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setupUi()
+                  openNewTab()
+                  startMediaPoll()
+              }
+
+              private fun setupUi() {
+                  mainContainer = FrameLayout(this)
+                  topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(16,12,16,12) }
+                  dockBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(12,8,12,8) }
+                  urlEt = EditText(this).apply { hint = "URL veya ara"; maxLines = 1; imeOptions = EditorInfo.IME_ACTION_GO }
+                  progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { layoutParams = FrameLayout.LayoutParams(-1,6); gravity=Gravity.TOP }
+                  topBar.addView(urlEt, LinearLayout.LayoutParams(0,‑2,1f))
+                  mainContainer.addView(topBar, FrameLayout.LayoutParams(-1,‑2).apply { gravity=Gravity.TOP })
+                  mainContainer.addView(dockBar, FrameLayout.LayoutParams(-1,‑2).apply { gravity=Gravity.BOTTOM })
+                  mainContainer.addView(progressBar, FrameLayout.LayoutParams(-1,‑2).apply { gravity=Gravity.TOP; topMargin=‑6 })
+                  setContentView(mainContainer)
+                  urlEt.setOnEditorActionListener { _, act, _ -> if(act==EditorInfo.IME_ACTION_GO){val u=urlEt.text.toString().trim();if(u.isNotEmpty())loadUrl(u);true}else false }
+              }
+
+              private fun openNewTab() {
+                  val w = WebView(this).apply { settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=object:WebViewClient(){override fun onPageFinished(view:WebView?,url:String?){super.onPageFinished(view,url);if(url!=null&&(url.contains("youtube.com")||url.contains("youtu.be")))view?.evaluateJavascript(YOUTUBE_ADFIX_JS,null);}}; webChromeClient=object:WebChromeClient(){override fun onShowCustomView(view:View?,cb:CustomViewCallback?){};override fun onHideCustomView(){};} }
+                  val t = Tab(w)
+                  tabs.add(t)
+                  curTabIndex = tabs.lastIndex
+                  mainContainer.addView(w, FrameLayout.LayoutParams(-1,‑1).apply { topMargin=110; bottomMargin=90 })
+                  w.loadUrl(NEWTAB_URL)
+              }
+
+              private fun loadUrl(raw:String){
+                  val u=raw.trim()
+                  val final=if(u.startsWith("http"))u else if(Regex("^[a‑z0‑9‑]+\\.[a‑z]{2,}",RegexOption.IGNORE_CASE).matches(u))"https://$u" else "https://google.com/search?q=${Uri.encode(u)}"
+                  tabs.getOrNull(curTabIndex)?.web?.loadUrl(final)
+              }
+
+              private fun startMediaPoll(){
+                  mediaPollRunnable=object:Runnable{override fun run(){pollMediaState();handler.postDelayed(this,2200)}}
+                  handler.post(mediaPollRunnable!!)
+              }
+
+              private fun pollMediaState(){
+                  val w=tabs.getOrNull(curTabIndex)?.web?:return
+                  w.evaluateJavascript(MEDIA_STATE_JS){raw->handleMedia(raw)}
+              }
+
+              private fun handleMedia(raw:String?){
+                  var ok=false;var play=false;var t="";var a=""
+                  try{if(raw!=null&&raw!="null"&&raw!="\"\""){val ja=JSONArray("[$raw]");val s=ja.getString(0);if(s.isNotEmpty()){val jo=JSONObject(s);ok=true;play=jo.optBoolean("p");t=jo.optString("t");a=jo.optString("a")}}}catch(_:Exception){return}
+                  if(!ok){if(hasMedia){hasMedia=false;lastPlaying=false;PlaybackService.stop(this)};return}
+                  val changed=!hasMedia||play!=lastPlaying||t!=lastTitle||a!=lastArtist
+                  hasMedia=true;lastPlaying=play;lastTitle=t;lastArtist=a
+                  if(changed&&!isInPipNow){PlaybackService.update(this,play,t,a)}
+              }
+
+              private fun enterPipIfPossible(){
+                  if(Build.VERSION.SDK_INT>=26&&!isInPipNow&&hasMedia){isInPipNow=true;enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())}
+              }
+
+              override fun onPictureInPictureModeChanged(isInPipMode: Boolean, newParams: android.app.PictureInPictureParams?) {
+                  super.onPictureInPictureModeChanged(isInPipMode, newParams)
+                  isInPipNow=isInPipMode
+                  topBar.visibility=if(isInPipMode)View.GONE else View.VISIBLE
+                  dockBar.visibility=if(isInPipMode)View.GONE else View.VISIBLE
+                  if(isInPipMode){if(hasMedia)PlaybackService.update(this,lastPlaying,lastTitle,lastArtist)}
+              }
+
+              override fun onUserLeaveHint() {
+                  super.onUserLeaveHint()
+                  enterPipIfPossible()
+              }
+
+              override fun onDestroy() {
+                  mediaPollRunnable?.let{handler.removeCallbacks(it)}
+                  tabs.forEach{it.web.destroy()}
+                  super.onDestroy()
+              }
+          }
+
+          class PlaybackService : android.app.Service() {
+              companion object {
+                  var running=false
+                  var actionPlay="act_play"
+                  var actionPause="act_pause"
+                  fun stop(ctx:Context){running=false;ctx.stopService(Intent(ctx,PlaybackService::class.java))}
+                  fun update(ctx:Context,playing:Boolean,title:String,artist:String){running=true;val i=Intent(ctx,PlaybackService::class.java);i.putExtra("play",playing);i.putExtra("t",title);i.putExtra("a",artist);ctx.startService(i)}
+              }
+              override fun onBind(intent: android.content.Intent?): android.os.IBinder?=null
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {running=true;return START_NOT_STICKY}
+              override fun onDestroy(){running=false;super.onDestroy()}
+          }
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.Pusula" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:windowFullscreen">false</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Pusula</string>
+          </resources>
+          EOF
+
+      - name: Gradle derleme önbelleğini hazırla
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}‑gradle‑${{ hashFiles('**/*.gradle.kts','**/gradle‑wrapper.properties') }}
+
+      - name: Gradle APK derle
+        run: ./gradlew assembleRelease
+
+      - name: APK’yı yükle
+        uses: actions/upload‑artifact@v4
+        with:
+          name: pusula‑release‑apk
+          path: app/build/outputs/apk/release/app‑release.apk
