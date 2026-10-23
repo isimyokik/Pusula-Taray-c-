@@ -17,12 +17,12 @@ jobs:
 
       - name: Proje dosyalarını oluştur
         run: |
-          rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
+          rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties gradle gradlew gradlew.bat
           mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
 
           cat > build.gradle.kts <<'EOF'
           plugins {
-              id("com.android.application") version "8.5.0" apply false
+              id("com.android.application") version "8.7.0" apply false
               id("org.jetbrains.kotlin.android") version "1.9.24" apply false
           }
           EOF
@@ -628,8 +628,7 @@ jobs:
           </resources>
           EOF
 
-          # Gradle wrapper dosyalarını oluştur
-          gradle wrapper --gradle-version 8.5
+          gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
       - name: Gradle önbelleği
