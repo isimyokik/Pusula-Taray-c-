@@ -1,4 +1,4 @@
-name: Pusula Son Düzeltme‑AppTricks Uyumlu
+name: Pusula Temiz Derleme App‑Tricks Uyumlu
 on:
   push:
   workflow_dispatch:
@@ -7,16 +7,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Java‑17 kurulumu
+      - name: Java‑17 kurulum
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Proje yapısını oluştur
+      - name: Projeyi sıfırdan oluştur
         run: |
           rm -rf *
           mkdir -p app/src/main/java/com/pusula/browser app/src/main/assets app/src/main/res/drawable app/src/main/res/values gradle/wrapper
-          # Kök gradle dosyaları
+          # Kök yapı dosyaları
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.7.3" apply false
@@ -31,18 +31,25 @@ jobs:
           EOF
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
-              repositories { google(); mavenCentral(); gradlePluginPortal() }
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
           }
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
           rootProject.name = "Pusula"
           include(":app")
           EOF
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
-          # Modül: app/build.gradle.kts
+          # app modülü yapılandırması
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -55,18 +62,24 @@ jobs:
                   applicationId = "com.pusula.browser"
                   minSdk = 24
                   targetSdk = 35
-                  versionCode = 4
-                  versionName = "2.3‑final‑apptricks"
+                  versionCode = 5
+                  versionName = "2.4‑clean‑build"
               }
               buildTypes {
-                  debug { isDebuggable = true }
-                  release { isMinifyEnabled = false }
+                  debug {
+                      isDebuggable = true
+                  }
+                  release {
+                      isMinifyEnabled = false
+                  }
               }
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
               }
-              kotlinOptions { jvmTarget = "17" }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
           }
           dependencies {
               implementation("androidx.core:core‑ktx:1.15.0")
@@ -76,7 +89,7 @@ jobs:
               implementation("androidx.lifecycle:lifecycle‑service‑ktx:2.8.4")
           }
           EOF
-          # Kotlin Sınıfları
+          # Kotlin sınıfları
           cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
           package com.pusula.browser
           import android.content.Context
@@ -99,17 +112,41 @@ jobs:
           EOF
           cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
           package com.pusula.browser
-          data class Palette(val dark:Boolean,val bg:Int,val surface:Int,val field:Int,val text:Int,val sub:Int,val icon:Int,val accent:Int,val accent2:Int)
+          data class Palette(
+              val dark: Boolean,
+              val bg: Int,
+              val surface: Int,
+              val field: Int,
+              val text: Int,
+              val sub: Int,
+              val icon: Int,
+              val accent: Int,
+              val accent2: Int
+          )
           object Themes {
-              fun get(id:String):Palette = Palette(true,0xFF0b1020.toInt(),0xFF131b33.toInt(),0xFF1d2848.toInt(),0xFFeaf0ff.toInt(),0xFF8fa0c8.toInt(),0xFFc5cde2.toInt(),0xFF4c8dff.toInt(),0xFF8a5cff.toInt())
+              fun get(id: String): Palette {
+                  return Palette(
+                      dark = true,
+                      bg = 0xFF0b1020.toInt(),
+                      surface = 0xFF131b33.toInt(),
+                      field = 0xFF1d2848.toInt(),
+                      text = 0xFFeaf0ff.toInt(),
+                      sub = 0xFF8fa0c8.toInt(),
+                      icon = 0xFFc5cde2.toInt(),
+                      accent = 0xFF4c8dff.toInt(),
+                      accent2 = 0xFF8a5cff.toInt()
+                  )
+              }
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
           package com.pusula.browser
           import android.webkit.JavascriptInterface
           class PusulaBridge {
-              @JavascriptInterface fun config():String = "{}"
-              @JavascriptInterface fun savePins(json:String) {}
+              @JavascriptInterface
+              fun config(): String = "{}"
+              @JavascriptInterface
+              fun savePins(json: String) {}
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
@@ -130,44 +167,62 @@ jobs:
                   const val ACTION_PREVIOUS = "com.pusula.action.PREV"
                   const val ACTION_NEXT = "com.pusula.action.NEXT"
                   var running = false
-                  fun stop(ctx:Context) { ctx.stopService(Intent(ctx,PlaybackService::class.java)) }
-                  fun update(ctx:Context,playing:Boolean,title:String,artist:String) {
-                      val i = Intent(ctx,PlaybackService::class.java)
-                      i.putExtra("play",playing);i.putExtra("title",title);i.putExtra("artist",artist)
-                      if(Build.VERSION.SDK_INT>=26) ctx.startForegroundService(i) else ctx.startService(i)
+                  fun stop(ctx: Context) {
+                      ctx.stopService(Intent(ctx, PlaybackService::class.java))
+                  }
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                      val i = Intent(ctx, PlaybackService::class.java)
+                      i.putExtra("play", playing)
+                      i.putExtra("title", title)
+                      i.putExtra("artist", artist)
+                      if (Build.VERSION.SDK_INT >= 26) {
+                          ctx.startForegroundService(i)
+                      } else {
+                          ctx.startService(i)
+                      }
                   }
               }
-              private var currPlaying=false;private var currTitle="";private var currArtist=""
+              private var currPlaying = false
+              private var currTitle = ""
+              private var currArtist = ""
               override fun onCreate() {
-                  super.onCreate();running=true
-                  if(Build.VERSION.SDK_INT>=26) {
-                      val ch = NotificationChannel(CH_ID,"Medya",NotificationManager.IMPORTANCE_LOW)
+                  super.onCreate()
+                  running = true
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      val ch = NotificationChannel(CH_ID, "Medya", NotificationManager.IMPORTANCE_LOW)
                       getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
                   }
               }
-              override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
-                  super.onStartCommand(intent,flags,startId)
-                  intent?.let { currPlaying=it.getBooleanExtra("play",false);currTitle=it.getStringExtra("title")?:"";currArtist=it.getStringExtra("artist")?:"" }
-                  val pi = PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                  val n = NotificationCompat.Builder(this,CH_ID)
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  super.onStartCommand(intent, flags, startId)
+                  intent?.let {
+                      currPlaying = it.getBooleanExtra("play", false)
+                      currTitle = it.getStringExtra("title") ?: ""
+                      currArtist = it.getStringExtra("artist") ?: ""
+                  }
+                  val pi = PendingIntent.getActivity(
+                      this, 0, Intent(this, MainActivity::class.java),
+                      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                  )
+                  val n = NotificationCompat.Builder(this, CH_ID)
                       .setContentIntent(pi)
                       .setSmallIcon(android.R.drawable.ic_media_play)
-                      .setContentTitle(currTitle.ifBlank{"Pusula Tarayıcı"})
+                      .setContentTitle(if (currTitle.isBlank()) "Pusula Tarayıcı" else currTitle)
                       .setContentText(currArtist)
-                      .setOngoing(currPlaying).build()
-                  startForeground(1001,n)
+                      .setOngoing(currPlaying)
+                      .build()
+                  startForeground(1001, n)
                   return START_STICKY
               }
-              override fun onDestroy() { running=false;super.onDestroy() }
+              override fun onDestroy() {
+                  running = false
+                  super.onDestroy()
+              }
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
           package com.pusula.browser
-          import android.annotation.SuppressLint
           import android.content.*
-          import android.content.res.ColorStateList
-          import android.graphics.*
-          import android.graphics.drawable.*
           import android.os.*
           import android.view.*
           import android.webkit.*
@@ -183,88 +238,168 @@ jobs:
                   const val MEDIA_STATE_JS = "(function(){var v=document.querySelector('video,audio');if(!v)return null;return JSON.stringify({p:!v.paused,t:v.title||v.src.split('/').pop()||'',a:''});})()"
                   const val MEDIA_TOGGLE_JS = "(function(){var v=document.querySelector('video,audio');if(v){if(v.paused)v.play();else v.pause();}})()"
                   const val MEDIA_PAUSE_JS = "(function(){var v=document.querySelector('video,audio');if(v&&!v.paused)v.pause();})()"
-                  const val MEDIA_PREVIOUS_JS = "(function(){var v=document.querySelector('video,audio');if(v)v.currentTime=Math.max(0,v.currentTime‑10);})()"
+                  const val MEDIA_PREVIOUS_JS = "(function(){var v=document.querySelector('video,audio');if(v)v.currentTime=Math.max(0,v.currentTime-10);})()"
                   const val MEDIA_NEXT_JS = "(function(){var v=document.querySelector('video,audio');if(v)v.currentTime+=10;})()"
                   const val BACKGROUND_MEDIA_JS = "(function(){var v=document.querySelector('video,audio');if(v&&!v.paused)v.play();})()"
               }
-              private class BTab(val web:WebView,val bridge:PusulaBridge,val incognito:Boolean=false) { var title="Yeni Sekme";var url="";var progress=100 }
-              private val tabs = ArrayList<BTab>();private var cur=-1;private var shown:WebView?=null
-              private lateinit var prefs:Prefs;private lateinit var loader:WebViewAssetLoader
-              private val handler=Handler(Looper.getMainLooper())
-              private var isInPip=false;private var lastPollPlaying:Boolean?=null
-              private var hasMedia=false;private var lastPlaying=false;private var lastTitle="";private var lastArtist=""
-              private lateinit var mediaPoll:Runnable
-              private val receiver=object:BroadcastReceiver(){
-                  override fun onReceive(ctx:Context?,i:Intent?){
-                      val act=i?.action?:return
-                      val js=when(act){
-                          PlaybackService.ACTION_PLAY,PlaybackService.ACTION_TOGGLE->MEDIA_TOGGLE_JS
-                          PlaybackService.ACTION_PAUSE->MEDIA_PAUSE_JS
-                          PlaybackService.ACTION_PREVIOUS->MEDIA_PREVIOUS_JS
-                          PlaybackService.ACTION_NEXT->MEDIA_NEXT_JS
-                          else->return
+              private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
+                  var title = "Yeni Sekme"
+                  var url = ""
+                  var progress = 100
+              }
+              private val tabs = ArrayList<BTab>()
+              private var cur = -1
+              private var shown: WebView? = null
+              private lateinit var prefs: Prefs
+              private lateinit var loader: WebViewAssetLoader
+              private val handler = Handler(Looper.getMainLooper())
+              private var isInPip = false
+              private var lastPollPlaying: Boolean? = null
+              private var hasMedia = false
+              private var lastPlaying = false
+              private var lastTitle = ""
+              private var lastArtist = ""
+              private lateinit var mediaPoll: Runnable
+              private val receiver = object : BroadcastReceiver() {
+                  override fun onReceive(ctx: Context?, i: Intent?) {
+                      val act = i?.action ?: return
+                      val js = when (act) {
+                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
+                          PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
+                          PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
+                          PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
+                          else -> return
                       }
-                      listOfNotNull(tabs.getOrNull(cur)).forEach{try{it.web.evaluateJavascript(js,null)}catch(_:Exception){}}
+                      listOfNotNull(tabs.getOrNull(cur)).forEach {
+                          try { it.web.evaluateJavascript(js, null) } catch (_: Exception) {}
+                      }
                   }
               }
-              private fun toast(m:String)=Toast.makeText(this,m,Toast.LENGTH_SHORT).show()
-              private fun pollMedia(){
-                  val t=tabs.getOrNull(cur)?:return
-                  try{t.web.evaluateJavascript(MEDIA_STATE_JS){raw->
-                      var h=false;var p=false;var ti="";var ar=""
-                      try{if(raw!="null"&&raw!="\"\""){val o=JSONObject(raw);h=true;p=o.optBoolean("p");ti=o.optString("t");ar=o.optString("a")}}catch(_:Exception){return@evaluateJavascript}
-                      if(!h){if(hasMedia){hasMedia=false;lastPlaying=false;lastPollPlaying=null;PlaybackService.stop(this)};return@evaluateJavascript}
-                      if(isInPip&&lastPollPlaying==p)return@evaluateJavascript
-                      val chg=!hasMedia||p!=lastPlaying||ti!=lastTitle||ar!=lastArtist
-                      hasMedia=true;lastPlaying=p;lastPollPlaying=p;lastTitle=ti;lastArtist=ar
-                      if(chg&&(p||PlaybackService.running))PlaybackService.update(this,p,ti,ar)
-                  }}catch(_:Exception){}
+              private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
+              private fun pollMedia() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  try {
+                      t.web.evaluateJavascript(MEDIA_STATE_JS) { raw ->
+                          var h = false; var p = false; var ti = ""; var ar = ""
+                          try {
+                              if (raw != "null" && raw != "\"\"") {
+                                  val o = JSONObject(raw)
+                                  h = true
+                                  p = o.optBoolean("p")
+                                  ti = o.optString("t")
+                                  ar = o.optString("a")
+                              }
+                          } catch (_: Exception) { return@evaluateJavascript }
+                          if (!h) {
+                              if (hasMedia) {
+                                  hasMedia = false
+                                  lastPlaying = false
+                                  lastPollPlaying = null
+                                  PlaybackService.stop(this)
+                              }
+                              return@evaluateJavascript
+                          }
+                          if (isInPip && lastPollPlaying == p) return@evaluateJavascript
+                          val chg = !hasMedia || p != lastPlaying || ti != lastTitle || ar != lastArtist
+                          hasMedia = true
+                          lastPlaying = p
+                          lastPollPlaying = p
+                          lastTitle = ti
+                          lastArtist = ar
+                          if (chg && (p || PlaybackService.running)) {
+                              PlaybackService.update(this, p, ti, ar)
+                          }
+                      }
+                  } catch (_: Exception) {}
               }
-              override fun onCreate(s:Bundle?) {
+              override fun onCreate(s: Bundle?) {
                   super.onCreate(s)
-                  prefs=Prefs(this);loader=WebViewAssetLoader.Builder().addPathHandler("/assets/",WebViewAssetLoader.AssetsPathHandler(this)).build()
-                  val pal=Themes.get(prefs.theme)
-                  val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(pal.bg)}
-                  val urlBar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;paddingLeft=dp(10);paddingRight=dp(10);paddingTop=dp(8);paddingBottom=dp(8);setBackgroundColor(pal.surface)}
-                  val urlEt=EditText(this).apply{hint="Adres veya ara";setTextColor(pal.text);setHintTextColor(pal.sub);layoutParams=LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)}
+                  prefs = Prefs(this)
+                  loader = WebViewAssetLoader.Builder()
+                      .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+                      .build()
+                  val pal = Themes.get(prefs.theme)
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setBackgroundColor(pal.bg)
+                  }
+                  val urlBar = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      setPadding(dp(10), dp(8), dp(10), dp(8))
+                      setBackgroundColor(pal.surface)
+                  }
+                  val urlEt = EditText(this).apply {
+                      hint = "Adres veya ara"
+                      setTextColor(pal.text)
+                      setHintTextColor(pal.sub)
+                      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                  }
                   urlBar.addView(urlEt)
                   setContentView(root)
-                  mediaPoll=object:Runnable{override fun run(){pollMedia();handler.postDelayed(this,if(isInPip)2700L else 1400L)}}
-                  handler.postDelayed(mediaPoll,1200L)
-                  val flt=IntentFilter().apply{addAction(PlaybackService.ACTION_PLAY);addAction(PlaybackService.ACTION_TOGGLE);addAction(PlaybackService.ACTION_PAUSE);addAction(PlaybackService.ACTION_PREVIOUS);addAction(PlaybackService.ACTION_NEXT)}
-                  ContextCompat.registerReceiver(this,receiver,flt,ContextCompat.RECEIVER_NOT_EXPORTED)
-                  openNewTab(ASSET_PREFIX+"newtab.html",false)
-                  onBackPressedDispatcher.addCallback(this,object:OnBackPressedCallback(true){override fun handleOnBackPressed(){val w=shown;if(w?.canGoBack()==true)w.goBack() else finish()}})
-                  addOnPictureInPictureModeChangedListener { isInPip=it.isInPictureInPictureMode }
-              }
-              private fun dp(v:Int):Int=(v*resources.displayMetrics.density+0.5f).toInt()
-              private fun openNewTab(url:String,incog:Boolean) {
-                  val w=WebView(this).apply{
-                      settings.javaScriptEnabled=true;settings.domStorageEnabled=true;settings.allowFileAccess=true;settings.mediaPlaybackRequiresUserGesture=false
-                      addJavascriptInterface(PusulaBridge(),"Pusula")
+                  mediaPoll = object : Runnable {
+                      override fun run() {
+                          pollMedia()
+                          handler.postDelayed(this, if (isInPip) 2700L else 1400L)
+                      }
                   }
-                  tabs.add(BTab(w,PusulaBridge(),incog));cur=tabs.size‑1;shown=w
-                  (findViewById<LinearLayout>(android.R.id.content))?.addView(w,LinearLayout.LayoutParams(-1,-1))
+                  handler.postDelayed(mediaPoll, 1200L)
+                  val flt = IntentFilter().apply {
+                      addAction(PlaybackService.ACTION_PLAY)
+                      addAction(PlaybackService.ACTION_TOGGLE)
+                      addAction(PlaybackService.ACTION_PAUSE)
+                      addAction(PlaybackService.ACTION_PREVIOUS)
+                      addAction(PlaybackService.ACTION_NEXT)
+                  }
+                  ContextCompat.registerReceiver(this, receiver, flt, ContextCompat.RECEIVER_NOT_EXPORTED)
+                  openNewTab(ASSET_PREFIX + "newtab.html", false)
+                  onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                      override fun handleOnBackPressed() {
+                          val w = shown
+                          if (w?.canGoBack() == true) w.goBack() else finish()
+                      }
+                  })
+                  addOnPictureInPictureModeChangedListener {
+                      isInPip = it.isInPictureInPictureMode
+                  }
+              }
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
+              private fun openNewTab(url: String, incog: Boolean) {
+                  val w = WebView(this).apply {
+                      settings.javaScriptEnabled = true
+                      settings.domStorageEnabled = true
+                      settings.allowFileAccess = true
+                      settings.mediaPlaybackRequiresUserGesture = false
+                      addJavascriptInterface(PusulaBridge(), "Pusula")
+                  }
+                  tabs.add(BTab(w, PusulaBridge(), incog))
+                  cur = tabs.size - 1
+                  shown = w
+                  findViewById<LinearLayout>(android.R.id.content)?.addView(w, LinearLayout.LayoutParams(-1, -1))
                   w.loadUrl(url)
               }
               override fun onDestroy() {
-                  try{unregisterReceiver(receiver)}catch(_:Exception){}
-                  handler.removeCallbacks(mediaPoll);PlaybackService.stop(this)
-                  tabs.forEach{try{it.web.destroy()}catch(_:Exception){}}
+                  try { unregisterReceiver(receiver) } catch (_: Exception) {}
+                  handler.removeCallbacks(mediaPoll)
+                  PlaybackService.stop(this)
+                  tabs.forEach { try { it.web.destroy() } catch (_: Exception) {} }
                   super.onDestroy()
               }
           }
           EOF
-          # Kaynaklar
+          # Kaynak dosyaları
           mkdir -p app/src/main/res/values
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf‑8"?>
-          <resources><string name="app_name">Pusula</string></resources>
+          <resources>
+              <string name="app_name">Pusula</string>
+          </resources>
           EOF
           mkdir -p app/src/main/res/drawable
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
           <?xml version="1.0" encoding="utf‑8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#4c8dff"/></shape>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#4c8dff"/>
+          </shape>
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf‑8"?>
@@ -273,26 +408,79 @@ jobs:
               <uses‑permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <uses‑permission android:name="android.permission.FOREGROUND_SERVICE"/>
               <uses‑permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-              <application android:allowBackup="false" android:icon="@drawable/ic_launcher" android:label="@string/app_name" android:usesCleartextTraffic="true">
-                  <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback"/>
-                  <activity android:name=".MainActivity" android:exported="true" android:supportsPictureInPicture="true" android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
-                      <intent‑filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent‑filter>
-                      <intent‑filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="http"/><data android:scheme="https"/></intent‑filter>
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:usesCleartextTraffic="true">
+                  <service
+                      android:name=".PlaybackService"
+                      android:exported="false"
+                      android:foregroundServiceType="mediaPlayback"/>
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:supportsPictureInPicture="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
+                      <intent‑filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent‑filter>
+                      <intent‑filter>
+                          <action android:name="android.intent.action.VIEW"/>
+                          <category android:name="android.intent.category.DEFAULT"/>
+                          <category android:name="android.intent.category.BROWSABLE"/>
+                          <data android:scheme="http"/>
+                          <data android:scheme="https"/>
+                      </intent‑filter>
                   </activity>
               </application>
           </manifest>
           EOF
           cat > app/src/main/assets/newtab.html <<'EOF'
-          <!doctype html><html lang="tr"><head><meta charset="utf‑8"><meta name="viewport" content="width=device‑width,initial‑scale=1"><title>Yeni Sekme</title><style>:root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff}*{box‑sizing:border‑box}body{margin:0;background:var(--bg);color:var(--text);font‑family:system‑ui,sans‑serif;padding:32px 18px}h1{font‑size:36px;background:linear‑gradient(90deg,var(--acc),var(--acc2));‑webkit‑background‑clip:text;background‑clip:text;color:transparent}.box{margin‑top:20px}.inp{width:100%;height:52px;border‑radius:26px;border:1px solid var(--sub);background:var(--field);color:var(--text);padding:0 16px;font‑size:16px;outline:none}.btn{margin‑top:12px;padding:12px 22px;border‑radius:24px;border:0;background:linear‑gradient(135deg,var(--acc),var(--acc2));color:#fff;font‑weight:bold}</style></head><body><h1>Pusula</h1><div class="box"><input class="inp" id="q" placeholder="Ara veya adres yaz"><br><button class="btn" id="go">Git</button></div><script>const q=document.getElementById("q"),go=document.getElementById("go");function nav(){let t=q.value.trim();if(!t)return;if(/^https?:\/\//i.test(t))location.href=t;else if(/^([a‑z0‑9‑]+\.)+[a‑z]{2,}$/i.test(t))location.href="https://"+t;else location.href="https://google.com/search?q="+encodeURIComponent(t)};go.onclick=nav;q.onkeydown=e=>{if(e.key==="Enter")nav()}</script></body></html>
+          <!doctype html>
+          <html lang="tr">
+          <head>
+              <meta charset="utf‑8">
+              <meta name="viewport" content="width=device‑width,initial‑scale=1">
+              <title>Yeni Sekme</title>
+              <style>
+                  :root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff}
+                  *{box‑sizing:border‑box;margin:0;padding:0}
+                  body{background:var(--bg);color:var(--text);font‑family:system‑ui,sans‑serif;padding:32px 18px}
+                  h1{font‑size:36px;background:linear‑gradient(90deg,var(--acc),var(--acc2));‑webkit‑background‑clip:text;background‑clip:text;color:transparent;margin‑bottom:24px}
+                  .inp{width:100%;height:52px;border‑radius:26px;border:1px solid var(--sub);background:var(--field);color:var(--text);padding:0 16px;font‑size:16px;outline:none}
+                  .btn{margin‑top:12px;padding:12px 22px;border‑radius:24px;border:0;background:linear‑gradient(135deg,var(--acc),var(--acc2));color:#fff;font‑weight:bold}
+              </style>
+          </head>
+          <body>
+              <h1>Pusula</h1>
+              <input class="inp" id="q" placeholder="Ara veya adres yaz">
+              <br>
+              <button class="btn" id="go">Git</button>
+              <script>
+                  const q=document.getElementById("q"),go=document.getElementById("go");
+                  function nav(){
+                      let t=q.value.trim();
+                      if(!t)return;
+                      if(/^https?:\/\//i.test(t))location.href=t;
+                      else if(/^([a‑z0‑9‑]+\.)+[a‑z]{2,}$/i.test(t))location.href="https://"+t;
+                      else location.href="https://google.com/search?q="+encodeURIComponent(t);
+                  }
+                  go.onclick=nav;
+                  q.onkeydown=e=>{if(e.key==="Enter")nav()};
+              </script>
+          </body>
+          </html>
           EOF
-      - name: Gradle ile debug APK derle
+      - name: Gradle assembleDebug
         run: ./gradlew assembleDebug
-      - name: APK var‑yok kontrol et
+      - name: APK kontrolü
         run: |
           ls -la app/build/outputs/apk/debug/
-          if [ ! -f "app/build/outputs/apk/debug/app‑debug.apk" ]; then echo "HATA: APK oluşturulamadı!"; exit 1; fi
-      - name: Artifact olarak yükle (App‑Tricks okuyabilir)
+          if [ ! -f "app/build/outputs/apk/debug/app‑debug.apk" ]; then echo "HATA: APK bulunamadı"; exit 1; fi
+      - name: Artifact yükle
         uses: actions/upload-artifact@v4
         with:
-          name: pusula‑debug‑apk
+          name: pusula‑latest‑apk
           path: app/build/outputs/apk/debug/app‑debug.apk
