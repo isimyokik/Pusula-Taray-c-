@@ -1,5 +1,4 @@
-
-name: Pusula APK - PiP Fix
+name: Pusula APK
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -7,18 +6,117 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-          cache-read-only: false
-
-      - name: Projeyi olustur (PiP fixli)
+        with: { distribution: 'temurin', java-version: '17' }
+      - name: Projeyi olustur
         run: |
-          mkdir -p app/src/main/java/com/pusula/browser
-          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'ENDMAIN'
+          rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          EOF
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "Pusula"
+          include(":app")
+          EOF
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.pusula.browser"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.pusula.browser"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "2.1"
+              }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+              implementation("androidx.appcompat:appcompat:1.7.0")
+              implementation("androidx.webkit:webkit:1.12.1")
+              implementation("androidx.media:media:1.7.0")
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.Pusula"
+                  android:usesCleartextTraffic="true">
+                  <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:supportsPictureInPicture="true"
+                      android:windowSoftInputMode="adjustResize|stateHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > app/src/main/assets/newtab.html <<'EOF'
+          <!doctype html><html><body>Yeni Sekme</body></html>
+          EOF
+          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
+
           package com.pusula.browser
           import android.annotation.SuppressLint
           import android.app.Dialog
@@ -367,16 +465,131 @@ jobs:
                   const val PIP_OFF_JS = "true"
               }
           }
-          ENDMAIN
-          echo "MainActivity.kt PiP fix ile yazıldı"
-
+          
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
+          package com.pusula.browser
+          class Palette(val id: String, val name: String, val dark: Boolean, val bg: Int, val surface: Int, val field: Int, val text: Int, val sub: Int, val icon: Int, val accent: Int, val accent2: Int)
+          object Themes {
+              private fun c(v: Long): Int = v.toInt()
+              val all: List<Palette> = listOf(
+                  Palette("gece", "Gece Mavisi", true, c(0xFF0B1020), c(0xFF131B33), c(0xFF1D2848), c(0xFFEAF0FF), c(0xFF8FA0C8), c(0xFFC9D6FF), c(0xFF4C8DFF), c(0xFF8A5CFF))
+              )
+              fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
+          package com.pusula.browser
+          import android.app.*
+          import android.content.*
+          import android.os.*
+          import androidx.core.content.ContextCompat
+          class PlaybackService : Service() {
+              override fun onBind(intent: Intent?): IBinder? = null
+              companion object {
+                  const val ACTION_PLAY = "PLAY"
+                  const val ACTION_TOGGLE = "TOGGLE"
+                  const val ACTION_PAUSE = "PAUSE"
+                  const val ACTION_PREVIOUS = "PREV"
+                  const val ACTION_NEXT = "NEXT"
+                  var running = false
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {}
+                  fun stop(ctx: Context) {}
+              }
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
+          package com.pusula.browser
+          import android.content.Context
+          class Prefs(context: Context) {
+              private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
+              var theme: String get() = sp.getString("theme", "gece") ?: "gece" set(v) { sp.edit().putString("theme", v).apply() }
+              var engine: String get() = sp.getString("engine", "google") ?: "google" set(v) { sp.edit().putString("engine", v).apply() }
+              var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true) set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
+              var barBottom: Boolean get() = sp.getBoolean("barBottom", false) set(v) { sp.edit().putBoolean("barBottom", v).apply() }
+              var startMode: String get() = sp.getString("startMode", "resume") ?: "resume" set(v) { sp.edit().putString("startMode", v).apply() }
+              var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false) set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
+              var pins: String get() = sp.getString("pins", "") ?: "" set(v) { sp.edit().putString("pins", v).apply() }
+              var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false) set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
+              var adBlock: Boolean get() = sp.getBoolean("adBlock", true) set(v) { sp.edit().putBoolean("adBlock", v).apply() }
+              class Entry(val title: String, val url: String)
+              fun bookmarks(): List<Entry> = emptyList()
+              fun isBookmarked(url: String): Boolean = false
+              fun toggleBookmark(title: String, url: String): Boolean = false
+              fun removeBookmark(url: String) {}
+              fun history(): List<Entry> = emptyList()
+              fun addHistory(title: String, url: String) {}
+              fun removeHistory(url: String) {}
+              fun clearHistory() {}
+              fun saveTabs(urls: List<String>, current: Int) {}
+              fun savedTabs(): List<String> = emptyList()
+              fun savedCurrent(): Int = 0
+          }
+          object Engines {
+              class E(val id: String, val name: String, val search: String, val home: String)
+              val all = listOf(E("google", "Google", "https://www.google.com/search?q=%s", "https://www.google.com/"))
+              fun get(id: String): E = all[0]
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
+          package com.pusula.browser
+          import android.webkit.JavascriptInterface
+          class PusulaBridge(private val prefs: Prefs) {
+              @Volatile var trusted = false
+              @JavascriptInterface fun savePins(json: String) {}
+              @JavascriptInterface fun config(): String = "{}"
+          }
+          EOF
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96"><path android:fillColor="#FF000000" android:pathData="M0,0h96v96h-96z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_prev.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#FFFFFFFF" android:pathData="M12,12h6v24h-6zM36,12 L18,24 36,36z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_next.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#FFFFFFFF" android:pathData="M30,12h6v24h-6zM12,12 L30,24 12,36z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_play.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#FFFFFFFF" android:pathData="M14,10 L14,38 L40,24z"/></vector>
+          EOF
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources><string name="app_name">Pusula</string></resources>
+          EOF
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+          <resources><style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="android:windowBackground">@color/bg</item><item name="android:statusBarColor">@android:color/transparent</item><item name="android:navigationBarColor">@android:color/transparent</item></style></resources>
+          EOF
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <resources><color name="bg">#0F1115</color></resources>
+          EOF
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: 8.9 }
       - name: APK derle
-        run: |
-          # Geri kalan dosyalar zaten ilk yml'de oluşturuluyordu, burada sadece MainActivity'i overwrite ettik
-          gradle :app:assembleDebug --no-daemon --stacktrace || ./gradlew assembleDebug --no-daemon
-
+        run: gradle assembleDebug --no-daemon
       - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
-          name: Pusula-PiP-Fix-${{ github.run_number }}
+          name: Pusula-APK
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
