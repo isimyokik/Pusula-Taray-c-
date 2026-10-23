@@ -1,86 +1,118 @@
-name: Pusula Build Fixed
+name: Pusula APK
 on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.6
-      - name: Create project structure
+      - uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '17' }
+      - name: Projeyi olustur
         run: |
-          rm -rf app build .gradle gradle gradlew gradlew.bat settings.gradle build.gradle
-          mkdir -p app/src/main/java/com/pusula/browser
-          mkdir -p app/src/main/assets
-          mkdir -p app/src/main/res/drawable
-          mkdir -p app/src/main/res/values
-          mkdir -p gradle/wrapper
-      - name: Write Gradle Wrapper
-        run: |
-          cat > gradle/wrapper/gradle-wrapper.properties <<'KOT'
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-bin.zip
-          networkTimeout=10000
-          validateDistributionUrl=true
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          KOT
-          cat > gradlew <<'KOT'
-          #!/usr/bin/env sh
-          set -e
-          exec gradle "$@"
-          KOT
-          chmod +x gradlew
-          cat > settings.gradle <<'KOT'
+          rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          EOF
+          cat > settings.gradle.kts <<'EOF'
           pluginManagement {
-            repositories { google(); mavenCentral(); gradlePluginPortal() }
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
           }
           dependencyResolutionManagement {
-            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-            repositories { google(); mavenCentral() }
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
-          include ':app'
-          KOT
-          cat > build.gradle <<'KOT'
-          plugins { id 'com.android.application' version '8.2.2' apply false; id 'org.jetbrains.kotlin.android' version '1.9.22' apply false }
-          KOT
-          cat > app/build.gradle <<'KOT'
-          plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
+          rootProject.name = "Pusula"
+          include(":app")
+          EOF
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
           android {
-            namespace 'com.pusula.browser'
-            compileSdk 34
-            defaultConfig {
-              applicationId 'com.pusula.browser'
-              minSdk 26
-              targetSdk 34
-              versionCode 42
-              versionName '1.0-fixed'
-            }
-            buildTypes { release { minifyEnabled false } }
-            compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-            kotlinOptions { jvmTarget = '17' }
+              namespace = "com.pusula.browser"
+              compileSdk = 35
+              defaultConfig {
+                  applicationId = "com.pusula.browser"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "2.1"
+              }
+              buildTypes {
+                  release {
+                      isMinifyEnabled = false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
           }
           dependencies {
-            implementation 'androidx.core:core-ktx:1.12.0'
-            implementation 'androidx.appcompat:appcompat:1.6.1'
-            implementation 'com.google.android.material:material:1.11.0'
-            implementation 'androidx.webkit:webkit:1.9.0'
-            implementation 'androidx.media:media:1.7.0'
+              implementation("androidx.core:core-ktx:1.15.0")
+              implementation("androidx.appcompat:appcompat:1.7.0")
+              implementation("androidx.webkit:webkit:1.12.1")
+              implementation("androidx.media:media:1.7.0")
           }
-          KOT
-      - name: Write MainActivity.kt
-        run: |
-          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'KOT'
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.Pusula"
+                  android:usesCleartextTraffic="true">
+                  <service
+                      android:name=".PlaybackService"
+                      android:exported="false"
+                      android:foregroundServiceType="mediaPlayback" />
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:supportsPictureInPicture="true"
+                      android:windowSoftInputMode="adjustResize|stateHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/assets/newtab.html <<'EOF'
+          <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Yeni Sekme</title></head><body style="background:#0b1020;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh">Rota</body></html>
+          EOF
+          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
 package com.pusula.browser
 
 import android.annotation.SuppressLint
@@ -282,7 +314,7 @@ class MainActivity : AppCompatActivity() {
     private fun createTab(incognito: Boolean = false): BTab {
         val web = BgWebView(this); val bridge = PusulaBridge(prefs); val tab = BTab(web, bridge, incognito); val s = web.settings
         s.javaScriptEnabled = true; s.domStorageEnabled = true; s.mediaPlaybackRequiresUserGesture = false; s.setSupportMultipleWindows(true); s.javaScriptCanOpenWindowsAutomatically = false; s.setSupportZoom(true); s.builtInZoomControls = true; s.displayZoomControls = false; s.loadWithOverviewMode = true; s.useWideViewPort = true; s.allowFileAccess = false; s.allowContentAccess = false; s.setGeolocationEnabled(false); s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), ""); s.userAgentString = ua; tab.mobileUa = ua; web.addJavascriptInterface(bridge, "Pusula"); syncScripts(tab)
+        val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\d+\.\d+ "), ""); s.userAgentString = ua; tab.mobileUa = ua; web.addJavascriptInterface(bridge, "Pusula"); syncScripts(tab)
         web.setFindListener { active, total, _ -> if (tabs.getOrNull(cur) === tab) { findCount.text = if (total == 0) "0" else "${active + 1}/$total" } }
         web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ -> startDownload(url, userAgent, contentDisposition, mimeType) }
         web.webViewClient = makeClient(tab); web.webChromeClient = makeChrome(tab); tabs.add(tab); updateTabCount(); return tab
@@ -292,7 +324,8 @@ class MainActivity : AppCompatActivity() {
         try {
             if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
             if (t.keepScript != null) t.keepScript?.remove()
-            t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS + "\n" + SMOOTH_CROSSFADE_JS, setOf("*"))
+            t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS + "
+" + SMOOTH_CROSSFADE_JS, setOf("*"))
             if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
             else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
         } catch (_: Exception) { }
@@ -373,7 +406,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun openFind() { findBar.visibility = View.VISIBLE; findInput.setText(""); findCount.text = ""; findInput.requestFocus(); (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(findInput,0) }
     private fun closeFind() { if (findBar.visibility != View.VISIBLE) return; findBar.visibility = View.GONE; currentWeb()?.clearMatches(); hideKeyboard(); root.requestFocus() }
-    private fun toggleDesktop() { val t = tabs.getOrNull(cur) ?: return; t.desktop = !t.desktop; val s = t.web.settings; if(t.desktop){ val chrome = Regex("Chrome/[\\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0"; s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36" } else { s.userAgentString = t.mobileUa }; t.web.reload() }
+    private fun toggleDesktop() { val t = tabs.getOrNull(cur) ?: return; t.desktop = !t.desktop; val s = t.web.settings; if(t.desktop){ val chrome = Regex("Chrome/[\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0"; s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36" } else { s.userAgentString = t.mobileUa }; t.web.reload() }
     private fun shareCurrent() { val t = tabs.getOrNull(cur) ?: return; if (!t.url.startsWith("http")) return; startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,t.url),"Paylas")) }
     private fun capturePreview(tab: BTab) { try { val w = tab.web.width; val h = tab.web.height; if (w <= 0 || h <= 0) return; val sc = 360f / w; val bh = (h * sc).toInt().coerceIn(1,700); val bmp = Bitmap.createBitmap(360,bh,Bitmap.Config.RGB_565); val canvas = Canvas(bmp); canvas.scale(sc,sc); tab.web.draw(canvas); tab.preview = bmp } catch (_: Exception) {} }
     private fun pillBtn(label: String, colors: IntArray, onClick: () -> Unit): TextView { val t = TextView(this); t.text = label; t.textSize = 14f; t.setTypeface(null,Typeface.BOLD); t.setTextColor(Color.WHITE); t.gravity = Gravity.CENTER; val g = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,colors); g.cornerRadius = dp(24).toFloat(); t.background = g; t.setOnClickListener{ onClick() }; return t }
@@ -427,144 +460,212 @@ class MainActivity : AppCompatActivity() {
         const val MEDIA_NEXT_JS = FADE_JS + "(function(){try{var h=window.__msh&&window.__msh.nexttrack;if(h){h();return;}var sels=[\"ytmusic-player-bar .next-button\",\"ytmusic-player-bar [aria-label='Next']\",\".ytp-next-button\"];for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){b.click();return;}}var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration-0.05;}catch(e){}})();"
         const val SMOOTH_CROSSFADE_JS = "(function(){if(window.__pusulaSmooth)return;window.__pusulaSmooth=1;function fade(m,a,b,d,cb){try{var s=(b-a)/(d/25),v=a,iv=setInterval(function(){v+=s;if((s>0&&v>=b)||(s<0&&v<=b)){clearInterval(iv);m.volume=Math.max(0,Math.min(1,b));if(cb)cb();}else m.volume=Math.max(0,Math.min(1,v));},25);}catch(e){if(cb)cb();}}function hookMedia(m){if(!m||m.__pusulaHooked)return;m.__pusulaHooked=true;m.addEventListener('play',function(){try{if(m.dataset.pusulaFading)return;if(m.volume<0.9){if(m.volume<0.1)m.volume=0;m.dataset.pusulaFading='1';fade(m,0,1,380,function(){delete m.dataset.pusulaFading;});}}catch(e){}});}var lastTitle='';setInterval(function(){try{var v=document.querySelector('video,audio');if(v)hookMedia(v);var tEl=document.querySelector('ytmusic-player-bar .title');var curTitle=tEl?tEl.textContent:'';if(curTitle&&curTitle!==lastTitle&&lastTitle!==''){var media=document.querySelector('video,audio');if(media&&!media.paused){fade(media,media.volume,0,180,function(){setTimeout(function(){if(media)fade(media,0,1,380,null);},120);});}lastTitle=curTitle;}else if(curTitle){lastTitle=curTitle;}}catch(e){}},500);document.addEventListener('ended',function(e){var m=e.target;if(m&&(m.tagName==='VIDEO'||m.tagName==='AUDIO')){try{fade(m,m.volume,0,180,null);}catch(x){}}},true);})();"
         const val MEDIA_HOOK_JS = "(function(){try{if(window.__msh)return;window.__msh={};var ms=navigator.mediaSession;if(ms&&ms.setActionHandler){var orig=ms.setActionHandler.bind(ms);ms.setActionHandler=function(a,f){window.__msh[a]=f;return orig(a,f);};}}catch(e){}})();"
-        const val MEDIA_STATE_JS = "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(!v||!(v.currentSrc||v.src))return '';var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}function site(t){return !t||/^YouTube( Music)?$/i.test(t.trim());}var t=(md&&md.title)||'';if(site(t))t=tx('ytmusic-player-bar .title')||tx('.player-bar-title')||tx('ytm-slim-video-metadata-section-renderer h2')||tx('.slim-video-information-title')||tx('ytd-watch-metadata h1')||tx('h1.title')||'';if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});}catch(e){return '';}})();"
+        const val MEDIA_STATE_JS = "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(!v||!(v.currentSrc||v.src))return '';var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}function site(t){return !t||/^YouTube( Music)?$/i.test(t.trim());}var t=(md&&md.title)||'';if(site(t))t=tx('ytmusic-player-bar .title')||tx('.player-bar-title')||tx('ytm-slim-video-metadata-section-renderer h2')||tx('.slim-video-information-title')||tx('ytd-watch-metadata h1')||tx('h1.title')||'';if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}if(site(t))t=(document.title||'').replace(/\s*[-|]\s*YouTube( Music)?\s*$/i,'');var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});}catch(e){return '';}})();"
         const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;var s=document.createElement('style');s.id='__pip';s.textContent='html,body{overflow:hidden!important}.__pipa{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important}.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important}';document.documentElement.appendChild(s);v.classList.add('__pipv');var e=v.parentElement;while(e&&e!==document.documentElement){e.classList.add('__pipa');e=e.parentElement;}window.dispatchEvent(new Event('resize'));}catch(e){}})();"
         const val PIP_OFF_JS = "(function(){try{var s=document.getElementById('__pip');if(s)s.remove();document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});document.querySelectorAll('.__pipa').forEach(function(x){x.classList.remove('__pipa');});window.dispatchEvent(new Event('resize'));}catch(e){}})();"
     }
 }
 
-KOT
-      - name: Write other sources
-        run: |
-          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'KOT'
+          EOF
+
+          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
           package com.pusula.browser
-          import android.content.Context
-          import org.json.JSONArray
-          import org.json.JSONObject
-          class Prefs(ctx: Context) {
-              private val sp = ctx.getSharedPreferences("pusula_v40", Context.MODE_PRIVATE)
-              data class Entry(val title: String, val url: String)
-              var theme: String get() = sp.getString("theme","midnight")!!; set(v){ sp.edit().putString("theme",v).apply() }
-              var engine: String get() = sp.getString("engine","google")!!; set(v){ sp.edit().putString("engine",v).apply() }
-              var adBlock: Boolean get() = sp.getBoolean("adBlock",true); set(v){ sp.edit().putBoolean("adBlock",v).apply() }
-              var bgPlay: Boolean get() = sp.getBoolean("bgPlay",true); set(v){ sp.edit().putBoolean("bgPlay",v).apply() }
-              var barBottom: Boolean get() = sp.getBoolean("barBottom",false); set(v){ sp.edit().putBoolean("barBottom",v).apply() }
-              var askedNotif: Boolean get() = sp.getBoolean("askedNotif",false); set(v){ sp.edit().putBoolean("askedNotif",v).apply() }
-              fun bookmarks(): List<Entry> = load("bms")
-              fun history(): List<Entry> = load("hist")
-              fun addHistory(t: String, u: String){ val l = load("hist").toMutableList(); l.removeAll{ it.url==u }; l.add(0,Entry(t,u)); save("hist",l.take(200)) }
-              fun removeHistory(u: String){ val l = load("hist").toMutableList(); l.removeAll{ it.url==u }; save("hist",l) }
-              fun clearHistory(){ save("hist",emptyList()) }
-              fun isBookmarked(u: String): Boolean = load("bms").any{ it.url==u }
-              fun toggleBookmark(t: String, u: String){ val l = load("bms").toMutableList(); val e = l.firstOrNull{ it.url==u }; if(e!=null) l.remove(e) else l.add(0,Entry(t,u)); save("bms",l.take(200)) }
-              fun removeBookmark(u: String){ val l = load("bms").toMutableList(); l.removeAll{ it.url==u }; save("bms",l) }
-              fun savedTabs(): List<String> = sp.getString("tabs","")!!.split("|").filter{ it.isNotEmpty() }
-              fun savedCurrent(): Int = sp.getInt("curTab",0)
-              fun saveTabs(urls: List<String>, cur: Int){ sp.edit().putString("tabs",urls.joinToString("|")).putInt("curTab",cur).apply() }
-              private fun load(k: String): List<Entry>{ try{ val s = sp.getString(k,"[]")!!; val a = JSONArray(s); return (0 until a.length()).map{ val o = a.getJSONObject(it); Entry(o.getString("t"),o.getString("u")) } }catch(_: Exception){ return emptyList() } }
-              private fun save(k: String, list: List<Entry>){ val a = JSONArray(); for(e in list){ val o = JSONObject(); o.put("t",e.title); o.put("u",e.url); a.put(o) }; sp.edit().putString(k,a.toString()).apply() }
+          class Palette(val id: String, val name: String, val dark: Boolean, val bg: Int, val surface: Int, val field: Int, val text: Int, val sub: Int, val icon: Int, val accent: Int, val accent2: Int)
+          object Themes {
+              private fun c(v: Long): Int = v.toInt()
+              val all: List<Palette> = listOf(
+                  Palette("gece", "Gece Mavisi", true, c(0xFF0B1020), c(0xFF131B33), c(0xFF1D2848), c(0xFFEAF0FF), c(0xFF8FA0C8), c(0xFFC9D6FF), c(0xFF4C8DFF), c(0xFF8A5CFF)),
+                  Palette("mor", "Mor Gece", true, c(0xFF120B1F), c(0xFF1A1230), c(0xFF2A1F4A), c(0xFFF1EAFF), c(0xFFA99BCF), c(0xFFD8C8FF), c(0xFF9B6BFF), c(0xFFFF5CA8)),
+                  Palette("orman", "Orman", true, c(0xFF08140F), c(0xFF0E1F17), c(0xFF173126), c(0xFFE6F7EE), c(0xFF86B8A0), c(0xFFBFE8D3), c(0xFF2ED47A), c(0xFF1BC5C5)),
+                  Palette("gunbatimi", "Gün Batımı", true, c(0xFF1A0F0F), c(0xFF241414), c(0xFF3A2020), c(0xFFFFEDE6), c(0xFFC9988A), c(0xFFFFD2C2), c(0xFFFF7A45), c(0xFFFF3D77)),
+                  Palette("acik", "Açık", false, c(0xFFF2F4F9), c(0xFFFFFFFF), c(0xFFE8ECF5), c(0xFF151A26), c(0xFF667089), c(0xFF3A4560), c(0xFF3D6BFF), c(0xFF7A5CFF)),
+                  Palette("okyanus", "Okyanus", false, c(0xFFEAF6FA), c(0xFFFFFFFF), c(0xFFDDEFF5), c(0xFF0F2530), c(0xFF5A7886), c(0xFF2A4E5E), c(0xFF0EA5C6), c(0xFF2F6BFF))
+              )
+              fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
           }
-          KOT
-          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'KOT'
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
           package com.pusula.browser
-          data class Pal(val id:String,val name:String,val dark:Boolean,val bg:Int,val surface:Int,val field:Int,val text:Int,val sub:Int,val icon:Int,val accent:Int,val accent2:Int)
-          object Themes{ val all=listOf(Pal("midnight","Gece Yarisi",true,0xFF101014.toInt(),0xFF1C1C21.toInt(),0xFF2A2A33.toInt(),0xFFF1F1F1.toInt(),0xFF8A8A95.toInt(),0xFFB0B0BB.toInt(),0xFF5B7FFF.toInt(),0xFF8B5FFF.toInt()),Pal("light","Aydinlik",false,0xFFF8F8FA.toInt(),0xFFFFFFFF.toInt(),0xFFECECF0.toInt(),0xFF121212.toInt(),0xFF7A7A85.toInt(),0xFF5A5A65.toInt(),0xFF2F6BFF.toInt(),0xFF8B3DFF.toInt())); fun get(id:String)=all.firstOrNull{it.id==id}?:all[0] }
-          KOT
-          cat > app/src/main/java/com/pusula/browser/Engines.kt <<'KOT'
-          package com.pusula.browser
-          data class Engine(val id:String,val name:String,val home:String,val search:String)
-          object Engines{ val all=listOf(Engine("google","Google","https://www.google.com","https://www.google.com/search?q=%s"),Engine("duck","DuckDuckGo","https://duckduckgo.com","https://duckduckgo.com/?q=%s"),Engine("bing","Bing","https://www.bing.com","https://www.bing.com/search?q=%s")); fun get(id:String)=all.firstOrNull{it.id==id}?:all[0] }
-          fun resolveInput(input:String, engine:Engine):String{ val t=input.trim(); if(t.isEmpty()) return engine.home; if(t.startsWith("http://")||t.startsWith("https://")) return t; if(t.contains(".")&&!t.contains(" ")&&!t.contains("://")) return "https://"+t; return engine.search.replace("%s", java.net.URLEncoder.encode(t,"UTF-8")) }
-          KOT
-          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'KOT'
-          package com.pusula.browser
-          import android.webkit.JavascriptInterface
-          class PusulaBridge(private val prefs: Prefs){ var trusted=false; @JavascriptInterface fun getTheme():String=prefs.theme; @JavascriptInterface fun getEngine():String=prefs.engine }
-          KOT
-          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'KOT'
-          package com.pusula.browser
-          import android.app.*
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.PendingIntent
+          import android.app.Service
           import android.content.Context
           import android.content.Intent
+          import android.content.pm.ServiceInfo
+          import android.graphics.drawable.Icon
+          import android.media.MediaMetadata
+          import android.media.session.MediaSession
+          import android.media.session.PlaybackState
           import android.os.Build
-          import androidx.core.app.NotificationCompat
-          class PlaybackService: Service(){
-              companion object{
-                  const val ACTION_PLAY="com.pusula.browser.PLAY"; const val ACTION_TOGGLE="com.pusula.browser.TOGGLE"; const val ACTION_PAUSE="com.pusula.browser.PAUSE"; const val ACTION_PREVIOUS="com.pusula.browser.PREV"; const val ACTION_NEXT="com.pusula.browser.NEXT"
-                  var running=false
-                  fun update(ctx: Context, playing:Boolean, title:String, artist:String){ val i=Intent(ctx,PlaybackService::class.java).putExtra("playing",playing).putExtra("title",title).putExtra("artist",artist); if(Build.VERSION.SDK_INT>=26) ctx.startForegroundService(i) else ctx.startService(i) }
-                  fun stop(ctx: Context){ ctx.stopService(Intent(ctx,PlaybackService::class.java)) }
+          import android.os.IBinder
+          import androidx.core.app.ServiceCompat
+          import androidx.core.content.ContextCompat
+          class PlaybackService : Service() {
+              private var session: MediaSession? = null
+              private var playing = false
+              private var title = ""
+              private var artist = ""
+              private var foregroundStarted = false
+              override fun onCreate() {
+                  super.onCreate()
+                  running = true
+                  val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                  if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
+                  val s = MediaSession(this, "Rota")
+                  s.setCallback(object : MediaSession.Callback() {
+                      override fun onPlay() { send(ACTION_PLAY) }
+                      override fun onPause() { send(ACTION_PAUSE) }
+                      override fun onSkipToNext() { send(ACTION_NEXT) }
+                      override fun onSkipToPrevious() { send(ACTION_PREVIOUS) }
+                  })
+                  s.isActive = true; session = s
               }
-              override fun onBind(intent: Intent?)=null
-              override fun onStartCommand(intent: Intent?, flags:Int, startId:Int):Int{
-                  val title=intent?.getStringExtra("title")?:"Pusula"; val artist=intent?.getStringExtra("artist")?:""; val playing=intent?.getBooleanExtra("playing",false)?:false
-                  if(title.isBlank()&&artist.isBlank()&&!playing){ stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY }
-                  val chId="pusula_play"; if(Build.VERSION.SDK_INT>=26){ val nm=getSystemService(NotificationManager::class.java); val ch=NotificationChannel(chId,"Caliyor",NotificationManager.IMPORTANCE_LOW); nm.createNotificationChannel(ch) }
-                  val pi=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-                  val prev=PendingIntent.getBroadcast(this,1,Intent(ACTION_PREVIOUS).setPackage(packageName),PendingIntent.FLAG_IMMUTABLE)
-                  val toggle=PendingIntent.getBroadcast(this,2,Intent(if(playing) ACTION_PAUSE else ACTION_PLAY).setPackage(packageName),PendingIntent.FLAG_IMMUTABLE)
-                  val next=PendingIntent.getBroadcast(this,3,Intent(ACTION_NEXT).setPackage(packageName),PendingIntent.FLAG_IMMUTABLE)
-                  val notif=NotificationCompat.Builder(this,chId).setSmallIcon(R.drawable.ic_music).setContentTitle(title.ifBlank{"Pusula"}).setContentText(artist).setContentIntent(pi).setOngoing(playing).addAction(R.drawable.ic_back,"Prev",prev).addAction(if(playing) R.drawable.ic_pause else R.drawable.ic_play,if(playing)"Pause" else "Play",toggle).addAction(R.drawable.ic_forward,"Next",next).setStyle(androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(0,1,2)).build()
-                  startForeground(1,notif); running=true; return START_STICKY
+              private fun send(action: String) { sendBroadcast(Intent(action).setPackage(packageName)) }
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      ACTION_UPDATE -> { playing = intent.getBooleanExtra("playing", false); title = intent.getStringExtra("title") ?: ""; artist = intent.getStringExtra("artist") ?: "" }
+                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
+                  }
+                  refresh(); return START_NOT_STICKY
               }
-              override fun onDestroy(){ running=false; super.onDestroy() }
+              private fun pi(code: Int, action: String): PendingIntent = PendingIntent.getBroadcast(this, code, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+              private fun act(res: Int, label: String, p: PendingIntent): Notification.Action = Notification.Action.Builder(Icon.createWithResource(this, res), label, p).build()
+              private fun refresh() {
+                  val s = session ?: return
+                  val shownTitle = if (title.isBlank()) "Rota" else title
+                  s.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, shownTitle).putString(MediaMetadata.METADATA_KEY_ARTIST, artist).build())
+                  val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                  s.setPlaybackState(PlaybackState.Builder().setActions(actions).setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
+                  val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                  val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
+                  b.setSmallIcon(R.drawable.ic_notif); b.setContentTitle(shownTitle); b.setContentText(if (artist.isBlank()) "Rota" else artist); b.setContentIntent(open); b.setOngoing(playing); b.setVisibility(Notification.VISIBILITY_PUBLIC)
+                  b.addAction(act(android.R.drawable.ic_media_previous, "Önceki", pi(1, ACTION_PREVIOUS)))
+                  if (playing) b.addAction(act(android.R.drawable.ic_media_pause, "Duraklat", pi(2, ACTION_PAUSE))) else b.addAction(act(android.R.drawable.ic_media_play, "Oynat", pi(3, ACTION_PLAY)))
+                  b.addAction(act(android.R.drawable.ic_media_next, "Sonraki", pi(4, ACTION_NEXT)))
+                  b.setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2))
+                  val n = b.build()
+                  try {
+                      if (!foregroundStarted) { if (Build.VERSION.SDK_INT >= 29) ServiceCompat.startForeground(this, NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK) else startForeground(NOTIF_ID, n); foregroundStarted = true } else { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n) }
+                      if (!playing) { stopForeground(Service.STOP_FOREGROUND_DETACH); foregroundStarted = false }
+                  } catch (_: Exception) { stopSelf() }
+              }
+              override fun onDestroy() { running = false; try { session?.release() } catch (_: Exception) { }; session = null; super.onDestroy() }
+              override fun onBind(intent: Intent?): IBinder? = null
+              companion object {
+                  const val CHANNEL = "playback"
+                  const val NOTIF_ID = 1002
+                  const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
+                  const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
+                  const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
+                  const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
+                  const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
+                  const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
+                  @Volatile var running = false
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) { val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE).putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist); try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { } }
+                  fun stop(ctx: Context) { try { ctx.stopService(Intent(ctx, PlaybackService::class.java)) } catch (_: Exception) { } }
+              }
           }
-          KOT
-          cat > app/src/main/assets/newtab.html <<'KOT'
-          <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:sans-serif;background:#101014;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh}input{width:80%;max-width:400px;padding:14px 18px;border-radius:24px;border:0;background:#1C1C21;color:#fff;font-size:16px;outline:none}</style></head><body><h1>Pusula</h1><input id="q" placeholder="Ara veya adres yaz"><script>const i=document.getElementById('q');i.addEventListener('keydown',e=>{if(e.key==='Enter'){location.href='https://www.google.com/search?q='+encodeURIComponent(i.value)}});</script></body></html>
-          KOT
-          cat > app/src/main/res/values/strings.xml <<'KOT'
-          <resources><string name="app_name">Pusula</string></resources>
-          KOT
-          cat > app/src/main/res/values/colors.xml <<'KOT'
-          <resources><color name="bg">#101014</color></resources>
-          KOT
-          cat > app/src/main/res/drawable/ic_back.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M15,19L8,12L15,5"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_forward.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M9,19L16,12L9,5"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_home.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_add.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_menu.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M3,18H21V16H3V18M3,13H21V11H3V13M3,6V8H21V6H3Z"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_reload.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0,0 0,4 12A8,8 0,0 0,12 20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.48,18 12,18A6,6 0,0 1,6 12A6,6 0,0 1,12 6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_music.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M12,3V13.55C11.41,13.21 10.73,13 10,13A4,4 0,0 0,6 17A4,4 0,0 0,10 21A4,4 0,0 0,14 17V7H18V3H12Z"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_play.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M8,5.14V19.14L19,12.14L8,5.14Z"/></vector>
-          KOT
-          cat > app/src/main/res/drawable/ic_pause.xml <<'KOT'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#fff" android:pathData="M14,19H18V5H14M6,19H10V5H6V19Z"/></vector>
-          KOT
-          cat > app/src/main/AndroidManifest.xml <<'KOT'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-            <uses-permission android:name="android.permission.INTERNET"/>
-            <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-            <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-            <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-            <application android:allowBackup="true" android:label="Pusula" android:theme="@android:style/Theme.NoTitleBar">
-              <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="http"/><data android:scheme="https"/></intent-filter></activity>
-              <service android:name=".PlaybackService" android:foregroundServiceType="mediaPlayback"/>
-            </application>
-          </manifest>
-          KOT
-      - name: Build APK
-        run: |
-          gradle assembleDebug
-      - name: Upload APK
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
+          package com.pusula.browser
+          import android.content.Context
+          import android.net.Uri
+          import org.json.JSONArray
+          import org.json.JSONObject
+          object Engines {
+              class E(val id: String, val name: String, val search: String, val home: String)
+              val all = listOf(E("google", "Google", "https://www.google.com/search?q=%s", "https://www.google.com/"), E("ddg", "DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com/"), E("bing", "Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com/"))
+              fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
+          }
+          val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\d{1,3}\.){3}\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$")
+          fun resolveInput(raw: String, engine: Engines.E): String { val t = raw.trim(); if (t.isEmpty()) return engine.home; if (t.startsWith("http://", true) || t.startsWith("https://", true)) return t; if (!t.contains(' ') && HOST_LIKE.matches(t)) return "https://" + t; return engine.search.replace("%s", Uri.encode(t)) }
+          class Prefs(context: Context) {
+              class Entry(val title: String, val url: String)
+              private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
+              var engine: String get() = sp.getString("engine", "google") ?: "google"; set(v) { sp.edit().putString("engine", v).apply() }
+              var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true); set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
+              var theme: String get() = sp.getString("theme", "gece") ?: "gece"; set(v) { sp.edit().putString("theme", v).apply() }
+              var barBottom: Boolean get() = sp.getBoolean("barBottom", false); set(v) { sp.edit().putBoolean("barBottom", v).apply() }
+              var pins: String get() = sp.getString("pins", "") ?: ""; set(v) { sp.edit().putString("pins", v).apply() }
+              var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false); set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
+              var adBlock: Boolean get() = sp.getBoolean("adBlock", true); set(v) { sp.edit().putBoolean("adBlock", v).apply() }
+              private fun readList(key: String): MutableList<Entry> { val out = ArrayList<Entry>(); try { val arr = JSONArray(sp.getString(key, "[]") ?: "[]"); for (i in 0 until arr.length()) { val o = arr.getJSONObject(i); out.add(Entry(o.optString("t"), o.optString("u"))) } } catch (_: Exception) {}; return out }
+              private fun writeList(key: String, list: List<Entry>) { val arr = JSONArray(); for (e in list) arr.put(JSONObject().put("t", e.title).put("u", e.url)); sp.edit().putString(key, arr.toString()).apply() }
+              fun bookmarks(): List<Entry> = readList("bookmarks")
+              fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
+              fun toggleBookmark(title: String, url: String): Boolean { val list = readList("bookmarks"); val had = list.removeAll { it.url == url }; if (!had) list.add(0, Entry(title, url)); writeList("bookmarks", list); return !had }
+              fun removeBookmark(url: String) { val l = readList("bookmarks"); l.removeAll { it.url == url }; writeList("bookmarks", l) }
+              fun history(): List<Entry> = readList("history")
+              fun addHistory(title: String, url: String) { val l = readList("history"); if (l.isNotEmpty() && l[0].url == url) return; l.add(0, Entry(title, url)); while (l.size > 300) l.removeAt(l.size - 1); writeList("history", l) }
+              fun removeHistory(url: String) { val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l) }
+              fun clearHistory() { sp.edit().putString("history", "[]").apply() }
+              fun saveTabs(urls: List<String>, current: Int) { val arr = JSONArray(); for (u in urls) arr.put(u); sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply() }
+              fun savedTabs(): List<String> { val out = ArrayList<String>(); try { val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]"); for (i in 0 until arr.length()) out.add(arr.getString(i)) } catch (_: Exception) {}; return out }
+              fun savedCurrent(): Int = sp.getInt("tabCur", 0)
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
+          package com.pusula.browser
+          import android.webkit.JavascriptInterface
+          import org.json.JSONArray
+          import org.json.JSONObject
+          class PusulaBridge(private val prefs: Prefs) {
+              @Volatile var trusted = false
+              private fun hex(v: Int): String = "#%06X".format(0xFFFFFF and v)
+              private fun pinsJson(): Any { val raw = prefs.pins; if (raw.isEmpty()) return JSONObject.NULL; return try { JSONArray(raw) } catch (e: Exception) { JSONObject.NULL } }
+              @JavascriptInterface fun savePins(json: String) { if (!trusted) return; try { prefs.pins = JSONArray(json).toString() } catch (e: Exception) { } }
+              @JavascriptInterface fun config(): String {
+                  if (!trusted) return "{}"
+                  val e = Engines.get(prefs.engine); val th = Themes.get(prefs.theme)
+                  val bm = JSONArray(); for (b in prefs.bookmarks().take(8)) bm.put(JSONObject().put("t", b.title).put("u", b.url))
+                  val hs = JSONArray(); for (h in prefs.history().take(6)) hs.put(JSONObject().put("t", h.title).put("u", h.url))
+                  return JSONObject().put("engine", e.name).put("search", e.search).put("bookmarks", bm).put("history", hs).put("pins", pinsJson()).put("dark", th.dark).put("bg", hex(th.bg)).put("surface", hex(th.surface)).put("field", hex(th.field)).put("text", hex(th.text)).put("sub", hex(th.sub)).put("accent", hex(th.accent)).put("accent2", hex(th.accent2)).toString()
+              }
+          }
+          EOF
+          cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96"><path android:pathData="M24,0 H72 A24,24 0 0 1 96,24 V72 A24,24 0 0 1 72,96 H24 A24,24 0 0 1 0,72 V24 A24,24 0 0 1 24,0 Z"><aapt:attr name="android:fillColor"><gradient android:startX="0" android:startY="0" android:endX="96" android:endY="96" android:type="linear"><item android:offset="0" android:color="#FF2F6BFF"/><item android:offset="0.55" android:color="#FF7A4DFF"/><item android:offset="1" android:color="#FFFF4D9D"/></gradient></aapt:attr></path></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
+          EOF
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources><string name="app_name">Rota</string></resources>
+          EOF
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+          <resources><style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="android:windowBackground">@color/bg</item><item name="android:statusBarColor">@android:color/transparent</item><item name="android:navigationBarColor">@android:color/transparent</item></style></resources>
+          EOF
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <resources><color name="bg">#0F1115</color></resources>
+          EOF
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: 8.9 }
+      - name: APK derle
+        run: gradle assembleDebug --no-daemon
+      - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
-          name: pusula-fixed
+          name: Pusula-APK
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
