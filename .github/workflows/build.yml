@@ -190,18 +190,10 @@ jobs:
                   if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
               }
           }
-                                            override fun onPause() {
+                                  override fun onPause() {
               super.onPause()
               saveTabs()
               CookieManager.getInstance().flush()
-              if (isInPictureInPictureMode) {
-                  try { shown?.onResume() } catch (_: Exception) {}
-                  try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) {}
-                  if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
-                  handler.removeCallbacks(pipMediaPump)
-                  handler.post(pipMediaPump)
-                  return
-              }
               if (prefs.bgPlay) {
                   appInBackground = true
                   handler.removeCallbacks(backgroundMediaPump)
@@ -215,15 +207,10 @@ jobs:
 
           override fun onStop() {
               super.onStop()
-              if (isInPictureInPictureMode) {
-                  try { shown?.onResume() } catch (_: Exception) {}
-                  try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) {}
-                  handler.removeCallbacks(pipMediaPump)
-                  handler.post(pipMediaPump)
-              }
           }
 
           
+          }
 
           
               override fun onResume() { super.onResume(); appInBackground = false; handler.removeCallbacks(backgroundMediaPump); shown?.onResume() }
