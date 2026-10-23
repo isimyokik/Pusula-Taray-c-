@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.2"
+                  versionName = "2.3"
               }
 
               buildTypes {
@@ -2503,7 +2503,7 @@ jobs:
               var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
-                set(v) { sp.edit().putBoolean("theme", v).apply() }
+                set(v) { sp.edit().putString("theme", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
@@ -2513,7 +2513,7 @@ jobs:
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
               var startMode: String get() = sp.getString("startMode", "resume") ?: "resume"
-                set(v) { sp.edit().putBoolean("startMode", v).apply() }
+                set(v) { sp.edit().putString("startMode", v).apply() }
               var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
                 set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
 
