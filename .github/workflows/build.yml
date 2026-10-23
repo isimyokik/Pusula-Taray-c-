@@ -519,9 +519,6 @@ jobs:
               private var lastPlaying = false
               private var lastTitle = ""
               private var lastArtist = ""
-              private var userPaused = false
-              /** true = tarayıcı native video PiP (requestPictureInPicture) kullanılıyor */
-              private var nativeVideoPip = false
               private lateinit var dockBar: LinearLayout
               private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
               private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -529,8 +526,7 @@ jobs:
               private val mediaStatePoll = object : Runnable {
                   override fun run() {
                       pollMedia()
-                      val delay = if (isInPictureInPictureMode || nativeVideoPip) 4000L else 2000L
-                      handler.postDelayed(this, delay)
+                      handler.postDelayed(this, 1500L)
                   }
               }
 
@@ -557,16 +553,12 @@ jobs:
                       }
                   } catch (_: Exception) { return }
                   if (!has) {
-                      if (hasMedia) { hasMedia = false; lastPlaying = false; userPaused = false; PlaybackService.stop(this) }
+                      if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
                       return
                   }
-                  if (playing) userPaused = false
                   val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
-                  if (changed && (playing || PlaybackService.running)) {
-                      val report = if (userPaused) false else playing
-                      PlaybackService.update(this, report, title, artist)
-                  }
+                  if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
               }
 
               private fun pipAction(code: Int, icon: Int, label: String, action: String): android.app.RemoteAction {
@@ -578,48 +570,17 @@ jobs:
                   return android.app.RemoteAction(android.graphics.drawable.Icon.createWithResource(this, icon), label, label, pi)
               }
 
-              private val pipMediaPump = object : Runnable {
-                  override fun run() {
-                      // Native video PiP'te hiçbir şey yapma. Activity PiP'te sadece WebView uyanık kalsın.
-                      if (nativeVideoPip || !isInPictureInPictureMode) return
-                      try { shown?.onResume() } catch (_: Exception) { }
-                      handler.postDelayed(this, 5000L)
-                  }
-              }
-
+              /** Küçük pencereye yalnızca menüdeki "Küçük pencere" düğmesiyle geçilir. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
-                  userPaused = false
-                  // 1) Önce native video PiP dene (Chrome gibi). CSS/Activity PiP takılmaya yol açıyordu.
                   try {
-                      currentWeb()?.evaluateJavascript(NATIVE_VIDEO_PIP_JS) { result ->
-                          val ok = result != null && result.contains("true")
-                          if (ok) {
-                              nativeVideoPip = true
-                              if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
-                          } else {
-                              enterActivityPip()
-                          }
-                      }
-                  } catch (_: Exception) {
-                      enterActivityPip()
-                  }
-              }
-
-              private fun enterActivityPip() {
-                  nativeVideoPip = false
-                  try {
-                      try { shown?.onResume() } catch (_: Exception) { }
                       val b = android.app.PictureInPictureParams.Builder()
                           .setAspectRatio(android.util.Rational(16, 9))
-                      if (Build.VERSION.SDK_INT >= 26) {
-                          val acts = ArrayList<android.app.RemoteAction>()
-                          acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
-                          acts.add(pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
-                          acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
-                          b.setActions(acts)
-                      }
-                      // CSS ile sayfayı parçalamıyoruz — takılmanın ana kaynağı buydu.
+                      val acts = ArrayList<android.app.RemoteAction>()
+                      acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
+                      acts.add(pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
+                      acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
+                      b.setActions(acts)
                       enterPictureInPictureMode(b.build())
                   } catch (_: Exception) { toast("Küçük pencere açılamadı") }
               }
@@ -627,24 +588,24 @@ jobs:
               private fun onPipChanged(pip: Boolean) {
                   topBar.visibility = if (pip) View.GONE else View.VISIBLE
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
-                  handler.removeCallbacks(pipMediaPump)
                   if (pip) {
                       closeFind()
                       appInBackground = false
-                      userPaused = false
+                      handler.removeCallbacks(backgroundMediaPump)
                       try { shown?.onResume() } catch (_: Exception) { }
-                      // Bilinçli olarak PIP_ON_JS yok — CSS hack takılma yapıyordu
-                      if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
-                      handler.post(pipMediaPump)
+                      if (customView == null) {
+                          try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
+                      }
+                      if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist)
+                      // Tek seferlik kontrol: pencere küçülürken video duraksadıysa bir kez devam ettir.
+                      handler.postDelayed({
+                          if (isInPictureInPictureMode && lastPlaying) {
+                              try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
+                          }
+                      }, 600)
                   } else {
-                      nativeVideoPip = false
-                      try { currentWeb()?.evaluateJavascript(EXIT_NATIVE_PIP_JS, null) } catch (_: Exception) { }
+                      for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
                   }
-              }
-
-              override fun onUserLeaveHint() {
-                  super.onUserLeaveHint()
-                  if (Build.VERSION.SDK_INT >= 26 && (customView != null || hasMedia)) enterPip()
               }
 
               override fun onConfigurationChanged(newConfig: Configuration) {
@@ -660,12 +621,6 @@ jobs:
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
-                      when (act) {
-                          PlaybackService.ACTION_PLAY -> userPaused = false
-                          PlaybackService.ACTION_PAUSE -> userPaused = true
-                          PlaybackService.ACTION_TOGGLE -> userPaused = lastPlaying
-                          else -> { }
-                      }
                       val js = when (act) {
                           PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
@@ -683,10 +638,10 @@ jobs:
 
               private val backgroundMediaPump = object : Runnable {
                   override fun run() {
-                      if (!appInBackground || !prefs.bgPlay || isInPictureInPictureMode || nativeVideoPip) return
+                      if (!appInBackground || !prefs.bgPlay) return
                       val t = tabs.getOrNull(cur)
                       try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
-                      handler.postDelayed(this, 4000L)
+                      handler.postDelayed(this, 1200L)
                   }
               }
 
@@ -777,11 +732,9 @@ jobs:
                   super.onPause()
                   saveTabs()
                   CookieManager.getInstance().flush()
-                  if (isInPictureInPictureMode || nativeVideoPip) {
+                  if (isInPictureInPictureMode) {
+                      // Küçük pencerede video akışına karışma; sadece WebView'ı canlı tut.
                       try { shown?.onResume() } catch (_: Exception) { }
-                      if (hasMedia) PlaybackService.update(this, !userPaused, lastTitle, lastArtist)
-                      handler.removeCallbacks(pipMediaPump)
-                      if (!nativeVideoPip) handler.post(pipMediaPump)
                       return
                   }
                   if (prefs.bgPlay) {
@@ -797,10 +750,8 @@ jobs:
 
               override fun onStop() {
                   super.onStop()
-                  if (isInPictureInPictureMode || nativeVideoPip) {
+                  if (isInPictureInPictureMode) {
                       try { shown?.onResume() } catch (_: Exception) { }
-                      handler.removeCallbacks(pipMediaPump)
-                      if (!nativeVideoPip) handler.post(pipMediaPump)
                   }
               }
 
@@ -815,7 +766,6 @@ jobs:
                   try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
                   handler.removeCallbacks(backgroundMediaPump)
                   handler.removeCallbacks(mediaStatePoll)
-                  handler.removeCallbacks(pipMediaPump)
                   PlaybackService.stop(this)
                   if (prefs.clearOnExit) {
                       try {
@@ -1522,7 +1472,11 @@ jobs:
                           lb.maxLines = 2; lb.setTextColor(cText)
                           lb.setPadding(dp(2), dp(6), dp(2), 0)
                           cell.addView(lb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-                          cell.setOnClickListener { d.dismiss(); item.act() }
+                          cell.setOnClickListener {
+                              d.dismiss()
+                              // Menü kapanırken küçük pencereye geçişin takılmaması için kısa gecikme.
+                              if (item.label == "Küçük pencere") handler.postDelayed({ item.act() }, 150) else item.act()
+                          }
                           lr.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                       }
                       for (k in rowItems.size until 4) lr.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
@@ -2218,14 +2172,13 @@ jobs:
                       "}else{vd.muted=true;}" +
                       "}" +
                       "}else if(!ad){hideAdUi(false);}" +
-                      "}catch(e){}},400);" +
+                      "}catch(e){}},120);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
                       "(function(){try{" +
                           "document.querySelectorAll('video,audio').forEach(function(m){" +
-                          "if(m.dataset.pusulaWasPlaying==='1' && m.paused && !m.ended && m.readyState>=2){" +
-                          "var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                          "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                           "});" +
                           "}catch(e){}})();"
 
@@ -2312,30 +2265,12 @@ jobs:
                       "});" +
                       "}catch(e){}})();"
 
-                  /** Chrome tarzı native video PiP — Activity+CSS PiP yerine. true/false döner. */
-                  const val NATIVE_VIDEO_PIP_JS =
-                      "(function(){try{" +
-                      "var v=document.querySelector('video.html5-main-video')" +
-                      "||document.querySelector('.html5-video-player video')" +
-                      "||document.querySelector('video');" +
-                      "if(!v)return false;" +
-                      "if(!document.pictureInPictureEnabled)return false;" +
-                      "if(document.pictureInPictureElement)return true;" +
-                      "v.requestPictureInPicture();" +
-                      "return true;" +
-                      "}catch(e){return false;}})();"
-
-                  const val EXIT_NATIVE_PIP_JS =
-                      "(function(){try{" +
-                      "if(document.pictureInPictureElement)document.exitPictureInPicture();" +
-                      "}catch(e){}})();"
-
+                  // Not: burada artık video.play() çağrılmaz; küçük pencerede oynat/duraklat döngüsüne yol açıyordu.
                   const val PIP_ON_JS =
                       "(function(){try{" +
                       "if(document.getElementById('__pip'))return;" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
                       "if(!v)return;" +
-                      "try{if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}catch(x){}" +
                       "var s=document.createElement('style');s.id='__pip';" +
                       "s.textContent='" +
                       "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:100%!important}" +
@@ -2347,14 +2282,13 @@ jobs:
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
                       "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e.style.setProperty('transform','none','important');e.style.setProperty('overflow','visible','important');e=e.parentElement;}" +
-                      "window.dispatchEvent(new Event('resize'));" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
                       "(function(){try{" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
-                      "window.dispatchEvent(new Event('resize'));" +
+                      "document.querySelectorAll('*').forEach(function(x){try{if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');}catch(z){}});" +
                       "}catch(e){}})();"
 
                   const val LANDSCAPE_VIDEO_JS =
