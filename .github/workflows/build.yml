@@ -2500,7 +2500,7 @@ jobs:
 
                   @Volatile var running = false
 
-                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                  fn update(ctx: Context, playing: Boolean, title: String, artist: String) {
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
                           .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist)
                       try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
