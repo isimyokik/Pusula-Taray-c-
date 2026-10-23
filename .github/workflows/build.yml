@@ -1,39 +1,28 @@
 name: Pusula APK
-
-on:
-  push:
-  workflow_dispatch:
-
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
+        with: { distribution: 'temurin', java-version: '17' }
       - name: Projeyi olustur
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
-          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
-
+          mkdir -p app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.7.3" apply false
               id("org.jetbrains.kotlin.android") version "2.0.21" apply false
           }
           EOF
-
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           kotlin.code.style=official
           EOF
-
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
               repositories {
@@ -52,7 +41,6 @@ jobs:
           rootProject.name = "Pusula"
           include(":app")
           EOF
-
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -66,7 +54,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 34
                   versionCode = 1
-                  versionName = "2.1"
+                  versionName = "2.2-2fix"
               }
               buildTypes {
                   release {
@@ -82,13 +70,12 @@ jobs:
               }
           }
           dependencies {
-              implementation("androidx.core:core-ktx:1.13.1")
+              implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.appcompat:appcompat:1.7.0")
               implementation("androidx.webkit:webkit:1.12.1")
               implementation("androidx.media:media:1.7.0")
           }
           EOF
-
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -96,1165 +83,366 @@ jobs:
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-              <application
-                  android:allowBackup="false"
-                  android:icon="@drawable/ic_launcher"
-                  android:label="@string/app_name"
-                  android:theme="@style/Theme.Pusula"
-                  android:usesCleartextTraffic="true">
-                  <service
-                      android:name=".PlaybackService"
-                      android:exported="false"
-                      android:foregroundServiceType="mediaPlayback" />
-                  <activity
-                      android:name=".MainActivity"
-                      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
-                      android:exported="true"
-                      android:launchMode="singleTask"
-                      android:supportsPictureInPicture="true"
-                      android:windowSoftInputMode="adjustResize|stateHidden">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
+              <application android:allowBackup="false" android:icon="@drawable/ic_launcher" android:label="@string/app_name" android:theme="@style/Theme.Pusula" android:usesCleartextTraffic="true">
+                  <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+                  <activity android:name=".MainActivity" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode" android:exported="true" android:launchMode="singleTask" android:supportsPictureInPicture="true" android:windowSoftInputMode="adjustResize|stateHidden">
+                      <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
-
           cat > app/src/main/assets/newtab.html <<'EOF'
           <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Yeni Sekme</title></head><body style="background:#0b1020;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh">Rota</body></html>
           EOF
-
-          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
-          package com.pusula.browser
-          import android.annotation.SuppressLint
-          import android.app.Dialog
-          import android.app.DownloadManager
-          import android.graphics.Matrix
-          import android.content.BroadcastReceiver
-          import android.content.Context
-          import android.content.Intent
-          import android.content.IntentFilter
-          import android.content.res.ColorStateList
-          import android.graphics.Bitmap
-          import android.graphics.Canvas
-          import android.graphics.Color
-          import android.graphics.Typeface
-          import android.graphics.drawable.ColorDrawable
-          import android.graphics.drawable.Drawable
-          import android.graphics.drawable.GradientDrawable
-          import android.graphics.drawable.RippleDrawable
-          import android.net.Uri
-          import android.os.Build
-          import android.os.Bundle
-          import android.os.Environment
-          import android.os.Handler
-          import android.os.Looper
-          import android.os.Message
-          import android.text.Html
-          import android.text.InputType
-          import android.view.Gravity
-          import android.view.KeyEvent
-          import android.view.View
-          import android.view.ViewGroup
-          import android.view.Window
-          import android.view.inputmethod.EditorInfo
-          import android.view.inputmethod.InputMethodManager
-          import android.webkit.CookieManager
-          import android.webkit.JsResult
-          import android.webkit.URLUtil
-          import android.webkit.ValueCallback
-          import android.webkit.WebChromeClient
-          import android.webkit.WebResourceError
-          import android.webkit.WebResourceRequest
-          import android.webkit.WebResourceResponse
-          import android.webkit.WebStorage
-          import android.webkit.WebView
-          import android.webkit.WebViewClient
-          import android.widget.EditText
-          import android.widget.FrameLayout
-          import android.widget.ImageButton
-          import android.widget.ImageView
-          import android.widget.LinearLayout
-          import android.widget.ProgressBar
-          import android.widget.ScrollView
-          import android.widget.TextView
-          import android.widget.Toast
-          import androidx.activity.OnBackPressedCallback
-          import androidx.activity.result.contract.ActivityResultContracts
-          import androidx.appcompat.app.AlertDialog
-          import androidx.appcompat.app.AppCompatActivity
-          import androidx.core.content.ContextCompat
-          import androidx.core.view.ViewCompat
-          import androidx.core.view.WindowCompat
-          import androidx.core.view.WindowInsetsCompat
-          import androidx.core.view.WindowInsetsControllerCompat
-          import androidx.core.widget.doAfterTextChanged
-          import androidx.appcompat.widget.SwitchCompat
-          import androidx.webkit.ScriptHandler
-          import androidx.webkit.WebViewAssetLoader
-          import androidx.webkit.WebViewCompat
-          import androidx.webkit.WebViewFeature
-          import org.json.JSONArray
-          import org.json.JSONObject
-          import java.io.ByteArrayInputStream
-          class MainActivity : AppCompatActivity() {
-              private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
-                  var title: String = "Yeni Sekme"
-                  var url: String = ""
-                  var pendingUrl: String? = null
-                  var desktop: Boolean = false
-                  var mobileUa: String = ""
-                  var progress: Int = 100
-                  var preview: Bitmap? = null
-                  var adScript: ScriptHandler? = null
-                  var keepScript: ScriptHandler? = null
-                  var hookScript: ScriptHandler? = null
-              }
-              private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
-              private class BgWebView(c: Context) : WebView(c) {
-                  override fun onWindowVisibilityChanged(visibility: Int) {
-                      if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
-                  }
-              }
-              private val tabs = ArrayList<BTab>()
-              private var cur = -1
-              private var shown: WebView? = null
-              private lateinit var prefs: Prefs
-              private lateinit var loader: WebViewAssetLoader
-              private val handler = Handler(Looper.getMainLooper())
-              private var appInBackground = false
-              private var hasMedia = false
-              private var lastPlaying = false
-              private var lastTitle = ""
-              private var lastArtist = ""
-              private lateinit var dockBar: LinearLayout
-              private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
-              private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-              private val mediaStatePoll = object : Runnable {
-                  override fun run() { pollMedia(); handler.postDelayed(this, 1500L) }
-              }
-              private fun pollMedia() {
-                  val t = tabs.getOrNull(cur) ?: return; try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
-              }
-              private fun onMediaState(raw: String?) {
-                  var has = false; var playing = false; var title = ""; var artist = ""
-                  try {
-                      if (raw != null && raw != "null" && raw != "\"\"") {
-                          val inner = JSONArray("[" + raw + "]").getString(0)
-                          if (inner.isNotEmpty()) {
-                              val o = JSONObject(inner); has = true; playing = o.optBoolean("p"); title = o.optString("t"); artist = o.optString("a")
-                          }
-                      }
-                  } catch (_: Exception) { return }
-                  if (!has) {
-                      if (hasMedia) {
-                          hasMedia = false; lastPlaying = false; PlaybackService.stop(this)
-                      }; return
-                  }
-                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
-                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
-                  if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
-              }
-              private fun enterPip() {
-                  if (Build.VERSION.SDK_INT < 26) { toast("Bu Android surumu kucuk pencereyi desteklemiyor"); return };
-                  try {
-                      val p = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build();
-                      enterPictureInPictureMode(p)
-                  } catch (_: Exception) { toast("Kucuk pencere acilamadi") }
-              }
-              private fun onPipChanged(pip: Boolean) {
-                  topBar.visibility = if (pip) View.GONE else View.VISIBLE;
-                  dockBar.visibility = if (pip) View.GONE else View.VISIBLE;
-                  if (pip) {
-                      closeFind(); shown?.onResume();
-                      if (customView == null) {
-                          try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
-                      }
-                  } else {
-                      for (t in tabs) {
-                          try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
-                      }
-                  }
-              }
-              override fun onUserLeaveHint() {
-                  super.onUserLeaveHint(); if (customView != null && Build.VERSION.SDK_INT >= 26) enterPip()
-              }
-              private val mediaControlReceiver = object : BroadcastReceiver() {
-                  override fun onReceive(context: Context?, intent: Intent?) {
-                      val act = intent?.action ?: return
-                      val js = when (act) {
-                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS;
-                          PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS;
-                          PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS;
-                          PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS;
-                          else -> return
-                      }
-                      val targets = if (act == PlaybackService.ACTION_PAUSE) tabs.toList() else listOfNotNull(tabs.getOrNull(cur))
-                      targets.forEach { t -> try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { } }
-                  }
-              }
-              private val backgroundMediaPump = object : Runnable {
-                  override fun run() {
-                      if (!appInBackground || !prefs.bgPlay) return;
-                      val t = tabs.getOrNull(cur);
-                      try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { };
-                      handler.postDelayed(this, 1200L)
-                  }
-              }
-              private lateinit var root: LinearLayout; private lateinit var content: FrameLayout; private lateinit var fullscreen: FrameLayout; private lateinit var urlField: EditText; private lateinit var progress: ProgressBar; private lateinit var backBtn: ImageButton; private lateinit var fwdBtn: ImageButton; private lateinit var tabCount: TextView; private lateinit var privateBadge: TextView; private lateinit var findBar: LinearLayout; private lateinit var findInput: EditText; private lateinit var findCount: TextView
-              private var dark = false; private var cBg = 0; private var cSurface = 0; private var cField = 0; private var cText = 0; private var cSub = 0; private var cIcon = 0; private var cAccent = 0; private var cAccent2 = 0; private lateinit var topBar: LinearLayout
-              private var customView: View? = null; private var customCb: WebChromeClient.CustomViewCallback? = null; private var fileCb: ValueCallback<Array<Uri>>? = null; private var startUrl: String? = null
-              private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-                  fileCb?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res.resultCode, res.data)); fileCb = null
-              }
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState); prefs = Prefs(this);
-                  loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build();
-                  loadPalette(); WindowCompat.setDecorFitsSystemWindows(window, false); buildUi()
-                  val bars = WindowInsetsControllerCompat(window, window.decorView);
-                  bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark;
-                  startUrl = intent?.dataString
-                  onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-                      override fun handleOnBackPressed() { handleBack() }
-                  })
-                  val mediaFilter = IntentFilter().apply {
-                      addAction(PlaybackService.ACTION_PLAY); addAction(PlaybackService.ACTION_TOGGLE); addAction(PlaybackService.ACTION_PAUSE); addAction(PlaybackService.ACTION_PREVIOUS); addAction(PlaybackService.ACTION_NEXT)
-                  }
-                  ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED);
-                  startBrowsing();
-                  addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) };
-                  handler.removeCallbacks(mediaStatePoll); handler.postDelayed(mediaStatePoll, 1500L)
-                  if (Build.VERSION.SDK_INT >= 33 && !prefs.askedNotif && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                      prefs.askedNotif = true; notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                  }
-              }
-              override fun onNewIntent(intent: Intent) {
-                  super.onNewIntent(intent); val u = intent.dataString ?: return; openTab(u)
-              }
-              override fun onPause() {
-                  super.onPause(); saveTabs(); CookieManager.getInstance().flush();
-                  if (prefs.bgPlay) {
-                      appInBackground = true; handler.removeCallbacks(backgroundMediaPump); handler.post(backgroundMediaPump);
-                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
-                  } else {
-                      appInBackground = true; shown?.onPause()
-                  }
-              }
-              override fun onResume() {
-                  super.onResume(); appInBackground = false; handler.removeCallbacks(backgroundMediaPump); shown?.onResume()
-              }
-              override fun onDestroy() {
-                  try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { };
-                  handler.removeCallbacks(backgroundMediaPump); handler.removeCallbacks(mediaStatePoll); PlaybackService.stop(this);
-                  for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } };
-                  super.onDestroy()
-              }
-              private fun loadPalette() {
-                  val pal = Themes.get(prefs.theme); dark = pal.dark; cBg = pal.bg; cSurface = pal.surface; cField = pal.field; cText = pal.text; cSub = pal.sub; cIcon = pal.icon; cAccent = pal.accent; cAccent2 = pal.accent2;
-                  window.setBackgroundDrawable(ColorDrawable(cBg))
-              }
-              private fun applyTheme() {
-                  if (customView != null) hideCustom();
-                  val web = shown; if (web != null) content.removeView(web);
-                  loadPalette(); buildUi();
-                  if (web != null) content.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                  val bars = WindowInsetsControllerCompat(window, window.decorView);
-                  bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark;
-                  val t = tabs.getOrNull(cur);
-                  if (t != null) {
-                      privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE;
-                      topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg);
-                      if (t.url.startsWith(ASSET_PREFIX)) t.web.reload()
-                  };
-                  syncUi()
-              }
-              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
-              private fun shape(color: Int, radiusDp: Int): GradientDrawable {
-                  val g = GradientDrawable(); g.setColor(color); g.cornerRadius = dp(radiusDp).toFloat(); return g
-              }
-              private fun ripple(content: Drawable?): RippleDrawable = RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
-              private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton {
-                  val b = ImageButton(this); b.setImageResource(res); b.setColorFilter(cIcon); b.background = ripple(null); b.contentDescription = desc; b.scaleType = ImageView.ScaleType.CENTER; b.setOnClickListener { v -> onClick(v) }; return b
-              }
-              private fun textBtn(label: String, onClick: () -> Unit): TextView {
-                  val t = TextView(this); t.text = label; t.textSize = 16f; t.setTextColor(cIcon); t.gravity = Gravity.CENTER; t.background = ripple(null); t.setOnClickListener { onClick() }; return t
-              }
-              private fun buildUi() {
-                  val match = ViewGroup.LayoutParams.MATCH_PARENT; val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
-                  root = LinearLayout(this); root.orientation = LinearLayout.VERTICAL; root.setBackgroundColor(cBg); root.isFocusable = true; root.isFocusableInTouchMode = true
-                  topBar = LinearLayout(this); topBar.orientation = LinearLayout.HORIZONTAL; topBar.gravity = Gravity.CENTER_VERTICAL; topBar.setPadding(dp(10), dp(8), dp(10), dp(8)); topBar.setBackgroundColor(cBg)
-                  privateBadge = TextView(this); privateBadge.text = "GIZLI"; privateBadge.textSize = 11f; privateBadge.setTypeface(null, Typeface.BOLD); privateBadge.setTextColor(Color.WHITE); privateBadge.gravity = Gravity.CENTER; privateBadge.setPadding(dp(10), 0, dp(10), 0); privateBadge.background = shape(0xFF8B3DFF.toInt(), 16); privateBadge.visibility = View.GONE
-                  val blp = LinearLayout.LayoutParams(wrap, dp(32)); blp.rightMargin = dp(8); topBar.addView(privateBadge, blp)
-                  val pill = LinearLayout(this); pill.orientation = LinearLayout.HORIZONTAL; pill.gravity = Gravity.CENTER_VERTICAL; pill.background = shape(cSurface, 24); pill.elevation = dp(3).toFloat()
-                  val lead = TextView(this); lead.text = "🔎"; lead.textSize = 15f; lead.gravity = Gravity.CENTER; pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
-                  urlField = EditText(this); urlField.hint = "Ara veya adres yaz"; urlField.setHintTextColor(cSub); urlField.setTextColor(cText); urlField.textSize = 15f; urlField.isSingleLine = true; urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; urlField.imeOptions = EditorInfo.IME_ACTION_GO; urlField.setSelectAllOnFocus(true); urlField.background = null; urlField.setPadding(0, 0, 0, 0)
-                  urlField.setOnEditorActionListener { _, actionId, event ->
-                      if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) {
-                          submitUrl(); true
-                      } else false
-                  }
-                  urlField.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) syncUrlText() }
-                  pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f));
-                  pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
-                  topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
-                  progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.max = 100; progress.progressTintList = ColorStateList.valueOf(cAccent); progress.progressBackgroundTintList = ColorStateList.valueOf(cBg); progress.visibility = View.INVISIBLE
-                  content = FrameLayout(this); content.setBackgroundColor(cBg)
-                  if (!prefs.barBottom) {
-                      root.addView(topBar, LinearLayout.LayoutParams(match, wrap));
-                      root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
-                  }
-                  root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
-                  findBar = LinearLayout(this); findBar.orientation = LinearLayout.HORIZONTAL; findBar.gravity = Gravity.CENTER_VERTICAL; findBar.setBackgroundColor(cSurface); findBar.setPadding(dp(8), dp(4), dp(4), dp(4)); findBar.visibility = View.GONE
-                  findInput = EditText(this); findInput.hint = "Sayfada bul"; findInput.setHintTextColor(cSub); findInput.setTextColor(cText); findInput.textSize = 15f; findInput.isSingleLine = true; findInput.background = shape(cField, 18); findInput.setPadding(dp(14), 0, dp(14), 0)
-                  findInput.doAfterTextChanged { text ->
-                      val t = text?.toString() ?: ""; val web = currentWeb();
-                      if (web != null) {
-                          if (t.isEmpty()) { web.clearMatches(); findCount.text = "" } else { web.findAllAsync(t) }
-                      }
-                  }
-                  findBar.addView(findInput, LinearLayout.LayoutParams(0, dp(36), 1f))
-                  findCount = TextView(this); findCount.setTextColor(cSub); findCount.textSize = 13f; findCount.setPadding(dp(8), 0, dp(8), 0); findBar.addView(findCount, LinearLayout.LayoutParams(wrap, wrap))
-                  findBar.addView(textBtn("▲") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40)));
-                  findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40)));
-                  findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
-                  root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
-                  if (prefs.barBottom) {
-                      root.addView(progress, LinearLayout.LayoutParams(match, dp(3)));
-                      root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
-                  }
-                  dockBar = LinearLayout(this); val dock = dockBar; dock.orientation = LinearLayout.VERTICAL; dock.setBackgroundColor(cBg); dock.setPadding(dp(12), dp(6), dp(12), dp(8)); dock.clipToPadding = false; dock.clipChildren = false
-                  val bottom = LinearLayout(this); bottom.orientation = LinearLayout.HORIZONTAL; bottom.gravity = Gravity.CENTER_VERTICAL; bottom.background = shape(cSurface, 30); bottom.elevation = dp(8).toFloat(); bottom.setPadding(dp(6), dp(4), dp(6), dp(4))
-                  backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }; fwdBtn = iconBtn(R.drawable.ic_forward, "Ileri") { goForward() }
-                  val homeBtn = iconBtn(R.drawable.ic_home, "Ana Sayfa") { goHome() }; homeBtn.setColorFilter(Color.WHITE);
-                  val hg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2)); hg.shape = GradientDrawable.OVAL; homeBtn.background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), hg, null)
-                  val addBtn = iconBtn(R.drawable.ic_add, "Yeni Sekme") { openTab(null) }; val menuBtn = iconBtn(R.drawable.ic_menu, "Menu") { v -> showMenu(v) }
-                  val tabsWrap = FrameLayout(this); tabsWrap.background = ripple(null); tabsWrap.contentDescription = "Sekmeler"; tabsWrap.setOnClickListener { showTabs() }
-                  tabCount = TextView(this); tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f; tabCount.setTypeface(null, Typeface.BOLD); tabCount.setTextColor(cIcon);
-                  val tcBg = GradientDrawable(); tcBg.setColor(0); tcBg.cornerRadius = dp(7).toFloat(); tcBg.setStroke(dp(2), cIcon); tabCount.background = tcBg;
-                  tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
-                  for (v in listOf<View>(backBtn, fwdBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f));
-                  val hlp = LinearLayout.LayoutParams(dp(48), dp(48)); hlp.leftMargin = dp(4); hlp.rightMargin = dp(4); bottom.addView(homeBtn, hlp);
-                  for (v in listOf<View>(addBtn, tabsWrap, menuBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f));
-                  dock.addView(bottom, LinearLayout.LayoutParams(match, wrap)); root.addView(dock, LinearLayout.LayoutParams(match, wrap))
-                  fullscreen = FrameLayout(this); fullscreen.setBackgroundColor(Color.BLACK); fullscreen.visibility = View.GONE
-                  val frame = FrameLayout(this); frame.addView(root, FrameLayout.LayoutParams(match, match)); frame.addView(fullscreen, FrameLayout.LayoutParams(match, match)); setContentView(frame)
-                  ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-                      val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime());
-                      v.setPadding(b.left, b.top, b.right, b.bottom); insets
-                  }
-                  root.requestFocus(); updateTabCount()
-              }
-              private fun startBrowsing() {
-                  if (tabs.isEmpty()) {
-                      val saved = prefs.savedTabs();
-                      if (saved.isEmpty()) {
-                          openTab(null)
-                      } else {
-                          val want = prefs.savedCurrent();
-                          for (u in saved.take(12)) {
-                              val t = createTab();
-                              if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) } else { t.pendingUrl = NEWTAB_URL }
-                          };
-                          switchTo(if (want in tabs.indices) want else 0)
-                      }
-                  };
-                  val s = startUrl; startUrl = null; if (s != null) openTab(s)
-              }
-              private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
-              @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
-              private fun createTab(incognito: Boolean = false): BTab {
-                  val web = BgWebView(this); val bridge = PusulaBridge(prefs); val tab = BTab(web, bridge, incognito); val s = web.settings
-                  s.javaScriptEnabled = true; s.domStorageEnabled = true; s.mediaPlaybackRequiresUserGesture = false; s.setSupportMultipleWindows(true); s.javaScriptCanOpenWindowsAutomatically = false; s.setSupportZoom(true); s.builtInZoomControls = true; s.displayZoomControls = false; s.loadWithOverviewMode = true; s.useWideViewPort = true; s.allowFileAccess = false; s.allowContentAccess = false; s.setGeolocationEnabled(false); s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                  val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), ""); s.userAgentString = ua; tab.mobileUa = ua;
-                  web.addJavascriptInterface(bridge, "Pusula"); syncScripts(tab)
-                  web.setFindListener { active, total, _ ->
-                      if (tabs.getOrNull(cur) === tab) { findCount.text = if (total == 0) "0" else "${active + 1}/$total" }
-                  }
-                  web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ -> startDownload(url, userAgent, contentDisposition, mimeType) }
-                  web.webViewClient = makeClient(tab); web.webChromeClient = makeChrome(tab); tabs.add(tab); updateTabCount(); return tab
-              }
-              private fun syncScripts(t: BTab) {
-                  if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
-                  try {
-                      if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
-                      if (t.keepScript != null) t.keepScript?.remove()
-                      t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS + "\n" + SMOOTH_CROSSFADE_JS, setOf("*"))
-                      if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
-                      else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
-                  } catch (_: Exception) { }
-              }
-              private fun settingsChanged() {
-                  for (t in tabs) syncScripts(t); val c = tabs.getOrNull(cur) ?: return; if (c.url.startsWith("http")) c.web.reload()
-              }
-              private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? {
-                  if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme acilabilir"); return null };
-                  val t = createTab(incognito); switchTo(tabs.size - 1);
-                  if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL)); return t
-              }
-              private fun switchTo(i: Int) {
-                  if (i !in tabs.indices) return
-                  shown?.let { tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }; content.removeView(it) }
-                  for (idx in tabs.indices) {
-                      if (idx != i) { try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {} }
-                  }
-                  cur = i; val t = tabs[i]; shown = t.web;
-                  content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                  t.web.onResume()
-                  try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
-                  val p = t.pendingUrl;
-                  if (p != null) { t.pendingUrl = null; t.web.loadUrl(p) };
-                  closeFind(); privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE;
-                  topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg); syncUi()
-              }
-              private fun closeTab(index: Int) {
-                  if (index !in tabs.indices) return;
-                  val t = tabs[index]; val wasCurrent = index == cur;
-                  if (wasCurrent) { content.removeView(t.web); shown = null };
-                  t.web.stopLoading(); t.web.clearHistory(); t.web.clearCache(true); t.web.destroy(); tabs.removeAt(index);
-                  if (t.incognito) {
-                      CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush(); WebStorage.getInstance().deleteAllData()
-                  };
-                  if (tabs.isEmpty()) { cur = -1; openTab(null); return };
-                  if (wasCurrent) switchTo(minOf(index, tabs.size - 1)) else if (index < cur) cur--;
-                  updateTabCount()
-              }
-              private fun updateTabCount() { tabCount.text = tabs.size.toString() }
-              private fun saveTabs() {
-                  if (tabs.isEmpty()) return;
-                  val urls = ArrayList<String>();
-                  for (t in tabs) {
-                      if (t.incognito) continue;
-                      val u = t.pendingUrl ?: t.url; urls.add(if (u.startsWith("http")) u else NEWTAB_URL)
-                  };
-                  prefs.saveTabs(urls, 0)
-              }
-              private fun shownUrl(u: String): String = if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) "" else u.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
-              private fun syncUrlText() { val t = tabs.getOrNull(cur); urlField.setText(if (t == null) "" else shownUrl(t.pendingUrl ?: t.url)) }
-              private fun syncUi() {
-                  val t = tabs.getOrNull(cur) ?: return; if (!urlField.hasFocus()) syncUrlText(); setLoadProgress(t.progress); refreshNav(); updateTabCount()
-              }
-              private fun setLoadProgress(p: Int) { progress.progress = p; progress.visibility = if (p in 1..99) View.VISIBLE else View.INVISIBLE }
-              private fun refreshNav() {
-                  val web = currentWeb(); backBtn.alpha = if (web != null && (web.canGoBack() || tabs.size > 1)) 1f else 0.35f; fwdBtn.alpha = if (web != null && web.canGoForward()) 1f else 0.35f
-              }
-              private fun loadInCurrent(url: String) { val t = tabs.getOrNull(cur) ?: return; t.pendingUrl = null; t.web.loadUrl(url) }
-              private fun submitUrl() {
-                  val text = urlField.text.toString(); loadInCurrent(resolveInput(text, Engines.get(prefs.engine))); hideKeyboard(); urlField.clearFocus(); root.requestFocus()
-              }
-              private fun goBack() { val web = currentWeb() ?: return; if (web.canGoBack()) web.goBack() else if (tabs.size > 1) closeTab(cur) }
-              private fun goForward() { val web = currentWeb() ?: return; if (web.canGoForward()) web.goForward() }
-              private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
-              private fun reloadCurrent() { val t = tabs.getOrNull(cur) ?: return; if (t.progress in 1..99) t.web.stopLoading() else t.web.reload() }
-              private fun handleBack() {
-                  val web = currentWeb();
-                  when {
-                      customView != null -> hideCustom();
-                      findBar.visibility == View.VISIBLE -> closeFind();
-                      urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() };
-                      web != null && web.canGoBack() -> web.goBack();
-                      tabs.size > 1 -> closeTab(cur);
-                      else -> finish()
-                  }
-              }
-              private fun shouldBlockAd(uri: Uri): Boolean {
-                  val host = (uri.host ?: "").lowercase(); val path = (uri.encodedPath ?: "").lowercase();
-                  val blockedHosts = listOf("doubleclick.net","googlesyndication.com","googleadservices.com","adservice.google.com","adnxs.com","adsrvr.org","adform.net","adcolony.com","taboola.com","outbrain.com","scorecardresearch.com","amazon-adsystem.com","criteo.com","hotjar.com","pagead2.googlesyndication.com");
-                  if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true;
-                  return path.contains("/ads/") || path.contains("/adserver/") || path.contains("/pagead/") || path.contains("/advertisement/") || path.contains("/api/stats/ads")
-              }
-              private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
-                  override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                      val uri = request?.url ?: return null;
-                      if (prefs.adBlock && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) {
-                          return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
-                      };
-                      return loader.shouldInterceptRequest(uri)
-                  }
-                  override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                      val u = request?.url ?: return false; val scheme = u.scheme ?: return false;
-                      return when (scheme) {
-                          "http","https","about","blob","data" -> false;
-                          "file","content","javascript" -> true;
-                          else -> openExternal(u.toString())
-                      }
-                  }
-                  override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                      val u = url ?: ""; tab.bridge.trusted = u.startsWith(ASSET_PREFIX); tab.url = u; tab.progress = 5; if (tabs.getOrNull(cur) === tab) syncUi()
-                  }
-                  override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                      if (url != null && !url.startsWith("data:")) tab.url = url; if (tabs.getOrNull(cur) === tab) syncUi()
-                  }
-                  override fun onPageFinished(view: WebView?, url: String?) {
-                      tab.progress = 100; val u = url ?: return;
-                      if (u.startsWith("http") && !tab.incognito) {
-                          val title = view?.title; prefs.addHistory(if (title.isNullOrBlank()) u else title, u)
-                      };
-                      if (tabs.getOrNull(cur) === tab) syncUi()
-                  }
-                  override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                      if (view == null || request == null || error == null) return;
-                      if (!request.isForMainFrame) return;
-                      val desc = error.description?.toString() ?: ""; if (desc.contains("ERR_ABORTED")) return;
-                      val failing = request.url.toString();
-                      view.loadDataWithBaseURL(failing, errorHtml(failing, desc), "text/html", "utf-8", failing)
-                  }
-              }
-              private fun makeChrome(tab: BTab): WebChromeClient = object : WebChromeClient() {
-                  override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                      tab.progress = newProgress; if (tabs.getOrNull(cur) === tab) setLoadProgress(newProgress)
-                  }
-                  override fun onReceivedTitle(view: WebView?, title: String?) {
-                      if (!title.isNullOrBlank()) tab.title = title
-                  }
-                  override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
-                      if (!isUserGesture || resultMsg == null) return false;
-                      val nt = openTab(null, false) ?: return false;
-                      val transport = resultMsg.obj as WebView.WebViewTransport;
-                      transport.webView = nt.web; resultMsg.sendToTarget(); return true
-                  }
-                  override fun onCloseWindow(window: WebView?) {
-                      handler.post { val i = tabs.indexOfFirst { it.web === window }; if (i >= 0) closeTab(i) }
-                  }
-                  override fun onShowFileChooser(webView: WebView?, filePathCallback: ValueCallback<Array<Uri>>?, fileChooserParams: FileChooserParams?): Boolean {
-                      fileCb?.onReceiveValue(null); fileCb = filePathCallback;
-                      return try {
-                          fileLauncher.launch(fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).setType("*/*")); true
-                      } catch (_: Exception) { fileCb?.onReceiveValue(null); fileCb = null; false }
-                  }
-                  override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                      if (view == null || customView != null) { callback?.onCustomViewHidden(); return };
-                      customView = view; customCb = callback;
-                      fullscreen.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                      fullscreen.visibility = View.VISIBLE; setBars(false)
-                  }
-                  override fun onHideCustomView() { hideCustom() }
-                  override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
-                      AlertDialog.Builder(this@MainActivity).setMessage(message).setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }.setOnCancelListener { result?.confirm() }.show();
-                      return true
-                  }
-              }
-              private fun hideCustom() {
-                  val v = customView ?: return; fullscreen.removeView(v); fullscreen.visibility = View.GONE; customView = null; customCb?.onCustomViewHidden(); customCb = null; setBars(true)
-              }
-              private fun setBars(show: Boolean) {
-                  val c = WindowInsetsControllerCompat(window, window.decorView);
-                  if (show) { c.show(WindowInsetsCompat.Type.systemBars()) } else {
-                      c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE; c.hide(WindowInsetsCompat.Type.systemBars())
-                  }
-              }
-              private fun openExternal(url: String): Boolean {
-                  try {
-                      val i = if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                      i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null; startActivity(i)
-                  } catch (_: Exception) { toast("Baglanti acilamadi") };
-                  return true
-              }
-              private fun errorHtml(url: String, desc: String): String {
-                  val bg = String.format("#%06X", 0xFFFFFF and cBg); val fg = String.format("#%06X", 0xFFFFFF and cText);
-                  val js = Html.escapeHtml("location.href=" + JSONObject.quote(url));
-                  return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-                          "<style>body{font-family:sans-serif;margin:0;padding:32px 24px;background:$bg;color:$fg}h1{font-size:22px}p{opacity:.75}" +
-                          "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
-                          "</style></head><body><h1>Yuklenemedi</h1><p>$url</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
-              }
-              private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) {
-                  if (!url.startsWith("http")) return;
-                  try {
-                      val name = URLUtil.guessFileName(url, cd, mime);
-                      val req = DownloadManager.Request(Uri.parse(url));
-                      if (mime != null) req.setMimeType(mime);
-                      val cookie = CookieManager.getInstance().getCookie(url);
-                      if (cookie != null) req.addRequestHeader("Cookie", cookie);
-                      if (ua != null) req.addRequestHeader("User-Agent", ua);
-                      req.setTitle(name);
-                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                      if (Build.VERSION.SDK_INT >= 29) req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-                      else req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name);
-                      (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req);
-                      toast("Indiriliyor: $name")
-                  } catch (_: Exception) { toast("Indirilemedi") }
-              }
-              private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
-              private fun hideKeyboard() {
-                  val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager; imm.hideSoftInputFromWindow(root.windowToken, 0)
-              }
-              private fun sheetWindow(d: Dialog, view: View, full: Boolean) {
-                  d.requestWindowFeature(Window.FEATURE_NO_TITLE); d.setContentView(view);
-                  d.window?.let { w ->
-                      w.setBackgroundDrawable(ColorDrawable(if (full) cBg else Color.TRANSPARENT));
-                      w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, if (full) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT);
-                      if (!full) w.setGravity(Gravity.BOTTOM)
-                  }
-              }
-              private fun showMenu(anchor: View) {
-                  val t = tabs.getOrNull(cur) ?: return; val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url); val d = Dialog(this)
-                  val items = listOf(
-                      SheetItem("➕","Yeni sekme",false){ openTab(null) },
-                      SheetItem("🕶","Gizli sekme",false){ openTab(null,true,true) },
-                      SheetItem(if(marked)"⭐"else"☆",if(marked)"Imi kaldir"else"Yer imi ekle",marked){ prefs.toggleBookmark(if(t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri guncellendi") },
-                      SheetItem("🔖","Yer imleri",false){ showEntries("Yer Imleri",prefs.bookmarks(),{prefs.removeBookmark(it.url)},null) },
-                      SheetItem("🕘","Gecmis",false){ showEntries("Gecmis",prefs.history(),{prefs.removeHistory(it.url)},Pair("Temizle"){prefs.clearHistory()}) },
-                      SheetItem("🔍","Sayfada bul",false){ openFind() },
-                      SheetItem("🖥","Masaustu sitesi",t.desktop){ toggleDesktop() },
-                      SheetItem("🪟","Kucuk pencere",false){ enterPip() },
-                      SheetItem("📤","Paylas",false){ shareCurrent() },
-                      SheetItem("🎨","Tema",false){ chooseTheme{} },
-                      SheetItem("⚙","Ayarlar",false){ showSettings() }
-                  )
-                  val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(14),dp(10),dp(14),dp(22));
-                  val r = dp(28).toFloat(); val bgd = GradientDrawable(); bgd.setColor(cSurface); bgd.cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f); col.background = bgd
-                  val handle = View(this); handle.background = shape(cField,3); val hlp = LinearLayout.LayoutParams(dp(42),dp(5)); hlp.gravity = Gravity.CENTER_HORIZONTAL; hlp.bottomMargin = dp(14); col.addView(handle,hlp)
-                  for (rowItems in items.chunked(4)) {
-                      val lr = LinearLayout(this); lr.orientation = LinearLayout.HORIZONTAL;
-                      for (item in rowItems) {
-                          val cell = LinearLayout(this); cell.orientation = LinearLayout.VERTICAL; cell.gravity = Gravity.CENTER_HORIZONTAL; cell.setPadding(0,dp(8),0,dp(8)); cell.background = ripple(null);
-                          val ic = TextView(this); ic.text = item.icon; ic.textSize = 22f; ic.gravity = Gravity.CENTER; ic.setTextColor(cText);
-                          ic.background = if(item.on){
-                              val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(19).toFloat(); g
-                          } else shape(cField,19);
-                          cell.addView(ic,LinearLayout.LayoutParams(dp(56),dp(56)));
-                          val lb = TextView(this); lb.text = item.label; lb.textSize = 11.5f; lb.gravity = Gravity.CENTER; lb.maxLines = 2; lb.setTextColor(cText); lb.setPadding(dp(2),dp(6),dp(2),0);
-                          cell.addView(lb,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-                          cell.setOnClickListener{ d.dismiss(); item.act() };
-                          lr.addView(cell,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                      };
-                      for(k in rowItems.size until 4) lr.addView(View(this),LinearLayout.LayoutParams(0,1,1f));
-                      col.addView(lr,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-                  }
-                  sheetWindow(d,col,false); d.show()
-              }
-              private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
-                  val items = ArrayList(list); val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(14),dp(34),dp(14),dp(14))
-                  val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(10));
-                  val tv = TextView(this); tv.text = title; tv.textSize = 24f; tv.setTypeface(null,Typeface.BOLD); tv.setTextColor(cText);
-                  head.addView(tv,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-                  val listCol = LinearLayout(this); listCol.orientation = LinearLayout.VERTICAL; var query = ""
-                  fun render() {
-                      listCol.removeAllViews(); val q = query.trim().lowercase();
-                      val shownList = items.filter{ q.isEmpty() || it.title.lowercase().contains(q) || it.url.lowercase().contains(q) }
-                      if (shownList.isEmpty()) {
-                          val e = TextView(this); e.text = if(items.isEmpty()) "Bos" else "Sonuc yok"; e.textSize = 15f; e.setTextColor(cSub); e.gravity = Gravity.CENTER; e.setPadding(0,dp(60),0,0);
-                          listCol.addView(e,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)); return
-                      }
-                      for (en in shownList) {
-                          val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(12),dp(10),dp(4),dp(10)); row.background = ripple(shape(cSurface,18));
-                          row.setOnClickListener{ d.dismiss(); loadInCurrent(en.url) };
-                          val host = shownUrl(en.url).substringBefore("/");
-                          val av = TextView(this); av.text = (host.firstOrNull() ?: '?').uppercaseChar().toString(); av.textSize = 17f; av.setTypeface(null,Typeface.BOLD); av.setTextColor(Color.WHITE); av.gravity = Gravity.CENTER;
-                          val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(14).toFloat(); av.background = g;
-                          row.addView(av,LinearLayout.LayoutParams(dp(42),dp(42)));
-                          val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12),0,dp(6),0);
-                          val t1 = TextView(this); t1.text = if(en.title.isBlank()) host else en.title; t1.textSize = 15f; t1.setTextColor(cText); t1.maxLines = 1; t1.ellipsize = android.text.TextUtils.TruncateAt.END; col.addView(t1);
-                          val t2 = TextView(this); t2.text = shownUrl(en.url); t2.textSize = 12.5f; t2.setTextColor(cSub); t2.maxLines = 1; t2.ellipsize = android.text.TextUtils.TruncateAt.END; col.addView(t2);
-                          row.addView(col,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-                          val x = textBtn("✕"){ onDelete(en); items.remove(en); render() }; x.setTextColor(cSub);
-                          row.addView(x,LinearLayout.LayoutParams(dp(44),dp(44)));
-                          val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); listCol.addView(row,lp)
-                      }
-                  }
-                  if (neutral != null) {
-                      val nb = textBtn(neutral.first){ neutral.second(); items.clear(); render() }; nb.setTextColor(cAccent); nb.setTypeface(null,Typeface.BOLD);
-                      head.addView(nb,LinearLayout.LayoutParams(dp(84),dp(40)))
-                  }
-                  val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD);
-                  head.addView(done,LinearLayout.LayoutParams(dp(64),dp(40)));
-                  rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-                  val search = EditText(this); search.hint = "Ara"; search.setHintTextColor(cSub); search.setTextColor(cText); search.textSize = 15f; search.isSingleLine = true; search.background = shape(cSurface,22); search.setPadding(dp(16),0,dp(16),0);
-                  search.doAfterTextChanged{ t -> query = t?.toString() ?: ""; render() };
-                  val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44)); slp.bottomMargin = dp(12); rootV.addView(search,slp)
-                  val scroll = ScrollView(this); scroll.addView(listCol); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f));
-                  render(); sheetWindow(d,rootV,true);
-                  d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); d.show()
-              }
-              private fun openFind() {
-                  findBar.visibility = View.VISIBLE; findInput.setText(""); findCount.text = ""; findInput.requestFocus();
-                  (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(findInput,0)
-              }
-              private fun closeFind() {
-                  if (findBar.visibility != View.VISIBLE) return; findBar.visibility = View.GONE; currentWeb()?.clearMatches(); hideKeyboard(); root.requestFocus()
-              }
-              private fun toggleDesktop() {
-                  val t = tabs.getOrNull(cur) ?: return; t.desktop = !t.desktop; val s = t.web.settings;
-                  if(t.desktop){
-                      val chrome = Regex("Chrome/[\\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0";
-                      s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
-                  } else { s.userAgentString = t.mobileUa };
-                  t.web.reload()
-              }
-              private fun shareCurrent() {
-                  val t = tabs.getOrNull(cur) ?: return; if (!t.url.startsWith("http")) return;
-                  startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,t.url),"Paylas"))
-              }
-              private fun capturePreview(tab: BTab) {
-                  try {
-                      val w = tab.web.width; val h = tab.web.height; if (w <= 0 || h <= 0) return;
-                      val sc = 360f / w; val bh = (h * sc).toInt().coerceIn(1,700);
-                      val bmp = Bitmap.createBitmap(360,bh,Bitmap.Config.RGB_565);
-                      val canvas = Canvas(bmp); canvas.scale(sc,sc); tab.web.draw(canvas); tab.preview = bmp
-                  } catch (_: Exception) {}
-              }
-              private fun pillBtn(label: String, colors: IntArray, onClick: () -> Unit): TextView {
-                  val t = TextView(this); t.text = label; t.textSize = 14f; t.setTypeface(null,Typeface.BOLD); t.setTextColor(Color.WHITE); t.gravity = Gravity.CENTER;
-                  val g = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,colors); g.cornerRadius = dp(24).toFloat(); t.background = g; t.setOnClickListener{ onClick() }; return t
-              }
-              private fun showTabs() {
-                  tabs.getOrNull(cur)?.let { capturePreview(it) }; val d = Dialog(this);
-                  val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(12),dp(34),dp(12),dp(16))
-                  val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(8));
-                  val title = TextView(this); title.textSize = 24f; title.setTypeface(null,Typeface.BOLD); title.setTextColor(cText);
-                  head.addView(title,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-                  val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD);
-                  head.addView(done,LinearLayout.LayoutParams(dp(72),dp(40)));
-                  rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-                  val grid = LinearLayout(this); grid.orientation = LinearLayout.VERTICAL; val scroll = ScrollView(this); scroll.addView(grid);
-                  rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
-                  val actions = LinearLayout(this); actions.orientation = LinearLayout.HORIZONTAL; actions.setPadding(0,dp(10),0,0);
-                  val b1 = pillBtn("+ Yeni sekme",intArrayOf(cAccent,cAccent2)){ d.dismiss(); openTab(null) };
-                  val b2 = pillBtn("Gizli sekme",intArrayOf(0xFF6D2BD9.toInt(),0xFFC026D3.toInt())){ d.dismiss(); openTab(null,true,true) };
-                  val l1 = LinearLayout.LayoutParams(0,dp(48),1f); l1.rightMargin = dp(6); val l2 = LinearLayout.LayoutParams(0,dp(48),1f); l2.leftMargin = dp(6);
-                  actions.addView(b1,l1); actions.addView(b2,l2); rootV.addView(actions,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-                  fillTabs(grid,title,d); sheetWindow(d,rootV,true); d.show()
-              }
-              private fun fillTabs(grid: LinearLayout, title: TextView, d: Dialog) {
-                  grid.removeAllViews(); title.text = "Sekmeler - " + tabs.size;
-                  for (rowStart in 0 until tabs.size step 2) {
-                      val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL;
-                      for (i in rowStart until minOf(rowStart+2,tabs.size)) {
-                          val lp = LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f); lp.setMargins(dp(5),dp(5),dp(5),dp(5));
-                          row.addView(tabCard(i,grid,title,d),lp)
-                      };
-                      if (rowStart+1 >= tabs.size) row.addView(View(this),LinearLayout.LayoutParams(0,1,1f));
-                      grid.addView(row,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-                  }
-              }
-              private fun tabCard(i: Int, grid: LinearLayout, title: TextView, d: Dialog): View {
-                  val t = tabs[i]; val card = LinearLayout(this); card.orientation = LinearLayout.VERTICAL; card.setPadding(dp(8),dp(4),dp(8),dp(8));
-                  val bg = GradientDrawable(); bg.setColor(if(t.incognito)0xFF2B1A55.toInt() else cSurface); bg.cornerRadius = dp(20).toFloat();
-                  if(i==cur) bg.setStroke(dp(2),if(t.incognito)0xFFA46BFF.toInt() else cAccent);
-                  card.background = bg; card.setOnClickListener{ d.dismiss(); switchTo(i) };
-                  val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL;
-                  val label = TextView(this);
-                  val name = if(t.title.isBlank() || t.title=="Yeni Sekme") shownUrl(t.pendingUrl ?: t.url).ifEmpty{ "Yeni sekme" } else t.title;
-                  label.text = (if(t.incognito)"GIZLI " else "") + name; label.textSize = 12.5f; label.maxLines = 1; label.ellipsize = android.text.TextUtils.TruncateAt.END;
-                  label.setTextColor(if(t.incognito)0xFFF3ECFF.toInt() else cText); if(i==cur) label.setTypeface(null,Typeface.BOLD); label.setPadding(dp(4),0,0,0);
-                  head.addView(label,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-                  head.addView(textBtn("x"){ closeTab(i); fillTabs(grid,title,d) },LinearLayout.LayoutParams(dp(34),dp(34)));
-                  card.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-                  val img = ImageView(this); img.scaleType = ImageView.ScaleType.MATRIX; img.background = shape(if(t.incognito)0xFF3A2470.toInt() else cField,14); img.clipToOutline = true;
-                  val bmp = t.preview;
-                  if (bmp != null) {
-                      img.setImageBitmap(bmp);
-                      img.post{ val sc = img.width.toFloat()/bmp.width; val m = Matrix(); m.setScale(sc,sc); img.imageMatrix = m }
-                  };
-                  card.addView(img,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(170))); return card
-              }
-              private fun settingsRow(icon: String, title: String, sub: String?, trailing: View?, onClick: () -> Unit): View {
-                  val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(12),dp(10),dp(14),dp(10)); row.background = ripple(shape(cSurface,18)); row.setOnClickListener{ onClick() };
-                  val ic = TextView(this); ic.text = icon; ic.textSize = 19f; ic.gravity = Gravity.CENTER;
-                  val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(13).toFloat(); ic.background = g;
-                  row.addView(ic,LinearLayout.LayoutParams(dp(42),dp(42)));
-                  val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12),0,dp(8),0);
-                  val tt = TextView(this); tt.text = title; tt.textSize = 15.5f; tt.setTextColor(cText); tt.setTypeface(null,Typeface.BOLD); col.addView(tt);
-                  if(sub!=null){ val st = TextView(this); st.text = sub; st.textSize = 12.5f; st.setTextColor(cSub); col.addView(st) };
-                  row.addView(col,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-                  if(trailing!=null) row.addView(trailing,LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-                  return row
-              }
-              private fun chevron(): TextView { val c = TextView(this); c.text = ">"; c.textSize = 24f; c.setTextColor(cSub); return c }
-              private fun switchRow(icon: String, title: String, sub: String, value: Boolean, onChange: (Boolean) -> Unit): View {
-                  val sw = SwitchCompat(this); sw.isChecked = value;
-                  val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf());
-                  sw.thumbTintList = ColorStateList(states,intArrayOf(Color.WHITE,cSub)); sw.trackTintList = ColorStateList(states,intArrayOf(cAccent,cField));
-                  sw.setOnCheckedChangeListener{ _,v -> onChange(v) };
-                  return settingsRow(icon,title,sub,sw){ sw.toggle() }
-              }
-              private fun showSettings() {
-                  val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(14),dp(34),dp(14),dp(14))
-                  val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(10));
-                  val title = TextView(this); title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null,Typeface.BOLD); title.setTextColor(cText);
-                  head.addView(title,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-                  val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD);
-                  head.addView(done,LinearLayout.LayoutParams(dp(72),dp(40)));
-                  rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-                  val list = LinearLayout(this); list.orientation = LinearLayout.VERTICAL
-                  fun add(v: View){ val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); list.addView(v,lp) }
-                  fun label(t: String){
-                      val l = TextView(this); l.text = t.uppercase(); l.textSize = 11.5f; l.setTextColor(cSub); l.setTypeface(null,Typeface.BOLD); l.letterSpacing = 0.1f; l.setPadding(dp(6),dp(10),0,dp(6)); list.addView(l)
-                  }
-                  label("Gezinme");
-                  add(switchRow("AD","Reklam engelleyici","YouTube reklamlarini atlar",prefs.adBlock){ v -> prefs.adBlock = v; settingsChanged() });
-                  add(switchRow("BG","Arka planda calma","Uygulamadan cikinca muzik surer",prefs.bgPlay){ v -> prefs.bgPlay = v; settingsChanged() });
-                  add(switchRow("BAR","Adres cubugu altta","Aciksa adres cubugu altta olur",prefs.barBottom){ v -> prefs.barBottom = v; applyTheme() });
-                  add(settingsRow("WEB","Varsayilan tarayici yap",if(isDefaultBrowser())"Su an varsayilan" else "Linkler Rota ile acilsin",chevron()){ d.dismiss(); askDefaultBrowser() })
-                  label("Gorunum ve arama");
-                  add(settingsRow("TEMA","Tema",Themes.get(prefs.theme).name,chevron()){ chooseTheme{ d.dismiss(); showSettings() } });
-                  add(settingsRow("ARA","Arama motoru",Engines.get(prefs.engine).name,chevron()){ chooseEngine{ d.dismiss(); showSettings() } })
-                  label("Gizlilik");
-                  add(settingsRow("SIL","Gecmisi temizle",null,null){ prefs.clearHistory(); toast("Gecmis temizlendi") });
-                  add(settingsRow("TEM","Onbellegi ve cerezleri temizle",null,null){ clearBrowsingData(); toast("Temizlendi") })
-                  val scroll = ScrollView(this); scroll.addView(list); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f));
-                  sheetWindow(d,rootV,true); d.show()
-              }
-              private fun isDefaultBrowser(): Boolean {
-                  return try {
-                      if (Build.VERSION.SDK_INT >= 29) {
-                          val rm = getSystemService(android.app.role.RoleManager::class.java); rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)
-                      } else {
-                          val i = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com"));
-                          val ri = packageManager.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
-                          ri?.activityInfo?.packageName == packageName
-                      }
-                  } catch (_: Exception) { false }
-              }
-              private fun openDefaultAppsSettings() {
-                  try {
-                      startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)); toast("Tarayici uygulamasini sec, sonra Rota'yi isaretle")
-                  } catch (_: Exception) {
-                      try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar acilamadi") }
-                  }
-              }
-              private fun afterRole() { if (isDefaultBrowser()) toast("Rota artik varsayilan") else openDefaultAppsSettings() }
-              private fun askDefaultBrowser() {
-                  if (isDefaultBrowser()) { toast("Rota zaten varsayilan"); return };
-                  if (Build.VERSION.SDK_INT >= 29) {
-                      try {
-                          val rm = getSystemService(android.app.role.RoleManager::class.java);
-                          if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
-                              roleLauncher.launch(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER)); return
-                          }
-                      } catch (_: Exception) { }
-                  };
-                  openDefaultAppsSettings()
-              }
-              private fun chooseTheme(onDone: () -> Unit) {
-                  val d = Dialog(this); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(14),dp(12),dp(14),dp(22));
-                  val r = dp(28).toFloat(); val bgd = GradientDrawable(); bgd.setColor(cSurface); bgd.cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f); col.background = bgd
-                  val tt = TextView(this); tt.text = "Tema sec"; tt.textSize = 18f; tt.setTypeface(null,Typeface.BOLD); tt.setTextColor(cText); tt.setPadding(dp(6),0,0,dp(10)); col.addView(tt)
-                  for (p in Themes.all) {
-                      val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(14),dp(10),dp(14),dp(10));
-                      val rb = GradientDrawable(); rb.setColor(p.bg); rb.cornerRadius = dp(18).toFloat();
-                      if(p.id==prefs.theme) rb.setStroke(dp(2),p.accent) else rb.setStroke(dp(1),p.field);
-                      row.background = rb;
-                      val dot = View(this); val dg = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(p.accent,p.accent2)); dg.shape = GradientDrawable.OVAL; dot.background = dg;
-                      row.addView(dot,LinearLayout.LayoutParams(dp(30),dp(30)));
-                      val nm = TextView(this); nm.text = p.name; nm.textSize = 15.5f; nm.setTextColor(p.text); nm.setTypeface(null,Typeface.BOLD); nm.setPadding(dp(14),0,0,0);
-                      row.addView(nm,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-                      if(p.id==prefs.theme){ val ck = TextView(this); ck.text = "v"; ck.textSize = 18f; ck.setTextColor(p.accent); ck.setTypeface(null,Typeface.BOLD); row.addView(ck) };
-                      row.setOnClickListener{ d.dismiss(); prefs.theme = p.id; applyTheme(); onDone() };
-                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); col.addView(row,lp)
-                  }
-                  val sc = ScrollView(this); sc.addView(col); sheetWindow(d,sc,false); d.show()
-              }
-              private fun chooseEngine(onDone: () -> Unit) {
-                  val names = Engines.all.map{ it.name }.toTypedArray();
-                  val sel = Engines.all.indexOfFirst{ it.id==prefs.engine }.coerceAtLeast(0);
-                  AlertDialog.Builder(this).setTitle("Arama Motoru").setSingleChoiceItems(names,sel){ dlg,which ->
-                      prefs.engine = Engines.all[which].id; dlg.dismiss(); onDone()
-                  }.show()
-              }
-              private fun clearBrowsingData() {
-                  CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush(); WebStorage.getInstance().deleteAllData();
-                  for(t in tabs) t.web.clearCache(true)
-              }
-              private companion object {
-                  const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
-                  const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
-                  const val MAX_TABS = 20
-                  const val KEEP_PLAYING_JS = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);}catch(e){}})();"
-                  const val STABLE_AD_BLOCKER_JS = "(function(){if(location.hostname.indexOf('youtube.com')<0 && location.hostname.indexOf('music.youtube.com')<0)return;var fast=false,adn=0;setInterval(function(){try{var pl=document.querySelector('.html5-video-player');if(!pl)return;var vd=pl.querySelector('video');var ad=pl.classList.contains('ad-showing');adn=ad?adn+1:0;if(ad&&adn>=2){var va=pl.querySelector('.video-ads');if(va)va.style.visibility='hidden';if(vd){if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';}vd.style.visibility='hidden';vd.muted=true;vd.playbackRate=16;var n=vd.buffered.length;if(n){var e=vd.buffered.end(n-1);if(e-vd.currentTime>0.3){vd.currentTime=e-0.1;}}}var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button');if(b)b.click();}else if(!ad&&fast){fast=false;var va2=pl.querySelector('.video-ads');if(va2)va2.style.visibility='';if(vd){vd.style.visibility='';vd.playbackRate=1;if(vd.dataset.pm!=='1'){var tv=vd.volume;vd.volume=0;vd.muted=false;var k=0;var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*k/6);if(k>=6)clearInterval(iv);},40);}}}catch(e){}},120);})();"
-                  const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}});}catch(e){}})();"
-                  const val FADE_JS = "window.__pFade=function(m,a,b,d,cb){try{var s=(b-a)/(d/25),v=a,iv=setInterval(function(){v+=s;if((s>0&&v>=b)||(s<0&&v<=b)){clearInterval(iv);m.volume=Math.max(0,Math.min(1,b));if(cb)cb();}else m.volume=Math.max(0,Math.min(1,v));},25);}catch(e){if(cb)cb();}};"
-                  const val MEDIA_TOGGLE_JS = FADE_JS + "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(!v){var b=document.querySelector('.ytp-play-button');if(b)b.click();return;}if(v.paused){v.volume=0;var p=v.play();if(p&&p.then)p.then(function(){__pFade(v,0,1,250);});else __pFade(v,0,1,250);}else{__pFade(v,v.volume,0,200,function(){v.pause();v.volume=1;});}})();"
-                  const val MEDIA_PAUSE_JS = FADE_JS + "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){__pFade(m,m.volume,0,200,function(){m.pause();m.volume=1;});}});})();"
-                  const val MEDIA_PREVIOUS_JS = FADE_JS + "(function(){try{var h=window.__msh&&window.__msh.previoustrack;if(h){h();return;}var sels=[\"ytmusic-player-bar .previous-button\",\"ytmusic-player-bar [aria-label='Previous']\",\".ytp-prev-button\"];for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){b.click();return;}}var v=document.querySelector('video,audio');if(v)v.currentTime=0;}catch(e){}})();"
-                  const val MEDIA_NEXT_JS = FADE_JS + "(function(){try{var h=window.__msh&&window.__msh.nexttrack;if(h){h();return;}var sels=[\"ytmusic-player-bar .next-button\",\"ytmusic-player-bar [aria-label='Next']\",\".ytp-next-button\"];for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){b.click();return;}}var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration-0.05;}catch(e){}})();"
-                  const val SMOOTH_CROSSFADE_JS = "(function(){if(window.__pusulaSmooth)return;window.__pusulaSmooth=1;function fade(m,a,b,d,cb){try{var s=(b-a)/(d/25),v=a,iv=setInterval(function(){v+=s;if((s>0&&v>=b)||(s<0&&v<=b)){clearInterval(iv);m.volume=Math.max(0,Math.min(1,b));if(cb)cb();}else m.volume=Math.max(0,Math.min(1,v));},25);}catch(e){if(cb)cb();}}function hookMedia(m){if(!m||m.__pusulaHooked)return;m.__pusulaHooked=true;m.addEventListener('play',function(){try{if(m.dataset.pusulaFading)return;if(m.volume<0.9){if(m.volume<0.1)m.volume=0;m.dataset.pusulaFading='1';fade(m,0,1,380,function(){delete m.dataset.pusulaFading;});}}catch(e){}});}var lastTitle='';setInterval(function(){try{var v=document.querySelector('video,audio');if(v)hookMedia(v);var tEl=document.querySelector('ytmusic-player-bar .title');var curTitle=tEl?tEl.textContent:'';if(curTitle&&curTitle!==lastTitle&&lastTitle!==''){var media=document.querySelector('video,audio');if(media&&!media.paused){fade(media,media.volume,0,180,function(){setTimeout(function(){if(media)fade(media,0,1,380,null);},120);});}lastTitle=curTitle;}else if(curTitle){lastTitle=curTitle;}}catch(e){}},500);document.addEventListener('ended',function(e){var m=e.target;if(m&&(m.tagName==='VIDEO'||m.tagName==='AUDIO')){try{fade(m,m.volume,0,180,null);}catch(x){}}},true);})();"
-                  const val MEDIA_HOOK_JS = "(function(){try{if(window.__msh)return;window.__msh={};var ms=navigator.mediaSession;if(ms&&ms.setActionHandler){var orig=ms.setActionHandler.bind(ms);ms.setActionHandler=function(a,f){window.__msh[a]=f;return orig(a,f);};}}catch(e){}})();"
-                  const val MEDIA_STATE_JS = "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(!v||!(v.currentSrc||v.src))return '';var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}var t=(md&&md.title)||'';if(site(t))t=tx('ytmusic-player-bar .title')||tx('.player-bar-title')||tx('ytm-slim-video-metadata-section-renderer h2')||tx('.slim-video-information-title')||tx('ytd-watch-metadata h1')||tx('h1.title')||'';if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});}catch(e){return '';}})();"
-                  const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;var s=document.createElement('style');s.id='__pip';s.textContent='html,body{overflow:hidden!important}.__pipa{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important}.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important}';document.documentElement.appendChild(s);v.classList.add('__pipv');var e=v.parentElement;while(e&&e!==document.documentElement){e.classList.add('__pipa');e=e.parentElement;}window.dispatchEvent(new Event('resize'));}catch(e){}})();"
-                  const val PIP_OFF_JS = "(function(){try{var s=document.getElementById('__pip');if(s)s.remove();document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});document.querySelectorAll('.__pipa').forEach(function(x){x.classList.remove('__pipa');});window.dispatchEvent(new Event('resize'));}catch(e){}})();"
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
-          package com.pusula.browser
-          class Palette(val id: String, val name: String, val dark: Boolean, val bg: Int, val surface: Int, val field: Int, val text: Int, val sub: Int, val icon: Int, val accent: Int, val accent2: Int)
-          object Themes {
-              private fun c(v: Long): Int = v.toInt()
-              val all: List<Palette> = listOf(
-                  Palette("gece", "Gece Mavisi", true, c(0xFF0B1020), c(0xFF131B33), c(0xFF1D2848), c(0xFFEAF0FF), c(0xFF8FA0C8), c(0xFFC9D6FF), c(0xFF4C8DFF), c(0xFF8A5CFF)),
-                  Palette("mor", "Mor Gece", true, c(0xFF120B1F), c(0xFF1A1230), c(0xFF2A1F4A), c(0xFFF1EAFF), c(0xFFA99BCF), c(0xFFD8C8FF), c(0xFF9B6BFF), c(0xFFFF5CA8)),
-                  Palette("orman", "Orman", true, c(0xFF08140F), c(0xFF0E1F17), c(0xFF173126), c(0xFFE6F7EE), c(0xFF86B8A0), c(0xFFBFE8D3), c(0xFF2ED47A), c(0xFF1BC5C5)),
-                  Palette("gunbatimi", "Gün Batımı", true, c(0xFF1A0F0F), c(0xFF241414), c(0xFF3A2020), c(0xFFFFEDE6), c(0xFFC9988A), c(0xFFFFD2C2), c(0xFFFF7A45), c(0xFFFF3D77)),
-                  Palette("acik", "Açık", false, c(0xFFF2F4F9), c(0xFFFFFFFF), c(0xFFE8ECF5), c(0xFF151A26), c(0xFF667089), c(0xFF3A4560), c(0xFF3D6BFF), c(0xFF7A5CFF)),
-                  Palette("okyanus", "Okyanus", false, c(0xFFEAF6FA), c(0xFFFFFFFF), c(0xFFDDEFF5), c(0xFF0F2530), c(0xFF5A7886), c(0xFF2A4E5E), c(0xFF0EA5C6), c(0xFF2F6BFF))
-              )
-              fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
-          }
-          EOF
-
-          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
-          package com.pusula.browser
-          import android.app.Notification
-          import android.app.NotificationChannel
-          import android.app.NotificationManager
-          import android.app.PendingIntent
-          import android.app.Service
-          import android.content.Context
-          import android.content.Intent
-          import android.content.pm.ServiceInfo
-          import android.graphics.drawable.Icon
-          import android.media.MediaMetadata
-          import android.media.session.MediaSession
-          import android.media.session.PlaybackState
-          import android.os.Build
-          import android.os.IBinder
-          import androidx.core.app.ServiceCompat
-          import androidx.core.content.ContextCompat
-          class PlaybackService : Service() {
-              private var session: MediaSession? = null
-              private var playing = false
-              private var title = ""
-              private var artist = ""
-              private var foregroundStarted = false
-              override fun onCreate() {
-                  super.onCreate()
-                  running = true
-                  val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                  if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
-                  val s = MediaSession(this, "Rota")
-                  s.setCallback(object : MediaSession.Callback() {
-                      override fun onPlay() { send(ACTION_PLAY) }
-                      override fun onPause() { send(ACTION_PAUSE) }
-                      override fun onSkipToNext() { send(ACTION_NEXT) }
-                      override fun onSkipToPrevious() { send(ACTION_PREVIOUS) }
-                  })
-                  s.isActive = true; session = s
-              }
-              private fun send(action: String) { sendBroadcast(Intent(action).setPackage(packageName)) }
-              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  when (intent?.action) {
-                      ACTION_UPDATE -> {
-                          playing = intent.getBooleanExtra("playing", false); title = intent.getStringExtra("title") ?: ""; artist = intent.getStringExtra("artist") ?: ""
-                      }
-                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
-                  }
-                  refresh(); return START_NOT_STICKY
-              }
-              private fun pi(code: Int, action: String): PendingIntent = PendingIntent.getBroadcast(this, code, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-              private fun act(res: Int, label: String, p: PendingIntent): Notification.Action = Notification.Action.Builder(Icon.createWithResource(this, res), label, p).build()
-              private fun refresh() {
-                  val s = session ?: return
-                  val shownTitle = if (title.isBlank()) "Rota" else title
-                  s.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, shownTitle).putString(MediaMetadata.METADATA_KEY_ARTIST, artist).build())
-                  val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
-                  s.setPlaybackState(PlaybackState.Builder().setActions(actions).setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
-                  val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-                  val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
-                  b.setSmallIcon(R.drawable.ic_notif); b.setContentTitle(shownTitle); b.setContentText(if (artist.isBlank()) "Rota" else artist); b.setContentIntent(open); b.setOngoing(playing); b.setVisibility(Notification.VISIBILITY_PUBLIC)
-                  b.addAction(act(android.R.drawable.ic_media_previous, "Önceki", pi(1, ACTION_PREVIOUS)))
-                  if (playing) b.addAction(act(android.R.drawable.ic_media_pause, "Duraklat", pi(2, ACTION_PAUSE)))
-                  else b.addAction(act(android.R.drawable.ic_media_play, "Oynat", pi(3, ACTION_PLAY)))
-                  b.addAction(act(android.R.drawable.ic_media_next, "Sonraki", pi(4, ACTION_NEXT)))
-                  b.setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2))
-                  val n = b.build()
-                  try {
-                      if (!foregroundStarted) {
-                          if (Build.VERSION.SDK_INT >= 29) ServiceCompat.startForeground(this, NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-                          else startForeground(NOTIF_ID, n);
-                          foregroundStarted = true
-                      } else {
-                          (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n)
-                      }
-                      if (!playing) {
-                          stopForeground(Service.STOP_FOREGROUND_DETACH); foregroundStarted = false
-                      }
-                  } catch (_: Exception) { stopSelf() }
-              }
-              override fun onDestroy() {
-                  running = false; try { session?.release() } catch (_: Exception) { }; session = null; super.onDestroy()
-              }
-              override fun onBind(intent: Intent?): IBinder? = null
-              companion object {
-                  const val CHANNEL = "playback"
-                  const val NOTIF_ID = 1002
-                  const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
-                  const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
-                  const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
-                  const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
-                  const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
-                  const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
-                  @Volatile var running = false
-                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
-                      val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE).putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist);
-                      try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
-                  }
-                  fun stop(ctx: Context) {
-                      try { ctx.stopService(Intent(ctx, PlaybackService::class.java)) } catch (_: Exception) { }
-                  }
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
-          package com.pusula.browser
-          import android.content.Context
-          import android.net.Uri
-          import org.json.JSONArray
-          import org.json.JSONObject
-          object Engines {
-              class E(val id: String, val name: String, val search: String, val home: String)
-              val all = listOf(
-                  E("google", "Google", "https://www.google.com/search?q=%s", "https://www.google.com/"),
-                  E("ddg", "DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com/"),
-                  E("bing", "Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com/")
-              )
-              fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
-          }
-          val HOST_LIKE = Regex("""^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\d{1,3}\.){3}\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$""")
-          fun resolveInput(raw: String, engine: Engines.E): String {
-              val t = raw.trim(); if (t.isEmpty()) return engine.home;
-              if (t.startsWith("http://", true) || t.startsWith("https://", true)) return t;
-              if (!t.contains(' ') && HOST_LIKE.matches(t)) return "https://" + t;
-              return engine.search.replace("%s", Uri.encode(t))
-          }
-          class Prefs(context: Context) {
-              class Entry(val title: String, val url: String)
-              private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
-              var engine: String get() = sp.getString("engine", "google") ?: "google"; set(v) { sp.edit().putString("engine", v).apply() }
-              var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true); set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
-              var theme: String get() = sp.getString("theme", "gece") ?: "gece"; set(v) { sp.edit().putString("theme", v).apply() }
-              var barBottom: Boolean get() = sp.getBoolean("barBottom", false); set(v) { sp.edit().putBoolean("barBottom", v).apply() }
-              var pins: String get() = sp.getString("pins", "") ?: ""; set(v) { sp.edit().putString("pins", v).apply() }
-              var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false); set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
-              var adBlock: Boolean get() = sp.getBoolean("adBlock", true); set(v) { sp.edit().putBoolean("adBlock", v).apply() }
-              private fun readList(key: String): MutableList<Entry> {
-                  val out = ArrayList<Entry>();
-                  try {
-                      val arr = JSONArray(sp.getString(key, "[]") ?: "[]");
-                      for (i in 0 until arr.length()) {
-                          val o = arr.getJSONObject(i); out.add(Entry(o.optString("t"), o.optString("u")))
-                      }
-                  } catch (_: Exception) {}; return out
-              }
-              private fun writeList(key: String, list: List<Entry>) {
-                  val arr = JSONArray(); for (e in list) arr.put(JSONObject().put("t", e.title).put("u", e.url)); sp.edit().putString(key, arr.toString()).apply()
-              }
-              fun bookmarks(): List<Entry> = readList("bookmarks")
-              fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
-              fun toggleBookmark(title: String, url: String): Boolean {
-                  val list = readList("bookmarks"); val had = list.removeAll { it.url == url };
-                  if (!had) list.add(0, Entry(title, url)); writeList("bookmarks", list); return !had
-              }
-              fun removeBookmark(url: String) {
-                  val l = readList("bookmarks"); l.removeAll { it.url == url }; writeList("bookmarks", l)
-              }
-              fun history(): List<Entry> = readList("history")
-              fun addHistory(title: String, url: String) {
-                  val l = readList("history"); if (l.isNotEmpty() && l[0].url == url) return;
-                  l.add(0, Entry(title, url)); while (l.size > 300) l.removeAt(l.size - 1); writeList("history", l)
-              }
-              fun removeHistory(url: String) {
-                  val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l)
-              }
-              fun clearHistory() { sp.edit().putString("history", "[]").apply() }
-              fun saveTabs(urls: List<String>, current: Int) {
-                  val arr = JSONArray(); for (u in urls) arr.put(u); sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
-              }
-              fun savedTabs(): List<String> {
-                  val out = ArrayList<String>();
-                  try {
-                      val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]");
-                      for (i in 0 until arr.length()) out.add(arr.getString(i))
-                  } catch (_: Exception) {}; return out
-              }
-              fun savedCurrent(): Int = sp.getInt("tabCur", 0)
-          }
-          EOF
-
-          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
-          package com.pusula.browser
-          import android.webkit.JavascriptInterface
-          import org.json.JSONArray
-          import org.json.JSONObject
-          class PusulaBridge(private val prefs: Prefs) {
-              @Volatile var trusted = false
-              private fun hex(v: Int): String = "#%06X".format(0xFFFFFF and v)
-              private fun pinsJson(): Any {
-                  val raw = prefs.pins; if (raw.isEmpty()) return JSONObject.NULL;
-                  return try { JSONArray(raw) } catch (e: Exception) { JSONObject.NULL }
-              }
-              @JavascriptInterface
-              fun savePins(json: String) {
-                  if (!trusted) return;
-                  try { prefs.pins = JSONArray(json).toString() } catch (e: Exception) { }
-              }
-              @JavascriptInterface
-              fun config(): String {
-                  if (!trusted) return "{}"
-                  val e = Engines.get(prefs.engine); val th = Themes.get(prefs.theme)
-                  val bm = JSONArray(); for (b in prefs.bookmarks().take(8)) bm.put(JSONObject().put("t", b.title).put("u", b.url))
-                  val hs = JSONArray(); for (h in prefs.history().take(6)) hs.put(JSONObject().put("t", h.title).put("u", h.url))
-                  return JSONObject().put("engine", e.name).put("search", e.search).put("bookmarks", bm).put("history", hs).put("pins", pinsJson()).put("dark", th.dark).put("bg", hex(th.bg)).put("surface", hex(th.surface)).put("field", hex(th.field)).put("text", hex(th.text)).put("sub", hex(th.sub)).put("accent", hex(th.accent)).put("accent2", hex(th.accent2)).toString()
-              }
-          }
-          EOF
-
+          echo 'H4sIAJEN22oC/51XW1MbNxR+z69Qt20iNWZxmqeaEgaIJ6FNgAlpO1NCGHlXthWvVxtJa0II/73naLUXX9ZLasZeW/p0Lp/OjUekemU8mvGJIJGah1lu8oSHI61ujNCPapCcZ0pbwtNYKxmHkUqtSG14jM8vth2YChv+peU6QOlJ+MmoNPzj4uz0UGt+24E5G30SUVOTcgtkmE5kKgy5a2zhK0q4MWRIFzwhMh6QC6tlOukR/J3yuVheMYLraLq8NlU1iq1Ix32eJGSfJNLYszEd0mCi1CQRQY8Er6pvU2szM9jdvbm5CYt94G6+W6g7+Lz/s9mCClgPHAjieIKgl3k0w/cr1TwSwwq+J8odWRO5su9FjsAlRB35Z9MA3OsyssIEbJWZcZ6SibC05pwNyBCIArrCsdTAlj7Ngbo7Im0oY7K/D/dD7snBACGX/auGwPsV4TX5r88u3l+/OfkTJb8TE/GFBkHwkV7yna+HO//2d37buXr6IWRP/cLV3a+9e3o52D348Sr8hR389O0j/RDfPes9vwfUHXwWP5YhiYp4MlXGNpdBT9Nn9FcLo5KFOEmz3FLNb+o4Ei46B2WUhkNW7oH/6IcF++FECGtzyvaIHBMKtJjhPLO3lDGQbXOdekEhxmQJMpZra/6Rdkrd5cDdwD1ZnQtGvn0j6wDTQFSCbSHuB+uSmsvU0CfkCSOPH9cch3Nuo6kw1NbnaonkKQpZtrOInVCLLOGRoIELISgEoUgjFQsnqHm5RbaeazE2NCqKyoD46sLacju1+tblt5U2WUnoXCdtuZtpueBWFHmfAf9eYQhhezHlWsRoh9BgKrgcFDURzPfmhG/PXg6vz9+d/H34frheF3R15/6eMRkYaDGZU+AWaVCAMK982WCYAOWPPShIli7AczwmYgkioDivn16wkGdZApGylitoymhynvDbATlSKhE8XbHFr0I5cLAyNNqUr8M7tNupmHfx4DCOBhFVJODXLgrKg10McH2krFXzbhJKJAgd88Q8hIjGkQ47MkisDioQgkx4FjoZ8PgOxdzMRHyqrBx3MlBDH07B0pkuU+IjqKizbjsK3IPjscZvMaDM+qJe8/gN9G06E7eNLvU2t3yUCNz53RWXF75IqxzLtJtSGptYruHpMVxrwFTTDF26W9ADF3t55a8Wv+yRsdKESiJT0id5aqWTESaQ21CwGSt1Y+uEdRBWj0FUwnmwKuRxTIs6qEKV1cmBfX5pJYdODaTAX4S1nNBraEpfIpFZqVLQdV9VcHR2G3k3Wlqxyl7PzUED0qCHtRBTei7QczzFnH/YOhsOuhtGR6CHhq6++5XcrUB5ZxgYG/LCcY0SrfIrrD0q0KGRUrM51zND2ZID2JnLQAkqULBp4JHmyO+LmDZbTx3r+009IU9viwEIwDgB4WOTbVZNoB+UwulKo9usqaAdmW3zYK+Yb3ns51fo03O1EIflVNY0yo8HAGYFFkOu3/Pd1xnkDMHrqEOjoa0IDVbFF4ra6GthROVr07nSp3aHku0+tFm2OSKmAFTg3ZZ48JCN0QAMvfYStlzYRp8qsQXtCUyCUFz9MIgzGQ7IDd/KcQwJ2HYxU5kIFGfkV0FekOf9Pqsps+XGDnm2fIulOa1MFRJKb7/HvYdfWKcREYS9Lm1obZe1GFd/t5YEwxfiPR8Z9Mj4ICjkvOiRKNcwG0KxO0ltV5HLscihkLrI5S11K4DmgzG5WroAAYrc9nGug0p/twexc4Et29/S0vzud/S00t7vbWtl2/JNzUuTrjv9n95UeXtc8IIOA2HVWLFMXp+1/Hv5H6UxmtMSEQAA' | base64 -d | gunzip > app/src/main/java/com/pusula/browser/Prefs.kt
+          echo 'H4sIAJEN22oC/22QzU7DMBCE73mKJVwaKYpIaKGtlENKieiZSj1vbDc1Te3IP4BAfXdip0AQ2ZNn9c2ud1okR6wZEHlKWqttg0ml5JtmKuCnVioDKKiSnCa1wvbAiU4eZCNVQNEgkAa1hu2BndjkFRugqI5LWEnZMBQxuFZVL2EjTC+0VXskbNDZc9bQgTbs3fwxVAOFhDBh/jWyQYcTKbyMAlm9MGL632n4DKCrvRVQMzPh3c5no7ioo2VPXABXfo5ed7dADpzCVQ5hbQW1H+EPo5ixSlxOd2fnvSPuDs59QkmLSjP/nITXN2WaprMwir8zGIPSIi2zhYN8LGNINstWt3OHuKQuxO5ps310k6sxy7xYTAtv6eMaHVvercryl8nGoPtiuu4hl/Jwd+RzOQfn4AsfpYzDUAIAAA==' | base64 -d | gunzip > app/src/main/java/com/pusula/browser/Themes.kt
+          echo 'H4sIAJEN22oC/5VU72vbMBD93r/iljGQYYjSD2UkDNZBBgulDXQr+yorZ1uNLRnp7CSE/u+THDt2fo7pS6R3717enU6+gf0qhVyKFEGagpeVq3LBY2tWDu1NT1JFaSyB0Atr1IKvMF4q4jNRCyetKumnJrSJkHiaY2zK35zRfPby/PRgrdj8g/Mcv6GkAUnmwjmYN96+W7VIkZVW1YIQapFDaTFxY5iHnwi2g8Swvr2aXJDKA9cC2coRLuArJCJ3eMTtVJNKQ4ZrVo/BFxaN4YWs0qnPGn38dHv/Z8QTYwtB7Hb9o1mhMVBHV+RKpd3MV8i82oPewLaxbsXKizYF8MCYgEqAeZQrNy1K2rAoAotUWQ19a/jT78fHSYeTDWr75obsCN5BCpIZMBzDdC2xJGV01PIGKp74ftywM7falOBEjXNvkoWb6noSNIPnD21nO7uT1ldfmy+0NxkkIk5mJ8KuGP4Pg9LoRKWsv6/jWWgm7oxZGG3fR2e44YrQ+57qVGl0PEViu4KwQaJJQ6HMc35lWBxQKADRBdW4OGiHF/ITBSwGpduWxcYsC2GXjvk+iSWyL34U4vBEifWX6IMBGNHoM8ScFOXYIlWDVDaPLnnI3FkPWe8hU46M3XQO7r2DzF1xkJ04yC46OJnqTmjXWp+LXIuiE3MorMwadLdt8X2bQrlFC7a+w/+7FgoT6M/9M2zxhc/1OGU87DrRNKT6D4CH47SjuqoZtT7UAl08UZgv+mhz7GKEa+pD4dSrxkPFuMOFlKgHObvzYfTuOHwXDR/VUdeH72i4/wsC0cdkDAYAAA==' | base64 -d | gunzip > app/src/main/java/com/pusula/browser/PusulaBridge.kt
+          echo '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' | base64 -d | gunzip > app/src/main/java/com/pusula/browser/PlaybackService.kt
+          cat > /tmp/ma.b64 <<'B64EOF'
+          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
+          B64EOF
+          base64 -d /tmp/ma.b64 | gunzip > app/src/main/java/com/pusula/browser/MainActivity.kt
           cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"/></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96"><path android:pathData="M24,0 H72 A24,24 0 0 1 96,24 V72 A24,24 0 0 1 72,96 H24 A24,24 0 0 1 0,72 V24 A24,24 0 0 1 24,0 Z"><aapt:attr name="android:fillColor"><gradient android:startX="0" android:startY="0" android:endX="96" android:endY="96" android:type="linear"><item android:offset="0" android:color="#FF2F6BFF"/><item android:offset="0.55" android:color="#FF7A4DFF"/><item android:offset="1" android:color="#FFFF4D9D"/></gradient></aapt:attr></path></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z"/></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z"/></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
           EOF
-
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Rota</string></resources>
           EOF
-
           cat > app/src/main/res/values/themes.xml <<'EOF'
           <resources><style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="android:windowBackground">@color/bg</item><item name="android:statusBarColor">@android:color/transparent</item><item name="android:navigationBarColor">@android:color/transparent</item></style></resources>
           EOF
-
           cat > app/src/main/res/values/colors.xml <<'EOF'
           <resources><color name="bg">#0F1115</color></resources>
           EOF
-
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
-
+        with: { gradle-version: 8.9 }
       - name: APK derle
         run: gradle assembleDebug --no-daemon
-
       - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
