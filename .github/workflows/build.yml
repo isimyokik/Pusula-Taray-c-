@@ -570,6 +570,15 @@ jobs:
                   return android.app.RemoteAction(android.graphics.drawable.Icon.createWithResource(this, icon), label, label, pi)
               }
 
+              private val pipMediaPump = object : Runnable {
+                  override fun run() {
+                      if (!isInPictureInPictureMode) return
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
+                      handler.postDelayed(this, 800L)
+                  }
+              }
+
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
                   try {
@@ -579,9 +588,9 @@ jobs:
                           .setAspectRatio(android.util.Rational(16, 9))
                       if (Build.VERSION.SDK_INT >= 26) {
                           val acts = ArrayList<android.app.RemoteAction>()
-                          acts.add(pipAction(11, android.R.drawable.ic_media_previous, "Önceki", PlaybackService.ACTION_PREVIOUS))
-                          acts.add(pipAction(12, android.R.drawable.ic_media_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
-                          acts.add(pipAction(13, android.R.drawable.ic_media_next, "Sonraki", PlaybackService.ACTION_NEXT))
+                          acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
+                          acts.add(pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
+                          acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
                           b.setActions(acts)
                       }
                       enterPictureInPictureMode(b.build())
@@ -591,17 +600,24 @@ jobs:
               private fun onPipChanged(pip: Boolean) {
                   topBar.visibility = if (pip) View.GONE else View.VISIBLE
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
+                  handler.removeCallbacks(pipMediaPump)
                   if (pip) {
                       closeFind()
+                      appInBackground = false
                       try { shown?.onResume() } catch (_: Exception) { }
                       try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
                       if (customView == null) {
                           try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
                       }
                       if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
+                      handler.post(pipMediaPump)
                       handler.postDelayed({
                           try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                      }, 400)
+                          try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
+                      }, 300)
+                      handler.postDelayed({
+                          try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
+                      }, 1000)
                   } else {
                       for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
                   }
@@ -740,6 +756,8 @@ jobs:
                       try { shown?.onResume() } catch (_: Exception) { }
                       try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
                       if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
+                      handler.removeCallbacks(pipMediaPump)
+                      handler.post(pipMediaPump)
                       return
                   }
                   if (prefs.bgPlay) {
@@ -750,6 +768,16 @@ jobs:
                   } else {
                       appInBackground = true
                       shown?.onPause()
+                  }
+              }
+
+              override fun onStop() {
+                  super.onStop()
+                  if (isInPictureInPictureMode) {
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
+                      handler.removeCallbacks(pipMediaPump)
+                      handler.post(pipMediaPump)
                   }
               }
 
@@ -764,6 +792,7 @@ jobs:
                   try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
                   handler.removeCallbacks(backgroundMediaPump)
                   handler.removeCallbacks(mediaStatePoll)
+                  handler.removeCallbacks(pipMediaPump)
                   PlaybackService.stop(this)
                   if (prefs.clearOnExit) {
                       try {
@@ -2223,7 +2252,14 @@ jobs:
                       "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
                       "}catch(e){return '';}})();"
                   const val KEEP_MEDIA_PLAYING_JS =
-                      "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}});}catch(e){}})();"
+                      "(function(){try{" +
+                      "document.querySelectorAll('video,audio').forEach(function(m){" +
+                      "try{" +
+                      "if(m.ended)return;" +
+                      "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                      "}catch(x){}" +
+                      "});" +
+                      "}catch(e){}})();"
 
                   const val PIP_ON_JS =
                       "(function(){try{" +
@@ -2663,6 +2699,28 @@ jobs:
           cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
           EOF
+
+          cat > app/src/main/res/drawable/ic_pip_prev.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M12,12h6v24h-6zM36,12 L18,24 36,36z"/>
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_next.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M30,12h6v24h-6zM12,12 L30,24 12,36z"/>
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_play.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M14,10 L14,38 L40,24z"/>
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_pause.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M12,10h8v28h-8zM28,10h8v28h-8z"/>
+          </vector>
+          EOF
+
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Rota</string></resources>
           EOF
