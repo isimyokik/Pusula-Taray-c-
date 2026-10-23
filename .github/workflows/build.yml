@@ -79,7 +79,7 @@ jobs:
           dependencies {
               implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.appcompat:appcompat:1.7.0")
-              implementation("androidx.webkit:webkit:1.13.0")
+              implementation("androidx.webkit:webkit:1.14.0")
               implementation("androidx.media:media:1.7.0")
           }
           EOF
@@ -2771,9 +2771,9 @@ jobs:
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 8.9 }
-      - name: APK derle
+      - name: APK derleme
         run: gradle assembleDebug --no-daemon
-      - name: APK yukle
+      - name: APK yukleme
         uses: actions/upload-artifact@v4
         with:
           name: Pusula-APK
