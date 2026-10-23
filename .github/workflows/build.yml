@@ -493,6 +493,7 @@ jobs:
                   var preview: Bitmap? = null
                   var adScript: ScriptHandler? = null
                   var keepScript: ScriptHandler? = null
+                  var hookScript: ScriptHandler? = null
               }
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
@@ -1037,6 +1038,7 @@ jobs:
               private fun syncScripts(t: BTab) {
                   if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
                   try {
+                      if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
                       if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
                       else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
                       if (prefs.bgPlay && t.keepScript == null) t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS, setOf("*"))
@@ -1925,14 +1927,35 @@ jobs:
 
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
                   const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){m.pause();m.dataset.pusulaWasPlaying='';}});})();"
-                  const val MEDIA_PREVIOUS_JS = "(function(){try{var h=window.__msh;if(h&&h.previoustrack){h.previoustrack();return;}}catch(e){}var b=document.querySelector('.ytp-prev-button,.previous-button,[aria-label=\\'Previous\\'],[aria-label=\\'Önceki\\']');if(b){b.click();return;}var v=document.querySelector('video,audio');if(v)v.currentTime=0;})();"
-                  const val MEDIA_NEXT_JS = "(function(){try{var h=window.__msh;if(h&&h.nexttrack){h.nexttrack();return;}}catch(e){}var b=document.querySelector('.ytp-next-button,.next-button,[aria-label=\\'Next\\'],[aria-label=\\'Sonraki\\']');if(b)b.click();})();"
-
-                  // Sayfanın medya oturumu düğmelerini (sonraki/önceki) yakalar; bildirimden çağrılır.
+                  const val MEDIA_PREVIOUS_JS =
+                      "(function(){try{var h=window.__msh&&window.__msh.previoustrack;if(h){h({action:'previoustrack'});return;}" +
+                      "var b=document.querySelector('.ytp-prev-button,ytmusic-player-bar .previous-button,.previous-button,[aria-label*=Previous],[aria-label*=Önceki]');" +
+                      "if(b){b.click();return;}var v=document.querySelector('video,audio');if(v)v.currentTime=0;}catch(e){}})();"
+                  const val MEDIA_NEXT_JS =
+                      "(function(){try{var h=window.__msh&&window.__msh.nexttrack;if(h){h({action:'nexttrack'});return;}" +
+                      "var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
+                      "if(b){b.click();return;}var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration;}catch(e){}})();"
+                  const val MEDIA_HOOK_JS =
+                      "(function(){try{var ms=navigator.mediaSession;if(!ms||ms.__rh)return;ms.__rh=1;" +
+                      "var o=ms.setActionHandler.bind(ms);window.__msh={};" +
+                      "ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
                   const val MEDIA_HOOK_JS = "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
 
-                  const val MEDIA_STATE_JS = "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(!v||!(v.currentSrc||v.src))return '';var m=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:(m&&m.title)||document.title||'',a:(m&&m.artist)||''});}catch(e){return '';}})();"
-
+                  const val MEDIA_STATE_JS =
+                      "(function(){try{" +
+                      "var l=Array.from(document.querySelectorAll('video,audio'));" +
+                      "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
+                      "if(!v||!(v.currentSrc||v.src))return '';" +
+                      "var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;" +
+                      "function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}" +
+                      "function site(t){return !t||/^YouTube( Music)?$/i.test(t.trim());}" +
+                      "var t=(md&&md.title)||'';" +
+                      "if(site(t))t=tx('ytmusic-player-bar .title')||tx('.player-bar-title')||tx('ytm-slim-video-metadata-section-renderer h2')||tx('.slim-video-information-title')||tx('ytd-watch-metadata h1')||tx('h1.title')||'';" +
+                      "if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}" +
+                      "if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');" +
+                      "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
+                      "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
+                      "}catch(e){return '';}})();"
                   const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;" +
                       "var s=document.createElement('style');s.id='__pip';" +
