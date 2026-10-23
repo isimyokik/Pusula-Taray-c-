@@ -431,6 +431,8 @@ jobs:
           import android.os.Environment
           import android.os.Handler
           import android.os.Looper
+          import android.os.SystemClock
+          import android.view.MotionEvent
           import android.os.Message
           import android.text.Html
           import android.text.InputType
@@ -495,6 +497,8 @@ jobs:
                   var adScript: ScriptHandler? = null
                   var keepScript: ScriptHandler? = null
                   var hookScript: ScriptHandler? = null
+                  var lx: Float = 0f
+                  var ly: Float = 0f
               }
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
@@ -519,6 +523,12 @@ jobs:
               private var lastPlaying = false
               private var lastTitle = ""
               private var lastArtist = ""
+              private var lastVideo = false
+              private var inPip = false
+              private var autoFs = false
+              private var pipPanel: LinearLayout? = null
+              private var pipTitleView: TextView? = null
+              private var pipArtistView: TextView? = null
               private lateinit var dockBar: LinearLayout
               private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
               private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -540,6 +550,7 @@ jobs:
                   var playing = false
                   var title = ""
                   var artist = ""
+                  var video = false
                   try {
                       if (raw != null && raw != "null" && raw != "\"\"") {
                           val inner = JSONArray("[" + raw + "]").getString(0)
@@ -549,6 +560,7 @@ jobs:
                               playing = o.optBoolean("p")
                               title = o.optString("t")
                               artist = o.optString("a")
+                              video = o.optBoolean("w")
                           }
                       }
                   } catch (_: Exception) { return }
@@ -557,7 +569,11 @@ jobs:
                       return
                   }
                   val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
-                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
+                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastVideo = video
+                  if (inPip) {
+                      pipTitleView?.text = if (title.isBlank()) "Rota" else title
+                      pipArtistView?.text = artist
+                  }
                   if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
               }
 
@@ -579,8 +595,62 @@ jobs:
                   }
               }
 
+              private fun isMusicPage(): Boolean = (tabs.getOrNull(cur)?.url ?: "").contains("music.youtube.com")
+
+              /** Videoyu gerçek tam ekrana alır. Tarayıcı dokunuş olmadan tam ekrana izin vermez; o yüzden oynatıcıya gerçek bir dokunuş yollarız. */
+              private fun requestVideoFullscreen(after: (() -> Unit)?) {
+                  val w = currentWeb()
+                  if (w == null || customView != null) { after?.invoke(); return }
+                  try {
+                      w.evaluateJavascript(PLAYER_RECT_JS) { raw ->
+                          val r = (raw ?: "").trim('"')
+                          val parts = r.split(",")
+                          if (parts.size != 2) { after?.invoke(); return@evaluateJavascript }
+                          val d = resources.displayMetrics.density
+                          val x = ((parts[0].toFloatOrNull() ?: 0f) * d).coerceIn(2f, (w.width - 2).toFloat())
+                          val y = ((parts[1].toFloatOrNull() ?: 0f) * d).coerceIn(2f, (w.height - 2).toFloat())
+                          w.evaluateJavascript(FS_ARM_JS, null)
+                          val t = SystemClock.uptimeMillis()
+                          w.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0))
+                          handler.postDelayed({
+                              val t2 = SystemClock.uptimeMillis()
+                              try { w.dispatchTouchEvent(MotionEvent.obtain(t2, t2, MotionEvent.ACTION_UP, x, y, 0)) } catch (_: Exception) { }
+                          }, 70)
+                          handler.postDelayed({ after?.invoke() }, 600)
+                      }
+                  } catch (_: Exception) { after?.invoke() }
+              }
+
+              private fun showPipPanel(show: Boolean) {
+                  if (!show) {
+                      pipPanel?.let { content.removeView(it) }
+                      pipPanel = null; pipTitleView = null; pipArtistView = null
+                      return
+                  }
+                  if (pipPanel != null) return
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.gravity = Gravity.CENTER
+                  col.setPadding(dp(10), dp(6), dp(10), dp(6))
+                  col.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
+                  val ic = TextView(this); ic.text = "🎵"; ic.textSize = 30f; ic.gravity = Gravity.CENTER
+                  val t = TextView(this)
+                  t.text = if (lastTitle.isBlank()) "Rota" else lastTitle
+                  t.textSize = 14f; t.setTypeface(null, Typeface.BOLD); t.setTextColor(Color.WHITE); t.gravity = Gravity.CENTER
+                  t.maxLines = 2; t.ellipsize = android.text.TextUtils.TruncateAt.END
+                  val a = TextView(this)
+                  a.text = lastArtist; a.textSize = 12f; a.setTextColor(0xCCFFFFFF.toInt()); a.gravity = Gravity.CENTER; a.maxLines = 1
+                  col.addView(ic); col.addView(t); col.addView(a)
+                  content.addView(col, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  pipPanel = col; pipTitleView = t; pipArtistView = a
+              }
+
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
+                  if (customView == null && !isMusicPage() && lastVideo) requestVideoFullscreen { doEnterPip() } else doEnterPip()
+              }
+
+              private fun doEnterPip() {
                   try {
                       try { shown?.onResume() } catch (_: Exception) { }
                       try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
@@ -598,6 +668,7 @@ jobs:
               }
 
               private fun onPipChanged(pip: Boolean) {
+                  inPip = pip
                   topBar.visibility = if (pip) View.GONE else View.VISIBLE
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
                   handler.removeCallbacks(pipMediaPump)
@@ -606,7 +677,8 @@ jobs:
                       appInBackground = false
                       try { shown?.onResume() } catch (_: Exception) { }
                       if (customView == null) {
-                          try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
+                          if (isMusicPage() || !lastVideo) showPipPanel(true)
+                          else { try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { } }
                       }
                       handler.postDelayed({
                           try { shown?.onResume() } catch (_: Exception) { }
@@ -615,6 +687,7 @@ jobs:
                       if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
                       handler.postDelayed(pipMediaPump, 2500L)
                   } else {
+                      showPipPanel(false)
                       for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
                   }
               }
@@ -628,10 +701,18 @@ jobs:
                   super.onConfigurationChanged(newConfig)
                   if (isInPictureInPictureMode) return
                   val land = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
-                  try {
-                      if (land) currentWeb()?.evaluateJavascript(LANDSCAPE_VIDEO_JS, null)
-                      else currentWeb()?.evaluateJavascript(PORTRAIT_VIDEO_JS, null)
-                  } catch (_: Exception) { }
+                  if (land) {
+                      if (prefs.autoFs && hasMedia && lastVideo && customView == null && !isMusicPage()) {
+                          autoFs = true
+                          requestVideoFullscreen {
+                              if (customView == null) { try { currentWeb()?.evaluateJavascript(LANDSCAPE_VIDEO_JS, null) } catch (_: Exception) { } }
+                          }
+                      }
+                  } else {
+                      if (autoFs && customView != null) hideCustom()
+                      autoFs = false
+                      try { currentWeb()?.evaluateJavascript(PORTRAIT_VIDEO_JS, null) } catch (_: Exception) { }
+                  }
               }
 
               private val mediaControlReceiver = object : BroadcastReceiver() {
@@ -1100,15 +1181,17 @@ jobs:
                   web.addJavascriptInterface(bridge, "Pusula")
 
                   syncScripts(tab)
-                  if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                      try { WebViewCompat.addDocumentStartJavaScript(web, MEDIA_HOOK_JS, setOf("*")) } catch (_: Exception) { }
-                  }
 
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
                           findCount.text = if (total == 0) "0" else "${active + 1}/$total"
                       }
                   }
+                  web.setOnTouchListener { _, ev ->
+                      if (ev.action == MotionEvent.ACTION_DOWN) { tab.lx = ev.x; tab.ly = ev.y }
+                      false
+                  }
+                  web.setOnLongClickListener { _ -> mediaLongPress(tab); false }
                   web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
                       startDownload(url, userAgent, contentDisposition, mimeType)
                   }
@@ -1425,7 +1508,8 @@ jobs:
                       req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                       if (Build.VERSION.SDK_INT >= 29) req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
                       else req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
-                      (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+                      val dlId = (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+                      prefs.addDownload(dlId, name, url)
                       toast("İndiriliyor: $name")
                   } catch (_: Exception) { toast("İndirilemedi") }
               }
@@ -1458,6 +1542,7 @@ jobs:
                       },
                       SheetItem("🔖", "Yer imleri", false) { showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) },
                       SheetItem("🕘", "Geçmiş", false) { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) },
+                      SheetItem("📥", "İndirilenler", false) { showDownloads() },
                       SheetItem("🔍", "Sayfada bul", false) { openFind() },
                       SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() },
                       SheetItem("🪟", "Küçük pencere", false) { enterPip() },
@@ -1606,6 +1691,198 @@ jobs:
                   render()
                   sheetWindow(d, rootV, true)
                   d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+                  d.show()
+              }
+
+              /** Sayfada basılı tutulan videoyu/sesi/resmi bulup indirme seçeneği sunar. */
+              private fun mediaLongPress(tab: BTab) {
+                  val d = resources.displayMetrics.density
+                  val x = (tab.lx / d).toInt(); val y = (tab.ly / d).toInt()
+                  try {
+                      tab.web.evaluateJavascript(MEDIA_AT_JS_START + x + "," + y + ")") { raw ->
+                          try {
+                              val r = (raw ?: "")
+                              if (r.isEmpty() || r == "null" || r == "\"\"") return@evaluateJavascript
+                              val inner = JSONArray("[" + r + "]").getString(0)
+                              if (inner.isEmpty()) return@evaluateJavascript
+                              val o = JSONObject(inner)
+                              showMediaSheet(tab, o.optString("k"), o.optString("u"))
+                          } catch (_: Exception) { }
+                      }
+                  } catch (_: Exception) { }
+              }
+
+              private fun showMediaSheet(tab: BTab, kind: String, url: String) {
+                  if (inPip || customView != null) return
+                  val low = url.lowercase()
+                  val pageUrl = tab.url.lowercase()
+                  val blocked = pageUrl.contains("youtube.com") || pageUrl.contains("youtu.be") ||
+                      low.contains("googlevideo.com") || low.contains("youtube.com")
+                  if (blocked) { toast("YouTube içerikleri indirilemez"); return }
+                  if (url.isBlank()) { toast("İndirilecek bir dosya bulunamadı"); return }
+                  if (low.startsWith("blob:") || low.contains(".m3u8") || low.contains(".mpd")) {
+                      toast("Bu video parçalı akış olarak geldiği için indirilemiyor"); return
+                  }
+                  if (!low.startsWith("http")) { toast("Bu içerik indirilemiyor"); return }
+                  val what = when (kind) { "v" -> "Videoyu indir"; "a" -> "Sesi indir"; "i" -> "Resmi indir"; else -> "Dosyayı indir" }
+                  val icon = when (kind) { "v" -> "🎞️"; "a" -> "🎵"; "i" -> "🖼️"; else -> "📁" }
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(18), dp(14), dp(18), dp(22))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val ti = TextView(this)
+                  ti.text = icon + "  " + URLUtil.guessFileName(url, null, null)
+                  ti.textSize = 15f; ti.setTypeface(null, Typeface.BOLD); ti.setTextColor(cText); ti.maxLines = 2
+                  ti.ellipsize = android.text.TextUtils.TruncateAt.END
+                  ti.setPadding(dp(4), 0, dp(4), dp(14))
+                  col.addView(ti)
+                  val b1 = pillBtn("⬇️  " + what, intArrayOf(cAccent, cAccent2)) {
+                      d.dismiss(); startDownload(url, tab.web.settings.userAgentString, null, null)
+                  }
+                  col.addView(b1, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+                  val b2 = textBtn("Kapat") { d.dismiss() }
+                  b2.setTextColor(cSub)
+                  col.addView(b2, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
+                  sheetWindow(d, col, false)
+                  d.show()
+              }
+
+              private fun dlEmoji(name: String): String {
+                  val n = name.lowercase()
+                  return when {
+                      n.endsWith(".pdf") -> "📕"
+                      n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".gif") || n.endsWith(".webp") -> "🖼️"
+                      n.endsWith(".mp3") || n.endsWith(".m4a") || n.endsWith(".wav") || n.endsWith(".ogg") -> "🎵"
+                      n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".webm") -> "🎞️"
+                      n.endsWith(".zip") || n.endsWith(".rar") || n.endsWith(".7z") -> "🗜️"
+                      n.endsWith(".apk") -> "📦"
+                      n.endsWith(".doc") || n.endsWith(".docx") || n.endsWith(".txt") -> "📄"
+                      else -> "📁"
+                  }
+              }
+
+              private fun fmtSize(b: Long): String = when {
+                  b <= 0 -> ""
+                  b < 1024L * 1024 -> (b / 1024).toString() + " KB"
+                  b < 1024L * 1024 * 1024 -> String.format("%.1f MB", b / 1048576.0)
+                  else -> String.format("%.2f GB", b / 1073741824.0)
+              }
+
+              private fun showDownloads() {
+                  val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                  val d = Dialog(this)
+                  val rootV = LinearLayout(this)
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  head.setPadding(dp(6), 0, dp(6), dp(10))
+                  val tv = TextView(this)
+                  tv.text = "İndirilenler"; tv.textSize = 24f; tv.setTypeface(null, Typeface.BOLD); tv.setTextColor(cText)
+                  head.addView(tv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  val done = textBtn("Bitti") { d.dismiss() }
+                  done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
+                  head.addView(done, LinearLayout.LayoutParams(dp(64), dp(40)))
+                  rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                  val listCol = LinearLayout(this)
+                  listCol.orientation = LinearLayout.VERTICAL
+                  val scroll = ScrollView(this)
+                  scroll.addView(listCol)
+                  rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+                  fun render() {
+                      listCol.removeAllViews()
+                      val items = prefs.downloads()
+                      if (items.isEmpty()) {
+                          val e = TextView(this)
+                          e.text = "📥\n\nHenüz indirilen bir şey yok"
+                          e.textSize = 15f; e.setTextColor(cSub); e.gravity = Gravity.CENTER
+                          e.setPadding(0, dp(60), 0, 0)
+                          listCol.addView(e, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                          return
+                      }
+                      for (it0 in items) {
+                          var status = DownloadManager.STATUS_FAILED
+                          var total = 0L
+                          var got = 0L
+                          try {
+                              val c = dm.query(DownloadManager.Query().setFilterById(it0.id))
+                              if (c != null) {
+                                  if (c.moveToFirst()) {
+                                      status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                                      total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                                      got = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                                  } else status = -1
+                                  c.close()
+                              }
+                          } catch (_: Exception) { }
+                          val sub = when (status) {
+                              DownloadManager.STATUS_SUCCESSFUL -> "Tamamlandı" + (if (total > 0) " · " + fmtSize(total) else "")
+                              DownloadManager.STATUS_RUNNING -> "İndiriliyor" + (if (total > 0) " · %" + (got * 100 / total) else "")
+                              DownloadManager.STATUS_PENDING -> "Sırada"
+                              DownloadManager.STATUS_PAUSED -> "Duraklatıldı"
+                              -1 -> "Dosya silinmiş"
+                              else -> "İndirilemedi"
+                          }
+                          val row = LinearLayout(this)
+                          row.orientation = LinearLayout.HORIZONTAL
+                          row.gravity = Gravity.CENTER_VERTICAL
+                          row.setPadding(dp(12), dp(10), dp(4), dp(10))
+                          row.background = ripple(shape(cSurface, 18))
+                          row.setOnClickListener {
+                              if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                                  try {
+                                      val uri = dm.getUriForDownloadedFile(it0.id)
+                                      val mime = dm.getMimeTypeForDownloadedFile(it0.id) ?: "*/*"
+                                      startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                                          .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+                                  } catch (_: Exception) { toast("Bu dosyayı açacak uygulama yok") }
+                              }
+                          }
+                          val av = TextView(this)
+                          av.text = dlEmoji(it0.name); av.textSize = 20f; av.gravity = Gravity.CENTER
+                          av.background = shape(cField, 14)
+                          row.addView(av, LinearLayout.LayoutParams(dp(44), dp(44)))
+                          val col = LinearLayout(this)
+                          col.orientation = LinearLayout.VERTICAL
+                          col.setPadding(dp(12), 0, dp(6), 0)
+                          val t1 = TextView(this)
+                          t1.text = it0.name; t1.textSize = 15f; t1.setTextColor(cText); t1.maxLines = 1
+                          t1.ellipsize = android.text.TextUtils.TruncateAt.END
+                          col.addView(t1)
+                          val t2 = TextView(this)
+                          t2.text = sub; t2.textSize = 12.5f; t2.setTextColor(cSub)
+                          col.addView(t2)
+                          row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                          val x = textBtn("✕") {
+                              try { dm.remove(it0.id) } catch (_: Exception) { }
+                              prefs.removeDownload(it0.id); render()
+                          }
+                          x.setTextColor(cSub)
+                          row.addView(x, LinearLayout.LayoutParams(dp(44), dp(44)))
+                          val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                          lp.bottomMargin = dp(8)
+                          listCol.addView(row, lp)
+                      }
+                  }
+                  render()
+                  val tick = object : Runnable {
+                      override fun run() {
+                          if (!d.isShowing) return
+                          render()
+                          handler.postDelayed(this, 1500L)
+                      }
+                  }
+                  d.setOnDismissListener { handler.removeCallbacks(tick) }
+                  handler.postDelayed(tick, 1500L)
+                  sheetWindow(d, rootV, true)
                   d.show()
               }
 
@@ -1967,6 +2244,7 @@ jobs:
                   add(switchRow("🎧", "Arka planda çalma", "Uygulamadan çıkınca müzik sürer", prefs.bgPlay) { v ->
                       prefs.bgPlay = v; settingsChanged()
                   })
+                  add(switchRow("📱", "Yatayda videoyu tam ekran yap", "Telefonu yan çevirince video büyür", prefs.autoFs) { v -> prefs.autoFs = v })
                   add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
                       prefs.barBottom = v; applyTheme()
                   })
@@ -2214,7 +2492,7 @@ jobs:
                       "if(v){" +
                       "if(!v.paused){" +
                       "var from=v.volume;v.dataset._fv=String(from);" +
-                      "fadeTo(v,from,0,350,function(){v.dataset.userPaused="1";v.pause();});" +
+                      "fadeTo(v,from,0,350,function(){v.dataset.userPaused='1';v.pause();});" +
                       "}else{" +
                       "var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
                       "var p=v.play();if(p&&p.catch)p.catch(function(){});" +
@@ -2261,6 +2539,26 @@ jobs:
                       "fadeOutAll(400,doNext);" +
                       "}catch(e){}})();"
 
+                  const val PLAYER_RECT_JS = "(function(){try{var p=document.querySelector('.html5-video-player');if(!p)return '';var r=p.getBoundingClientRect();if(r.width<50||r.height<30)return '';return Math.round(r.left+r.width/2)+','+Math.round(r.top+r.height/2);}catch(e){return '';}})();"
+                  const val FS_ARM_JS =
+                      "(function(){try{var done=false;function go(){if(done)return;done=true;" +
+                      "document.removeEventListener('touchend',go,true);document.removeEventListener('click',go,true);" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
+                      "var p=document.querySelector('.html5-video-player')||(v&&v.parentElement);" +
+                      "var r=p&&(p.requestFullscreen||p.webkitRequestFullscreen);" +
+                      "if(r){try{var pr=r.call(p);if(pr&&pr.catch)pr.catch(function(){});}catch(e){}}}" +
+                      "document.addEventListener('touchend',go,true);document.addEventListener('click',go,true);" +
+                      "setTimeout(function(){document.removeEventListener('touchend',go,true);document.removeEventListener('click',go,true);},3000);}catch(e){}})();"
+
+                  const val MEDIA_AT_JS_START =
+                      "(function(x,y){try{var e=document.elementFromPoint(x,y);" +
+                      "for(var n=0;e&&n<8;n++,e=e.parentElement){var t=e.tagName;" +
+                      "if(t==='VIDEO'||t==='AUDIO'){var u=e.currentSrc||e.src;if(!u){var s=e.querySelector('source');u=s&&s.src;}return JSON.stringify({k:t==='VIDEO'?'v':'a',u:u||''});}" +
+                      "if(t==='IMG'){return JSON.stringify({k:'i',u:e.currentSrc||e.src||''});}" +
+                      "if(t==='A'&&/\\.(mp4|webm|mkv|mp3|m4a|wav|ogg|pdf|zip|apk)([?#]|\\x24)/i.test(e.href||'')){return JSON.stringify({k:'f',u:e.href});}}" +
+                      "var vs=document.querySelectorAll('video');for(var i=0;i<vs.length;i++){var r=vs[i].getBoundingClientRect();" +
+                      "if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return JSON.stringify({k:'v',u:vs[i].currentSrc||vs[i].src||''});}" +
+                      "return '';}catch(e){return '';}})("
                   const val MEDIA_HOOK_JS =
                       "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
 
@@ -2277,7 +2575,7 @@ jobs:
                       "if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}" +
                       "if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');" +
                       "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
-                      "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
+                      "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a,w:(v.tagName=='VIDEO'&&v.videoWidth>0&&v.offsetWidth>0)});" +
                       "}catch(e){return '';}})();"
                   const val KEEP_MEDIA_PLAYING_JS =
                       "(function(){try{" +
@@ -2568,6 +2866,8 @@ jobs:
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
                 set(v) { sp.edit().putString("theme", v).apply() }
+              var autoFs: Boolean get() = sp.getBoolean("autoFs", true)
+                set(v) { sp.edit().putBoolean("autoFs", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
@@ -2581,6 +2881,36 @@ jobs:
                 set(v) { sp.edit().putString("startMode", v).apply() }
               var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
                 set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
+
+              class Dl(val id: Long, val name: String, val url: String)
+
+              fun downloads(): MutableList<Dl> {
+                  val out = ArrayList<Dl>()
+                  try {
+                      val arr = JSONArray(sp.getString("dls", "[]") ?: "[]")
+                      for (i in 0 until arr.length()) {
+                          val o = arr.getJSONObject(i)
+                          out.add(Dl(o.getLong("id"), o.optString("n"), o.optString("u")))
+                      }
+                  } catch (_: Exception) { }
+                  return out
+              }
+
+              private fun saveDownloads(list: List<Dl>) {
+                  val arr = JSONArray()
+                  for (d in list.take(200)) arr.put(org.json.JSONObject().put("id", d.id).put("n", d.name).put("u", d.url))
+                  sp.edit().putString("dls", arr.toString()).apply()
+              }
+
+              fun addDownload(id: Long, name: String, url: String) {
+                  val l = downloads()
+                  l.add(0, Dl(id, name, url))
+                  saveDownloads(l)
+              }
+
+              fun removeDownload(id: Long) {
+                  saveDownloads(downloads().filter { it.id != id })
+              }
 
               private fun readList(key: String): MutableList<Entry> {
                   val out = ArrayList<Entry>()
@@ -2731,7 +3061,6 @@ jobs:
           cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
           EOF
-
           cat > app/src/main/res/drawable/ic_pip_prev.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
               <path android:fillColor="#FFFFFFFF" android:pathData="M12,12h6v24h-6zM36,12 L18,24 36,36z"/>
@@ -2752,7 +3081,6 @@ jobs:
               <path android:fillColor="#FFFFFFFF" android:pathData="M12,10h8v28h-8zM28,10h8v28h-8z"/>
           </vector>
           EOF
-
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Rota</string></resources>
           EOF
@@ -2779,4 +3107,5 @@ jobs:
           name: Pusula-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
 
