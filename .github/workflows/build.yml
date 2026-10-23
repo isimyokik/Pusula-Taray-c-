@@ -2455,7 +2455,7 @@ jobs:
 
                   @Volatile var running = false
 
-                  fn update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
                           .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist)
                       try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
@@ -2487,7 +2487,7 @@ jobs:
 
           val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:\\/?#].*)?|^(\\d{1,3}\\.){3}\\d{1,3}([:\\/?#].*)?|^localhost([:\\/?#].*)?$")
 
-          fn resolveInput(raw: String, engine: Engines.E): String {
+          fun resolveInput(raw: String, engine: Engines.E): String {
               val t = raw.trim()
               if (t.isEmpty()) return engine.home
               if (t.startsWith("http://", true) || t.startsWith("https://", true)) return t
@@ -2504,7 +2504,7 @@ jobs:
               var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
-                set(v) { sp.edit().putBoolean("theme", v).apply() }
+                set(v) { sp.edit().putString("theme", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
@@ -2514,7 +2514,7 @@ jobs:
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
               var startMode: String get() = sp.getString("startMode", "resume") ?: "resume"
-                set(v) { sp.edit().putBoolean("startMode", v).apply() }
+                set(v) { sp.edit().putString("startMode", v).apply() }
               var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
                 set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
 
