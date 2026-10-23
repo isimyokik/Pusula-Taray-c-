@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.4"
+                  versionName = "2.5"
               }
 
               buildTypes {
@@ -1922,26 +1922,73 @@ jobs:
 
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button');if(b)b.click();}})();"
                   
-                  // 1.5 Saniye Uzun Fade Out (Yumuşak Kapanış - Pıt sesi olmasın)
-                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){var vol=m.volume;var steps=25;var step=vol/steps;var i=0;var iv=setInterval(function(){i++;m.volume=Math.max(0,vol-(step*i));if(i>=steps||m.volume===0){clearInterval(iv);m.pause();m.volume=vol;m.dataset.pusulaWasPlaying='';}},60);}});})();"
+                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){m.pause();}});})();"
 
-                  // YouTube ve YouTube Music Ortak Entegre İleri/Geri Tuşları
+                  // YouTube & YouTube Music İleri/Geri Geçişlerinde 1.5 Saniye Yumuşak Fade-Out / Fade-In Sinüs Dalgası
                   const val MEDIA_PREVIOUS_JS =
                       "(function(){try{" +
-                      "var h=window.__msh&&window.__msh.previoustrack;if(h){h({action:'previoustrack'});return;}" +
-                      "var c=document.querySelector('ytmusic-player-bar');if(c&&c.previousVideo){c.previousVideo();return;}" +
-                      "var b=document.querySelector('.ytp-prev-button,ytmusic-player-bar .previous-button,.previous-button,#left-controls .previous-button,[aria-label*=Previous],[aria-label*=Önceki]');" +
-                      "if(b){b.click();return;}" +
-                      "var v=document.querySelector('video,audio');if(v)v.currentTime=0;" +
+                      "var l=Array.from(document.querySelectorAll('video,audio'));" +
+                      "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
+                      "if(v){" +
+                      "  var tv=v.volume; var steps=25; var step=tv/steps; var i=0;" +
+                      "  var iv=setInterval(function(){" +
+                      "    i++; v.volume=Math.max(0, tv-(step*i));" +
+                      "    if(i>=steps||v.volume===0){" +
+                      "      clearInterval(iv);" +
+                      "      var h=window.__msh&&window.__msh.previoustrack;if(h){h({action:'previoustrack'});}" +
+                      "      else{" +
+                      "        var c=document.querySelector('ytmusic-player-bar');if(c&&c.previousVideo){c.previousVideo();}" +
+                      "        else{" +
+                      "          var b=document.querySelector('.ytp-prev-button,ytmusic-player-bar .previous-button,.previous-button,#left-controls .previous-button,[aria-label*=Previous],[aria-label*=Önceki]');" +
+                      "          if(b)b.click(); else v.currentTime=0;" +
+                      "        }" +
+                      "      }" +
+                      "      setTimeout(function(){" +
+                      "        var k=0; v.volume=0;" +
+                      "        var iv2=setInterval(function(){" +
+                      "          k++; v.volume=Math.min(tv, tv*(k/steps));" +
+                      "          if(k>=steps) clearInterval(iv2);" +
+                      "        },60);" +
+                      "      },300);" +
+                      "    }" +
+                      "  },60);" +
+                      "}else{" +
+                      "  var b=document.querySelector('.ytp-prev-button,ytmusic-player-bar .previous-button,.previous-button,#left-controls .previous-button,[aria-label*=Previous],[aria-label*=Önceki]');" +
+                      "  if(b)b.click();" +
+                      "}" +
                       "}catch(e){}})();"
 
                   const val MEDIA_NEXT_JS =
                       "(function(){try{" +
-                      "var h=window.__msh&&window.__msh.nexttrack;if(h){h({action:'nexttrack'});return;}" +
-                      "var c=document.querySelector('ytmusic-player-bar');if(c&&c.nextVideo){c.nextVideo();return;}" +
-                      "var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,#left-controls .next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
-                      "if(b){b.click();return;}" +
-                      "var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration;" +
+                      "var l=Array.from(document.querySelectorAll('video,audio'));" +
+                      "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
+                      "if(v){" +
+                      "  var tv=v.volume; var steps=25; var step=tv/steps; var i=0;" +
+                      "  var iv=setInterval(function(){" +
+                      "    i++; v.volume=Math.max(0, tv-(step*i));" +
+                      "    if(i>=steps||v.volume===0){" +
+                      "      clearInterval(iv);" +
+                      "      var h=window.__msh&&window.__msh.nexttrack;if(h){h({action:'nexttrack'});}" +
+                      "      else{" +
+                      "        var c=document.querySelector('ytmusic-player-bar');if(c&&c.nextVideo){c.nextVideo();}" +
+                      "        else{" +
+                      "          var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,#left-controls .next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
+                      "          if(b)b.click(); else if(isFinite(v.duration))v.currentTime=v.duration;" +
+                      "        }" +
+                      "      }" +
+                      "      setTimeout(function(){" +
+                      "        var k=0; v.volume=0;" +
+                      "        var iv2=setInterval(function(){" +
+                      "          k++; v.volume=Math.min(tv, tv*(k/steps));" +
+                      "          if(k>=steps) clearInterval(iv2);" +
+                      "        },60);" +
+                      "      },300);" +
+                      "    }" +
+                      "  },60);" +
+                      "}else{" +
+                      "  var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,#left-controls .next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
+                      "  if(b)b.click();" +
+                      "}" +
                       "}catch(e){}})();"
 
                   const val MEDIA_HOOK_JS =
@@ -1955,22 +2002,10 @@ jobs:
                       "};" +
                       "}catch(e){}})();"
 
-                  // 1.5 Saniye Uzun Fade In (Yumuşak Açılış ve Sinüs Dalgası Efekti)
                   const val MEDIA_STATE_JS =
                       "(function(){try{" +
                       "var l=Array.from(document.querySelectorAll('video,audio'));" +
                       "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
-                      "if(v && !v.__pusulaInited){" +
-                      "  v.__pusulaInited=true;" +
-                      "  v.addEventListener('play', function(){" +
-                      "    var tv = v.volume; v.volume = 0;" +
-                      "    var steps = 25; var k = 0;" +
-                      "    var iv = setInterval(function(){" +
-                      "      k++; v.volume = Math.min(tv, tv * (k / steps));" +
-                      "      if(k >= steps) clearInterval(iv);" +
-                      "    }, 60);" +
-                      "  });" +
-                      "}" +
                       "if(!v||!(v.currentSrc||v.src))return '';" +
                       "var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;" +
                       "function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}" +
@@ -2216,7 +2251,7 @@ jobs:
               var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
-                set(v) { sp.edit().putString("theme", v).apply() }
+                set(v) { sp.edit().putBoolean("theme", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
