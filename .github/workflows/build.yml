@@ -1577,4 +1577,819 @@ jobs:
                   tabs.getOrNull(cur)?.let { capturePreview(it) }
                   val d = Dialog(this)
                   val rootV = LinearLayout(this)
-                  rootV.orientation =
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(12), dp(34), dp(12), dp(16))
+
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  head.setPadding(dp(6), 0, dp(6), dp(8))
+                  val title = TextView(this)
+                  title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
+                  head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  val done = textBtn("Bitti") { d.dismiss() }
+                  done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
+                  head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
+                  rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  val grid = LinearLayout(this)
+                  grid.orientation = LinearLayout.VERTICAL
+                  val scroll = ScrollView(this)
+                  scroll.addView(grid)
+                  rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+                  val actions = LinearLayout(this)
+                  actions.orientation = LinearLayout.HORIZONTAL
+                  actions.setPadding(0, dp(10), 0, 0)
+                  val b1 = pillBtn("＋  Yeni sekme", intArrayOf(cAccent, cAccent2)) { d.dismiss(); openTab(null) }
+                  val b2 = pillBtn("🕶  Gizli sekme", intArrayOf(0xFF6D2BD9.toInt(), 0xFFC026D3.toInt())) { d.dismiss(); openTab(null, true, true) }
+                  val l1 = LinearLayout.LayoutParams(0, dp(48), 1f); l1.rightMargin = dp(6)
+                  val l2 = LinearLayout.LayoutParams(0, dp(48), 1f); l2.leftMargin = dp(6)
+                  actions.addView(b1, l1); actions.addView(b2, l2)
+                  rootV.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  fillTabs(grid, title, d)
+                  sheetWindow(d, rootV, true)
+                  d.show()
+              }
+
+              private fun fillTabs(grid: LinearLayout, title: TextView, d: Dialog) {
+                  grid.removeAllViews()
+                  title.text = "Sekmeler · " + tabs.size
+                  for (rowStart in 0 until tabs.size step 2) {
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.HORIZONTAL
+                      for (i in rowStart until minOf(rowStart + 2, tabs.size)) {
+                          val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                          lp.setMargins(dp(5), dp(5), dp(5), dp(5))
+                          row.addView(tabCard(i, grid, title, d), lp)
+                      }
+                      if (rowStart + 1 >= tabs.size) row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+                      grid.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                  }
+              }
+
+              private fun tabCard(i: Int, grid: LinearLayout, title: TextView, d: Dialog): View {
+                  val t = tabs[i]
+                  val card = LinearLayout(this)
+                  card.orientation = LinearLayout.VERTICAL
+                  card.setPadding(dp(8), dp(4), dp(8), dp(8))
+                  val bg = GradientDrawable()
+                  bg.setColor(if (t.incognito) 0xFF2B1A55.toInt() else cSurface)
+                  bg.cornerRadius = dp(20).toFloat()
+                  if (i == cur) bg.setStroke(dp(2), if (t.incognito) 0xFFA46BFF.toInt() else cAccent)
+                  card.background = bg
+                  card.setOnClickListener { d.dismiss(); switchTo(i) }
+
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  val label = TextView(this)
+                  val name = if (t.title.isBlank() || t.title == "Yeni Sekme") shownUrl(t.pendingUrl ?: t.url).ifEmpty { "Yeni sekme" } else t.title
+                  label.text = (if (t.incognito) "🕶 " else "") + name
+                  label.textSize = 12.5f; label.maxLines = 1
+                  label.ellipsize = android.text.TextUtils.TruncateAt.END
+                  label.setTextColor(if (t.incognito) 0xFFF3ECFF.toInt() else cText)
+                  if (i == cur) label.setTypeface(null, Typeface.BOLD)
+                  label.setPadding(dp(4), 0, 0, 0)
+                  head.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  head.addView(textBtn("✕") { closeTab(i); fillTabs(grid, title, d) }, LinearLayout.LayoutParams(dp(34), dp(34)))
+                  card.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  val img = ImageView(this)
+                  img.scaleType = ImageView.ScaleType.MATRIX
+                  img.background = shape(if (t.incognito) 0xFF3A2470.toInt() else cField, 14)
+                  img.clipToOutline = true
+                  val bmp = t.preview
+                  if (bmp != null) {
+                      img.setImageBitmap(bmp)
+                      img.post {
+                          val sc = img.width.toFloat() / bmp.width
+                          val m = Matrix(); m.setScale(sc, sc)
+                          img.imageMatrix = m
+                      }
+                  }
+                  card.addView(img, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(170)))
+                  return card
+              }
+
+              private fun settingsRow(icon: String, title: String, sub: String?, trailing: View?, onClick: () -> Unit): View {
+                  val row = LinearLayout(this)
+                  row.orientation = LinearLayout.HORIZONTAL
+                  row.gravity = Gravity.CENTER_VERTICAL
+                  row.setPadding(dp(12), dp(10), dp(14), dp(10))
+                  row.background = ripple(shape(cSurface, 18))
+                  row.setOnClickListener { onClick() }
+                  val ic = TextView(this)
+                  ic.text = icon; ic.textSize = 19f; ic.gravity = Gravity.CENTER
+                  val g = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
+                  g.cornerRadius = dp(13).toFloat()
+                  ic.background = g
+                  row.addView(ic, LinearLayout.LayoutParams(dp(42), dp(42)))
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(12), 0, dp(8), 0)
+                  val tt = TextView(this)
+                  tt.text = title; tt.textSize = 15.5f; tt.setTextColor(cText); tt.setTypeface(null, Typeface.BOLD)
+                  col.addView(tt)
+                  if (sub != null) {
+                      val st = TextView(this)
+                      st.text = sub; st.textSize = 12.5f; st.setTextColor(cSub)
+                      col.addView(st)
+                  }
+                  row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  if (trailing != null) row.addView(trailing, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                  return row
+              }
+
+              private fun chevron(): TextView {
+                  val c = TextView(this)
+                  c.text = "›"; c.textSize = 24f; c.setTextColor(cSub)
+                  return c
+              }
+
+              private fun switchRow(icon: String, title: String, sub: String, value: Boolean, onChange: (Boolean) -> Unit): View {
+                  val sw = SwitchCompat(this)
+                  sw.isChecked = value
+                  val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+                  sw.thumbTintList = ColorStateList(states, intArrayOf(Color.WHITE, cSub))
+                  sw.trackTintList = ColorStateList(states, intArrayOf(cAccent, cField))
+                  sw.setOnCheckedChangeListener { _, v -> onChange(v) }
+                  return settingsRow(icon, title, sub, sw) { sw.toggle() }
+              }
+
+              private fun showSettings() {
+                  val d = Dialog(this)
+                  val rootV = LinearLayout(this)
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  head.setPadding(dp(6), 0, dp(6), dp(10))
+                  val title = TextView(this)
+                  title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
+                  head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  val done = textBtn("Bitti") { d.dismiss() }
+                  done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
+                  head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
+                  rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  val list = LinearLayout(this)
+                  list.orientation = LinearLayout.VERTICAL
+                  fun add(v: View) {
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      lp.bottomMargin = dp(8)
+                      list.addView(v, lp)
+                  }
+                  fun label(t: String) {
+                      val l = TextView(this)
+                      l.text = t.uppercase(); l.textSize = 11.5f; l.setTextColor(cSub); l.setTypeface(null, Typeface.BOLD)
+                      l.letterSpacing = 0.1f
+                      l.setPadding(dp(6), dp(10), 0, dp(6))
+                      list.addView(l)
+                  }
+                  label("Gezinme")
+                  add(switchRow("🛡️", "Reklam engelleyici", "YouTube reklamlarını atlar", prefs.adBlock) { v ->
+                      prefs.adBlock = v; settingsChanged()
+                  })
+                  add(switchRow("🎧", "Arka planda çalma", "Uygulamadan çıkınca müzik sürer", prefs.bgPlay) { v ->
+                      prefs.bgPlay = v; settingsChanged()
+                  })
+                  add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
+                      prefs.barBottom = v; applyTheme()
+                  })
+                  add(settingsRow("🌐", "Varsayılan tarayıcı yap", if (isDefaultBrowser()) "Şu an varsayılan ✓" else "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
+                  label("Görünüm ve arama")
+                  add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
+                  add(settingsRow("🔎", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
+                  label("Gizlilik")
+                  add(settingsRow("🕘", "Geçmişi temizle", null, null) { prefs.clearHistory(); toast("Geçmiş temizlendi") })
+                  add(settingsRow("🧹", "Önbelleği ve çerezleri temizle", null, null) { clearBrowsingData(); toast("Temizlendi") })
+
+                  val scroll = ScrollView(this)
+                  scroll.addView(list)
+                  rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+                  sheetWindow(d, rootV, true)
+                  d.show()
+              }
+
+              private fun isDefaultBrowser(): Boolean {
+                  return try {
+                      if (Build.VERSION.SDK_INT >= 29) {
+                          val rm = getSystemService(android.app.role.RoleManager::class.java)
+                          rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)
+                      } else {
+                          val i = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com"))
+                          val ri = packageManager.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                          ri?.activityInfo?.packageName == packageName
+                      }
+                  } catch (_: Exception) { false }
+              }
+
+              private fun openDefaultAppsSettings() {
+                  try {
+                      startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+                      toast("\"Tarayıcı uygulaması\"nı seç, sonra Rota'yı işaretle")
+                  } catch (_: Exception) {
+                      try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar açılamadı") }
+                  }
+              }
+
+              private fun afterRole() {
+                  if (isDefaultBrowser()) toast("Rota artık varsayılan tarayıcı ✓") else openDefaultAppsSettings()
+              }
+
+              private fun askDefaultBrowser() {
+                  if (isDefaultBrowser()) { toast("Rota zaten varsayılan tarayıcı ✓"); return }
+                  if (Build.VERSION.SDK_INT >= 29) {
+                      try {
+                          val rm = getSystemService(android.app.role.RoleManager::class.java)
+                          if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
+                              roleLauncher.launch(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER))
+                              return
+                          }
+                      } catch (_: Exception) { }
+                  }
+                  openDefaultAppsSettings()
+              }
+
+              private fun chooseTheme(onDone: () -> Unit) {
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(14), dp(12), dp(14), dp(22))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val tt = TextView(this)
+                  tt.text = "Tema seç"; tt.textSize = 18f; tt.setTypeface(null, Typeface.BOLD); tt.setTextColor(cText)
+                  tt.setPadding(dp(6), 0, 0, dp(10))
+                  col.addView(tt)
+                  for (p in Themes.all) {
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.HORIZONTAL
+                      row.gravity = Gravity.CENTER_VERTICAL
+                      row.setPadding(dp(14), dp(10), dp(14), dp(10))
+                      val rb = GradientDrawable()
+                      rb.setColor(p.bg); rb.cornerRadius = dp(18).toFloat()
+                      if (p.id == prefs.theme) rb.setStroke(dp(2), p.accent) else rb.setStroke(dp(1), p.field)
+                      row.background = rb
+                      val dot = View(this)
+                      val dg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(p.accent, p.accent2))
+                      dg.shape = GradientDrawable.OVAL
+                      dot.background = dg
+                      row.addView(dot, LinearLayout.LayoutParams(dp(30), dp(30)))
+                      val nm = TextView(this)
+                      nm.text = p.name; nm.textSize = 15.5f; nm.setTextColor(p.text); nm.setTypeface(null, Typeface.BOLD)
+                      nm.setPadding(dp(14), 0, 0, 0)
+                      row.addView(nm, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                      if (p.id == prefs.theme) {
+                          val ck = TextView(this)
+                          ck.text = "✓"; ck.textSize = 18f; ck.setTextColor(p.accent); ck.setTypeface(null, Typeface.BOLD)
+                          row.addView(ck)
+                      }
+                      row.setOnClickListener {
+                          d.dismiss()
+                          prefs.theme = p.id
+                          applyTheme()
+                          onDone()
+                      }
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      lp.bottomMargin = dp(8)
+                      col.addView(row, lp)
+                  }
+                  val sc = ScrollView(this)
+                  sc.addView(col)
+                  sheetWindow(d, sc, false)
+                  d.show()
+              }
+
+              private fun chooseEngine(onDone: () -> Unit) {
+                  val names = Engines.all.map { it.name }.toTypedArray()
+                  val sel = Engines.all.indexOfFirst { it.id == prefs.engine }.coerceAtLeast(0)
+                  AlertDialog.Builder(this).setTitle("Arama Motoru").setSingleChoiceItems(names, sel) { dlg, which ->
+                      prefs.engine = Engines.all[which].id; dlg.dismiss(); onDone()
+                  }.show()
+              }
+
+              private fun clearBrowsingData() {
+                  CookieManager.getInstance().removeAllCookies(null)
+                  CookieManager.getInstance().flush()
+                  WebStorage.getInstance().deleteAllData()
+                  for (t in tabs) t.web.clearCache(true)
+              }
+
+              private companion object {
+                  const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
+                  const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
+                  const val MAX_TABS = 20
+
+                  const val KEEP_PLAYING_JS =
+                      "(function(){try{" +
+                          "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
+                          "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
+                          "document.addEventListener('visibilitychange',function(e){" +
+                          "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
+                          "e.stopImmediatePropagation();},true);" +
+                          "}catch(e){}})();"
+
+                  // Reklam görüntüsünü gizler (siyah bekleme ekranı kalır), veriyi değiştirmez, yalnızca inmiş (tamponlanmış) kısmı atlar, inmemiş yere sarmaz:
+                  // reklam sırasında sesi kapatıp 16 kat hızlandırır ve "Atla" düğmesine basar.
+                  const val STABLE_AD_BLOCKER_JS =
+                      "(function(){" +
+                      "if(location.hostname.indexOf('youtube.com')<0)return;" +
+                      "var fast=false,adn=0;" +
+                      "setInterval(function(){try{" +
+                      "var pl=document.querySelector('.html5-video-player');" +
+                      "if(!pl)return;" +
+                      "var vd=pl.querySelector('video');" +
+                      "var ad=pl.classList.contains('ad-showing');adn=ad?adn+1:0;" +
+                      "if(ad&&adn>=2){" +
+                      "var va=pl.querySelector('.video-ads');if(va)va.style.visibility='hidden';" +
+                      "if(vd){" +
+                      "if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';vd.dataset.pv=String(vd.volume||1);}" +
+                      "vd.style.visibility='hidden';vd.muted=true;" +
+                      "if(vd.playbackRate<8)vd.playbackRate=16;" +
+                      "}" +
+                      "var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button');" +
+                      "if(b)b.click();" +
+                      "}else if(!ad&&fast){fast=false;" +
+                      "var va2=pl.querySelector('.video-ads');if(va2)va2.style.visibility='';" +
+                      "if(vd){vd.style.visibility='';vd.playbackRate=1;" +
+                      "if(vd.dataset.pm!=='1'){var tv=parseFloat(vd.dataset.pv||'1')||1;vd.volume=0;vd.muted=false;" +
+                      "var k=0;var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;}},30);}" +
+                      "else{vd.muted=true;}}" +
+                      "}" +
+                      "}catch(e){}},150);" +
+                      "})();"
+
+
+                  const val BACKGROUND_MEDIA_JS =
+                      "(function(){try{" +
+                          "document.querySelectorAll('video,audio').forEach(function(m){" +
+                          "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                          "});" +
+                          "}catch(e){}})();"
+
+                  const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
+                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){m.pause();m.dataset.pusulaWasPlaying='';}});})();"
+                  const val MEDIA_PREVIOUS_JS =
+                      "(function(){try{" +
+                      "function softMute(){document.querySelectorAll('video,audio').forEach(function(m){try{if(!m.dataset._sm){m.dataset._sm='1';m.dataset._sv=String(m.volume||1);m.volume=0;}}catch(x){}});setTimeout(function(){document.querySelectorAll('video,audio').forEach(function(m){try{if(m.dataset._sm==='1'){var tv=parseFloat(m.dataset._sv||'1')||1;m.volume=0;var k=0;var iv=setInterval(function(){k++;m.volume=Math.min(tv,tv*(k/10));if(k>=10){clearInterval(iv);m.volume=tv;delete m.dataset._sm;delete m.dataset._sv;}},25);}}catch(x){}});},400);}" +
+                      "var h=window.__msh&&window.__msh.previoustrack;if(h){try{softMute();h({action:'previoustrack'});return;}catch(x){}}" +
+                      "var sels=['ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','.previous-button','.ytp-prev-button','#left-controls .previous-button','[aria-label=\\\"Previous\\\"]','[aria-label=\\\"Önceki\\\"]','[aria-label*=\\\"Previous track\\\"]','[aria-label*=\\\"Önceki parça\\\"]'];" +
+                      "for(var i=0;i<sels.length;i++){var el=document.querySelector(sels[i]);if(!el)continue;var btn=el.querySelector&&el.querySelector('button')||el;try{softMute();btn.click();return;}catch(x){}}" +
+                      "}catch(e){}})();"
+
+                  const val MEDIA_NEXT_JS =
+                      "(function(){try{" +
+                      "function softMute(){document.querySelectorAll('video,audio').forEach(function(m){try{if(!m.dataset._sm){m.dataset._sm='1';m.dataset._sv=String(m.volume||1);m.volume=0;}}catch(x){}});setTimeout(function(){document.querySelectorAll('video,audio').forEach(function(m){try{if(m.dataset._sm==='1'){var tv=parseFloat(m.dataset._sv||'1')||1;m.volume=0;var k=0;var iv=setInterval(function(){k++;m.volume=Math.min(tv,tv*(k/10));if(k>=10){clearInterval(iv);m.volume=tv;delete m.dataset._sm;delete m.dataset._sv;}},25);}}catch(x){}});},400);}" +
+                      "var h=window.__msh&&window.__msh.nexttrack;if(h){try{softMute();h({action:'nexttrack'});return;}catch(x){}}" +
+                      "var sels=['ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','.next-button','.ytp-next-button','#left-controls .next-button','[aria-label=\\\"Next\\\"]','[aria-label=\\\"Sonraki\\\"]','[aria-label*=\\\"Next track\\\"]','[aria-label*=\\\"Sonraki parça\\\"]'];" +
+                      "for(var i=0;i<sels.length;i++){var el=document.querySelector(sels[i]);if(!el)continue;var btn=el.querySelector&&el.querySelector('button')||el;try{softMute();btn.click();return;}catch(x){}}" +
+                      "}catch(e){}})();"
+
+                  const val MEDIA_HOOK_JS =
+                      "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
+
+                  const val MEDIA_STATE_JS =
+                      "(function(){try{" +
+                      "var l=Array.from(document.querySelectorAll('video,audio'));" +
+                      "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
+                      "if(!v||!(v.currentSrc||v.src))return '';" +
+                      "var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;" +
+                      "function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}" +
+                      "function site(t){return !t||/^YouTube( Music)?$/i.test(t.trim());}" +
+                      "var t=(md&&md.title)||'';" +
+                      "if(site(t))t=tx('ytmusic-player-bar .title')||tx('.player-bar-title')||tx('ytm-slim-video-metadata-section-renderer h2')||tx('.slim-video-information-title')||tx('ytd-watch-metadata h1')||tx('h1.title')||'';" +
+                      "if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}" +
+                      "if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');" +
+                      "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
+                      "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
+                      "}catch(e){return '';}})();"
+                  const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;" +
+                      "var s=document.createElement('style');s.id='__pip';" +
+                      "s.textContent='html,body{overflow:hidden!important}.__pipa{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important}" +
+                      ".__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important}';" +
+                      "document.documentElement.appendChild(s);v.classList.add('__pipv');" +
+                      "var e=v.parentElement;while(e&&e!==document.documentElement){e.classList.add('__pipa');e=e.parentElement;}" +
+                      "window.dispatchEvent(new Event('resize'));}catch(e){}})();"
+                  const val PIP_OFF_JS = "(function(){try{var s=document.getElementById('__pip');if(s)s.remove();" +
+                      "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
+                      "document.querySelectorAll('.__pipa').forEach(function(x){x.classList.remove('__pipa');});" +
+                      "window.dispatchEvent(new Event('resize'));}catch(e){}})();"
+              }
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
+          package com.pusula.browser
+
+          /** Uygulama renk temaları. */
+          class Palette(
+              val id: String,
+              val name: String,
+              val dark: Boolean,
+              val bg: Int,
+              val surface: Int,
+              val field: Int,
+              val text: Int,
+              val sub: Int,
+              val icon: Int,
+              val accent: Int,
+              val accent2: Int
+          )
+
+          object Themes {
+              private fun c(v: Long): Int = v.toInt()
+
+              val all: List<Palette> = listOf(
+                  Palette("gece", "Gece Mavisi", true,
+                      c(0xFF0B1020), c(0xFF131B33), c(0xFF1D2848), c(0xFFEAF0FF), c(0xFF8FA0C8), c(0xFFC9D6FF), c(0xFF4C8DFF), c(0xFF8A5CFF)),
+                  Palette("mor", "Mor Gece", true,
+                      c(0xFF120B1F), c(0xFF1A1230), c(0xFF2A1F4A), c(0xFFF1EAFF), c(0xFFA99BCF), c(0xFFD8C8FF), c(0xFF9B6BFF), c(0xFFFF5CA8)),
+                  Palette("orman", "Orman", true,
+                      c(0xFF08140F), c(0xFF0E1F17), c(0xFF173126), c(0xFFE6F7EE), c(0xFF86B8A0), c(0xFFBFE8D3), c(0xFF2ED47A), c(0xFF1BC5C5)),
+                  Palette("gunbatimi", "Gün Batımı", true,
+                      c(0xFF1A0F0F), c(0xFF241414), c(0xFF3A2020), c(0xFFFFEDE6), c(0xFFC9988A), c(0xFFFFD2C2), c(0xFFFF7A45), c(0xFFFF3D77)),
+                  Palette("acik", "Açık", false,
+                      c(0xFFF2F4F9), c(0xFFFFFFFF), c(0xFFE8ECF5), c(0xFF151A26), c(0xFF667089), c(0xFF3A4560), c(0xFF3D6BFF), c(0xFF7A5CFF)),
+                  Palette("okyanus", "Okyanus", false,
+                      c(0xFFEAF6FA), c(0xFFFFFFFF), c(0xFFDDEFF5), c(0xFF0F2530), c(0xFF5A7886), c(0xFF2A4E5E), c(0xFF0EA5C6), c(0xFF2F6BFF))
+              )
+
+              fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.PendingIntent
+          import android.app.Service
+          import android.content.Context
+          import android.content.Intent
+          import android.content.pm.ServiceInfo
+          import android.graphics.drawable.Icon
+          import android.media.MediaMetadata
+          import android.media.session.MediaSession
+          import android.media.session.PlaybackState
+          import android.os.Build
+          import android.os.IBinder
+          import androidx.core.app.ServiceCompat
+          import androidx.core.content.ContextCompat
+
+          /** Bildirim ve kilit ekranı medya oynatıcısı. Düğmeler uygulamaya yayın olarak iletilir. */
+          class PlaybackService : Service() {
+              private var session: MediaSession? = null
+              private var playing = false
+              private var title = ""
+              private var artist = ""
+              private var foregroundStarted = false
+
+              override fun onCreate() {
+                  super.onCreate()
+                  running = true
+                  val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
+                  }
+                  val s = MediaSession(this, "Rota")
+                  s.setCallback(object : MediaSession.Callback() {
+                      override fun onPlay() { send(ACTION_PLAY) }
+                      override fun onPause() { send(ACTION_PAUSE) }
+                      override fun onSkipToNext() { send(ACTION_NEXT) }
+                      override fun onSkipToPrevious() { send(ACTION_PREVIOUS) }
+                  })
+                  s.isActive = true
+                  session = s
+              }
+
+              private fun send(action: String) { sendBroadcast(Intent(action).setPackage(packageName)) }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      ACTION_UPDATE -> {
+                          playing = intent.getBooleanExtra("playing", false)
+                          title = intent.getStringExtra("title") ?: ""
+                          artist = intent.getStringExtra("artist") ?: ""
+                      }
+                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
+                  }
+                  refresh()
+                  return START_NOT_STICKY
+              }
+
+              private fun pi(code: Int, action: String): PendingIntent =
+                  PendingIntent.getBroadcast(this, code, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+              private fun act(res: Int, label: String, p: PendingIntent): Notification.Action =
+                  Notification.Action.Builder(Icon.createWithResource(this, res), label, p).build()
+
+              private fun refresh() {
+                  val s = session ?: return
+                  val shownTitle = if (title.isBlank()) "Rota" else title
+                  s.setMetadata(MediaMetadata.Builder()
+                      .putString(MediaMetadata.METADATA_KEY_TITLE, shownTitle)
+                      .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
+                      .build())
+                  val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
+                      PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                  s.setPlaybackState(PlaybackState.Builder()
+                      .setActions(actions)
+                      .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
+                      .build())
+
+                  val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                  val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
+                  b.setSmallIcon(R.drawable.ic_notif)
+                  b.setContentTitle(shownTitle)
+                  b.setContentText(if (artist.isBlank()) "Rota" else artist)
+                  b.setContentIntent(open)
+                  b.setOngoing(playing)
+                  b.setVisibility(Notification.VISIBILITY_PUBLIC)
+                  b.addAction(act(android.R.drawable.ic_media_previous, "Önceki", pi(1, ACTION_PREVIOUS)))
+                  if (playing) b.addAction(act(android.R.drawable.ic_media_pause, "Duraklat", pi(2, ACTION_PAUSE)))
+                  else b.addAction(act(android.R.drawable.ic_media_play, "Oynat", pi(3, ACTION_PLAY)))
+                  b.addAction(act(android.R.drawable.ic_media_next, "Sonraki", pi(4, ACTION_NEXT)))
+                  b.setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2))
+                  val n = b.build()
+                  try {
+                      if (!foregroundStarted) {
+                          if (Build.VERSION.SDK_INT >= 29) {
+                              ServiceCompat.startForeground(this, NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                          } else { startForeground(NOTIF_ID, n) }
+                          foregroundStarted = true
+                      } else {
+                          (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n)
+                      }
+                      if (!playing) {
+                          stopForeground(Service.STOP_FOREGROUND_DETACH)
+                          foregroundStarted = false
+                      }
+                  } catch (_: Exception) { stopSelf() }
+              }
+
+              override fun onDestroy() {
+                  running = false
+                  try { session?.release() } catch (_: Exception) { }
+                  session = null
+                  super.onDestroy()
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+
+              companion object {
+                  const val CHANNEL = "playback"
+                  const val NOTIF_ID = 1002
+                  const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
+                  const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
+                  const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
+                  const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
+                  const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
+                  const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
+
+                  @Volatile var running = false
+
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                      val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
+                          .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist)
+                      try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
+                  }
+
+                  fun stop(ctx: Context) {
+                      try { ctx.stopService(Intent(ctx, PlaybackService::class.java)) } catch (_: Exception) { }
+                  }
+              }
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.content.Context
+          import android.net.Uri
+          import org.json.JSONArray
+          import org.json.JSONObject
+
+          object Engines {
+              class E(val id: String, val name: String, val search: String, val home: String)
+              val all = listOf(
+                  E("google", "Google", "https://www.google.com/search?q=%s", "https://www.google.com/"),
+                  E("ddg", "DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com/"),
+                  E("bing", "Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com/")
+              )
+              fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
+          }
+
+          val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$")
+
+          fun resolveInput(raw: String, engine: Engines.E): String {
+              val t = raw.trim()
+              if (t.isEmpty()) return engine.home
+              if (t.startsWith("http://", true) || t.startsWith("https://", true)) return t
+              if (!t.contains(' ') && HOST_LIKE.matches(t)) return "https://" + t
+              return engine.search.replace("%s", Uri.encode(t))
+          }
+
+          class Prefs(context: Context) {
+              class Entry(val title: String, val url: String)
+              private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
+
+              var engine: String get() = sp.getString("engine", "google") ?: "google"
+                set(v) { sp.edit().putString("engine", v).apply() }
+              var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
+                set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
+              var theme: String get() = sp.getString("theme", "gece") ?: "gece"
+                set(v) { sp.edit().putString("theme", v).apply() }
+              var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
+                set(v) { sp.edit().putBoolean("barBottom", v).apply() }
+              var pins: String get() = sp.getString("pins", "") ?: ""
+                set(v) { sp.edit().putString("pins", v).apply() }
+              var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false)
+                set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
+              var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
+                set(v) { sp.edit().putBoolean("adBlock", v).apply() }
+
+              private fun readList(key: String): MutableList<Entry> {
+                  val out = ArrayList<Entry>()
+                  try {
+                      val arr = JSONArray(sp.getString(key, "[]") ?: "[]")
+                      for (i in 0 until arr.length()) {
+                          val o = arr.getJSONObject(i)
+                          out.add(Entry(o.optString("t"), o.optString("u")))
+                      }
+                  } catch (_: Exception) {}
+                  return out
+              }
+              private fun writeList(key: String, list: List<Entry>) {
+                  val arr = JSONArray()
+                  for (e in list) arr.put(JSONObject().put("t", e.title).put("u", e.url))
+                  sp.edit().putString(key, arr.toString()).apply()
+              }
+              fun bookmarks(): List<Entry> = readList("bookmarks")
+              fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
+              fun toggleBookmark(title: String, url: String): Boolean {
+                  val list = readList("bookmarks")
+                  val had = list.removeAll { it.url == url }
+                  if (!had) list.add(0, Entry(title, url))
+                  writeList("bookmarks", list)
+                  return !had
+              }
+              fun removeBookmark(url: String) { val l = readList("bookmarks"); l.removeAll { it.url == url }; writeList("bookmarks", l) }
+              fun history(): List<Entry> = readList("history")
+              fun addHistory(title: String, url: String) {
+                  val l = readList("history")
+                  if (l.isNotEmpty() && l[0].url == url) return
+                  l.add(0, Entry(title, url))
+                  while (l.size > 300) l.removeAt(l.size - 1)
+                  writeList("history", l)
+              }
+              fun removeHistory(url: String) { val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l) }
+              fun clearHistory() { sp.edit().putString("history", "[]").apply() }
+              fun saveTabs(urls: List<String>, current: Int) {
+                  val arr = JSONArray()
+                  for (u in urls) arr.put(u)
+                  sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
+              }
+              fun savedTabs(): List<String> {
+                  val out = ArrayList<String>()
+                  try {
+                      val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
+                      for (i in 0 until arr.length()) out.add(arr.getString(i))
+                  } catch (_: Exception) {}
+                  return out
+              }
+              fun savedCurrent(): Int = sp.getInt("tabCur", 0)
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.webkit.JavascriptInterface
+          import org.json.JSONArray
+          import org.json.JSONObject
+
+          /** Yeni sekme sayfasının okuduğu bilgiler. Yalnızca kendi sayfamız yüklüyken cevap verir. */
+          class PusulaBridge(private val prefs: Prefs) {
+              @Volatile var trusted = false
+
+              private fun hex(v: Int): String = "#%06X".format(0xFFFFFF and v)
+
+              private fun pinsJson(): Any {
+                  val raw = prefs.pins
+                  if (raw.isEmpty()) return JSONObject.NULL
+                  return try { JSONArray(raw) } catch (e: Exception) { JSONObject.NULL }
+              }
+
+              @JavascriptInterface
+              fun savePins(json: String) {
+                  if (!trusted) return
+                  try { prefs.pins = JSONArray(json).toString() } catch (e: Exception) { }
+              }
+
+              @JavascriptInterface
+              fun config(): String {
+                  if (!trusted) return "{}"
+                  val e = Engines.get(prefs.engine)
+                  val th = Themes.get(prefs.theme)
+                  val bm = JSONArray()
+                  for (b in prefs.bookmarks().take(8)) bm.put(JSONObject().put("t", b.title).put("u", b.url))
+                  val hs = JSONArray()
+                  for (h in prefs.history().take(6)) hs.put(JSONObject().put("t", h.title).put("u", h.url))
+                  return JSONObject()
+                      .put("engine", e.name)
+                      .put("search", e.search)
+                      .put("bookmarks", bm)
+                      .put("history", hs)
+                      .put("pins", pinsJson())
+                      .put("dark", th.dark)
+                      .put("bg", hex(th.bg))
+                      .put("surface", hex(th.surface))
+                      .put("field", hex(th.field))
+                      .put("text", hex(th.text))
+                      .put("sub", hex(th.sub))
+                      .put("accent", hex(th.accent))
+                      .put("accent2", hex(th.accent2))
+                      .toString()
+              }
+          }
+          EOF
+          cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:aapt="http://schemas.android.com/aapt"
+              android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+              <path android:pathData="M24,0 H72 A24,24 0 0 1 96,24 V72 A24,24 0 0 1 72,96 H24 A24,24 0 0 1 0,72 V24 A24,24 0 0 1 24,0 Z">
+                  <aapt:attr name="android:fillColor">
+                      <gradient android:startX="0" android:startY="0" android:endX="96" android:endY="96" android:type="linear">
+                          <item android:offset="0" android:color="#FF2F6BFF"/>
+                          <item android:offset="0.55" android:color="#FF7A4DFF"/>
+                          <item android:offset="1" android:color="#FFFF4D9D"/>
+                      </gradient>
+                  </aapt:attr>
+              </path>
+              <path android:strokeColor="#E6FFFFFF" android:strokeWidth="3.5" android:fillColor="#00000000"
+                  android:pathData="M48,17 A31,31 0 1 1 47.9,17 Z"/>
+              <path android:strokeColor="#66FFFFFF" android:strokeWidth="2" android:pathData="M48,6 L48,13 M48,83 L48,90 M6,48 L13,48 M83,48 L90,48"/>
+              <group android:pivotX="48" android:pivotY="48" android:rotation="45">
+                  <path android:fillColor="#FFFFFFFF" android:pathData="M48,20 L59,48 L37,48 Z"/>
+                  <path android:fillColor="#88FFFFFF" android:pathData="M48,76 L59,48 L37,48 Z"/>
+              </group>
+              <path android:fillColor="#FF2F6BFF" android:pathData="M48,43 A5,5 0 1 1 47.9,43 Z"/>
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
+          EOF
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources><string name="app_name">Rota</string></resources>
+          EOF
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+          <resources>
+              <style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar">
+                  <item name="android:windowBackground">@color/bg</item>
+                  <item name="android:statusBarColor">@android:color/transparent</item>
+                  <item name="android:navigationBarColor">@android:color/transparent</item>
+              </style>
+          </resources>
+          EOF
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <resources><color name="bg">#0F1115</color></resources>
+          EOF
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: 8.9 }
+      - name: APK derle
+        run: gradle assembleDebug --no-daemon
+      - name: APK yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pusula-APK
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
