@@ -2200,7 +2200,7 @@ jobs:
 
                   @Volatile var running = false
 
-                  fn update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
                           .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist)
                       try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
@@ -2250,7 +2250,7 @@ jobs:
               var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
-                set(v) { sp.edit().putString("theme", v).apply() }
+                set(v) { sp.edit().putBoolean("theme", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
