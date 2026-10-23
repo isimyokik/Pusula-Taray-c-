@@ -10,7 +10,7 @@ jobs:
       - name: Projeyi olustur
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
-          mkdir -p app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.7.3" apply false
@@ -18,17 +18,28 @@ jobs:
           }
           EOF
           cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2g
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
           android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
           EOF
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
-              repositories { google(); mavenCentral(); gradlePluginPortal() }
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
           }
+
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
+
           rootProject.name = "Pusula"
           include(":app")
           EOF
@@ -37,9 +48,11 @@ jobs:
               id("com.android.application")
               id("org.jetbrains.kotlin.android")
           }
+
           android {
               namespace = "com.pusula.browser"
               compileSdk = 35
+
               defaultConfig {
                   applicationId = "com.pusula.browser"
                   minSdk = 24
@@ -47,127 +60,518 @@ jobs:
                   versionCode = 1
                   versionName = "2.1"
               }
+
               buildTypes {
-                  release { isMinifyEnabled = false }
+                  release {
+                      isMinifyEnabled = false
+                  }
               }
+
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
               }
-              kotlinOptions { jvmTarget = "17" }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
           }
+
           dependencies {
               implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.appcompat:appcompat:1.7.0")
               implementation("androidx.webkit:webkit:1.12.1")
+              implementation("androidx.media:media:1.7.0")
           }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
-              <application android:allowBackup="false" android:icon="@drawable/ic_launcher" android:label="@string/app_name" android:theme="@style/Theme.Pusula" android:usesCleartextTraffic="true">
-                  <activity android:name=".MainActivity" android:exported="true" android:supportsPictureInPicture="true">
-                      <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.Pusula"
+                  android:usesCleartextTraffic="true">
+                  <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:supportsPictureInPicture="true"
+                      android:windowSoftInputMode="adjustResize|stateHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
+          cat > app/src/main/assets/newtab.html <<'EOF'
+          <!doctype html><html><body>Yeni Sekme</body></html>
+          EOF
           cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
-          package com.pusula.browser
 
-          import android.app.PictureInPictureParams
+          package com.pusula.browser
+          import android.annotation.SuppressLint
+          import android.app.Dialog
+          import android.app.PendingIntent
+          import android.app.DownloadManager
+          import android.content.BroadcastReceiver
           import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.res.ColorStateList
+          import android.content.res.Configuration
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.Drawable
+          import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.RippleDrawable
+          import android.net.Uri
           import android.os.Build
           import android.os.Bundle
-          import android.util.Rational
+          import android.os.Environment
+          import android.os.Handler
+          import android.os.Looper
+          import android.os.Message
+          import android.text.InputType
+          import android.view.Gravity
+          import android.view.KeyEvent
+          import android.view.View
           import android.view.ViewGroup
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.webkit.CookieManager
+          import android.webkit.JsResult
+          import android.webkit.URLUtil
+          import android.webkit.ValueCallback
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceError
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebResourceResponse
+          import android.webkit.WebStorage
           import android.webkit.WebView
-          import android.widget.FrameLayout
+          import android.webkit.WebViewClient
+          import android.widget.*
+          import androidx.activity.OnBackPressedCallback
+          import androidx.activity.result.contract.ActivityResultContracts
           import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.content.ContextCompat
+          import androidx.core.view.ViewCompat
+          import androidx.core.view.WindowCompat
+          import androidx.core.view.WindowInsetsCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+          import androidx.core.widget.doAfterTextChanged
+          import androidx.appcompat.widget.SwitchCompat
+          import androidx.webkit.ScriptHandler
+          import androidx.webkit.WebViewAssetLoader
+          import androidx.webkit.WebViewCompat
+          import androidx.webkit.WebViewFeature
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.ByteArrayInputStream
 
           class MainActivity : AppCompatActivity() {
-
-              // PIP FIX: WebView durmasin diye blockPause
-              class BgWebView(c: Context) : WebView(c) {
-                  var blockPause = false
-                  override fun onWindowVisibilityChanged(visibility: Int) {
-                      if (visibility != View.GONE) super.onWindowVisibilityChanged(VISIBLE)
-                  }
-                  override fun onPause() {
-                      if (blockPause) return
-                      super.onPause()
-                  }
+              private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
+                  var title: String = "Yeni Sekme"; var url: String = ""; var pendingUrl: String? = null; var desktop: Boolean = false; var mobileUa: String = ""; var progress: Int = 100; var preview: Bitmap? = null; var adScript: ScriptHandler? = null; var keepScript: ScriptHandler? = null; var hookScript: ScriptHandler? = null
               }
+              private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
+                        private class BgWebView(c: Context) : WebView(c) {
+              var blockPause = false
+              override fun onWindowVisibilityChanged(visibility: Int) {
+                  if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
+              }
+                        override fun onPause() {
+              super.onPause()
+              saveTabs()
+              CookieManager.getInstance().flush()
+              if (isInPictureInPictureMode) {
+                  try { (shown as? BgWebView)?.let { it.blockPause = true; it.onResume() } } catch (_: Exception) {}
+                  try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) {}
+                  if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
+                  handler.removeCallbacks(pipMediaPump)
+                  handler.post(pipMediaPump)
+                  return
+              }
+              if (prefs.bgPlay) {
+                  appInBackground = true
+                  handler.removeCallbacks(backgroundMediaPump)
+                  handler.post(backgroundMediaPump)
+                  if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
+              } else {
+                  appInBackground = true
+                  shown?.onPause()
+              }
+          }
 
-              private lateinit var web: BgWebView
+          override fun onStop() {
+              super.onStop()
+              if (isInPictureInPictureMode) {
+                  try { (shown as? BgWebView)?.let { it.blockPause = true; it.onResume() } } catch (_: Exception) {}
+                  try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) {}
+                  handler.removeCallbacks(pipMediaPump)
+                  handler.post(pipMediaPump)
+              }
+          }
 
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  web = BgWebView(this)
-                  web.settings.javaScriptEnabled = true
-                  web.settings.domStorageEnabled = true
-                  web.settings.mediaPlaybackRequiresUserGesture = false
-                  web.loadUrl("https://www.youtube.com")
-                  val frame = FrameLayout(this)
-                  frame.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                  setContentView(frame)
-                  addOnPictureInPictureModeChangedListener { info ->
-                      if (info.isInPictureInPictureMode) {
-                          web.blockPause = true
-                          web.onResume()
-                      } else {
-                          web.blockPause = false
+          
+              override fun onResume() { super.onResume(); appInBackground = false; handler.removeCallbacks(backgroundMediaPump); shown?.onResume() }
+              override fun onDestroy() { try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }; handler.removeCallbacks(backgroundMediaPump); handler.removeCallbacks(mediaStatePoll); handler.removeCallbacks(pipMediaPump); PlaybackService.stop(this); for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }; super.onDestroy() }
+              private fun loadPalette() { val pal = Themes.get(prefs.theme); dark = pal.dark; cBg = pal.bg; cSurface = pal.surface; cField = pal.field; cText = pal.text; cSub = pal.sub; cIcon = pal.icon; cAccent = pal.accent; cAccent2 = pal.accent2; window.setBackgroundDrawable(ColorDrawable(cBg)) }
+              private fun applyTheme() { if (customView != null) hideCustom(); val web = shown; if (web != null) content.removeView(web); loadPalette(); buildUi(); if (web != null) { content.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }; val bars = WindowInsetsControllerCompat(window, window.decorView); bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark; val t = tabs.getOrNull(cur); if (t != null) { privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE; topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg); if (t.url.startsWith(ASSET_PREFIX)) t.web.reload() }; syncUi() }
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
+              private fun shape(color: Int, radiusDp: Int): GradientDrawable { val g = GradientDrawable(); g.setColor(color); g.cornerRadius = dp(radiusDp).toFloat(); return g }
+              private fun ripple(content: Drawable?): RippleDrawable = RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
+              private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton { val b = ImageButton(this); b.setImageResource(res); b.setColorFilter(cIcon); b.background = ripple(null); b.contentDescription = desc; b.scaleType = ImageView.ScaleType.CENTER; b.setOnClickListener { v -> onClick(v) }; return b }
+              private fun textBtn(label: String, onClick: () -> Unit): TextView { val t = TextView(this); t.text = label; t.textSize = 16f; t.setTextColor(cIcon); t.gravity = Gravity.CENTER; t.background = ripple(null); t.setOnClickListener { onClick() }; return t }
+              private fun buildUi() {
+                  val match = ViewGroup.LayoutParams.MATCH_PARENT; val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+                  root = LinearLayout(this); root.orientation = LinearLayout.VERTICAL; root.setBackgroundColor(cBg); root.isFocusable = true; root.isFocusableInTouchMode = true
+                  topBar = LinearLayout(this); topBar.orientation = LinearLayout.HORIZONTAL; topBar.gravity = Gravity.CENTER_VERTICAL; topBar.setPadding(dp(10), dp(8), dp(10), dp(8)); topBar.setBackgroundColor(cBg)
+                  privateBadge = TextView(this); privateBadge.text = "🕶 GİZLİ"; privateBadge.textSize = 11f; privateBadge.setTypeface(null, Typeface.BOLD); privateBadge.setTextColor(Color.WHITE); privateBadge.gravity = Gravity.CENTER; privateBadge.setPadding(dp(10), 0, dp(10), 0); privateBadge.background = shape(0xFF8B3DFF.toInt(), 16); privateBadge.visibility = View.GONE
+                  val blp = LinearLayout.LayoutParams(wrap, dp(32)); blp.rightMargin = dp(8); topBar.addView(privateBadge, blp)
+                  val pill = LinearLayout(this); pill.orientation = LinearLayout.HORIZONTAL; pill.gravity = Gravity.CENTER_VERTICAL; pill.background = shape(cSurface, 24); pill.elevation = dp(3).toFloat()
+                  val lead = TextView(this); lead.text = "🔎"; lead.textSize = 15f; lead.gravity = Gravity.CENTER; pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
+                  urlField = EditText(this); urlField.hint = "Ara veya adres yaz"; urlField.setHintTextColor(cSub); urlField.setTextColor(cText); urlField.textSize = 15f; urlField.isSingleLine = true; urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; urlField.imeOptions = EditorInfo.IME_ACTION_GO; urlField.setSelectAllOnFocus(true); urlField.background = null; urlField.setPadding(0, 0, 0, 0)
+                  urlField.setOnEditorActionListener { _, actionId, event -> if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) { submitUrl(); true } else false }
+                  urlField.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) syncUrlText() }
+                  pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f)); pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
+                  topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
+                  progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.max = 100; progress.progressTintList = ColorStateList.valueOf(cAccent); progress.progressBackgroundTintList = ColorStateList.valueOf(cBg); progress.visibility = View.INVISIBLE
+                  content = FrameLayout(this); content.setBackgroundColor(cBg)
+                  if (!prefs.barBottom) { root.addView(topBar, LinearLayout.LayoutParams(match, wrap)); root.addView(progress, LinearLayout.LayoutParams(match, dp(3))) }
+                  root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
+                  findBar = LinearLayout(this); findBar.orientation = LinearLayout.HORIZONTAL; findBar.gravity = Gravity.CENTER_VERTICAL; findBar.setBackgroundColor(cSurface); findBar.setPadding(dp(8), dp(4), dp(4), dp(4)); findBar.visibility = View.GONE
+                  findInput = EditText(this); findInput.hint = "Sayfada bul"; findInput.setHintTextColor(cSub); findInput.setTextColor(cText); findInput.textSize = 15f; findInput.isSingleLine = true; findInput.background = shape(cField, 18); findInput.setPadding(dp(14), 0, dp(14), 0)
+                  findInput.doAfterTextChanged { text -> val t = text?.toString() ?: ""; val web = currentWeb(); if (web != null) { if (t.isEmpty()) { web.clearMatches(); findCount.text = "" } else { web.findAllAsync(t) } } }
+                  findBar.addView(findInput, LinearLayout.LayoutParams(0, dp(36), 1f))
+                  findCount = TextView(this); findCount.setTextColor(cSub); findCount.textSize = 13f; findCount.setPadding(dp(8), 0, dp(8), 0); findBar.addView(findCount, LinearLayout.LayoutParams(wrap, wrap))
+                  findBar.addView(textBtn("▲") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40))); findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40))); findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
+                  if (prefs.barBottom) { root.addView(progress, LinearLayout.LayoutParams(match, dp(3))); root.addView(topBar, LinearLayout.LayoutParams(match, wrap)) }
+                  dockBar = LinearLayout(this); dockBar.orientation = LinearLayout.VERTICAL; dockBar.setBackgroundColor(cBg); dockBar.setPadding(dp(12), dp(6), dp(12), dp(8))
+                  val bottom = LinearLayout(this); bottom.orientation = LinearLayout.HORIZONTAL; bottom.gravity = Gravity.CENTER_VERTICAL; bottom.background = shape(cSurface, 30); bottom.elevation = dp(8).toFloat(); bottom.setPadding(dp(6), dp(4), dp(6), dp(4))
+                  backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }; fwdBtn = iconBtn(R.drawable.ic_forward, "İleri") { goForward() }
+                  val homeBtn = iconBtn(R.drawable.ic_home, "Ana Sayfa") { goHome() }; homeBtn.setColorFilter(Color.WHITE); val hg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2)); hg.shape = GradientDrawable.OVAL; homeBtn.background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), hg, null)
+                  val addBtn = iconBtn(R.drawable.ic_add, "Yeni Sekme") { openTab(null) }; val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
+                  val tabsWrap = FrameLayout(this); tabsWrap.background = ripple(null); tabsWrap.contentDescription = "Sekmeler"; tabsWrap.setOnClickListener { showTabs() }
+                  tabCount = TextView(this); tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f; tabCount.setTypeface(null, Typeface.BOLD); tabCount.setTextColor(cIcon); val tcBg = GradientDrawable(); tcBg.setColor(0); tcBg.cornerRadius = dp(7).toFloat(); tcBg.setStroke(dp(2), cIcon); tabCount.background = tcBg
+                  tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+                  for (v in listOf<View>(backBtn, fwdBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f))
+                  val hlp = LinearLayout.LayoutParams(dp(48), dp(48)); hlp.leftMargin = dp(4); hlp.rightMargin = dp(4); bottom.addView(homeBtn, hlp)
+                  for (v in listOf<View>(addBtn, tabsWrap, menuBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f))
+                  dockBar.addView(bottom, LinearLayout.LayoutParams(match, wrap)); root.addView(dockBar, LinearLayout.LayoutParams(match, wrap))
+                  fullscreen = FrameLayout(this); fullscreen.setBackgroundColor(Color.BLACK); fullscreen.visibility = View.GONE
+                  val frame = FrameLayout(this); frame.addView(root, FrameLayout.LayoutParams(match, match)); frame.addView(fullscreen, FrameLayout.LayoutParams(match, match)); setContentView(frame)
+                  ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets -> val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime()); v.setPadding(b.left, b.top, b.right, b.bottom); insets }
+                  root.requestFocus(); updateTabCount()
+              }
+              private fun startBrowsing() {
+                  if (tabs.isEmpty()) {
+                      when (prefs.startMode) {
+                          "home" -> openTab(Engines.get(prefs.engine).home)
+                          "blank" -> openTab(null)
+                          else -> {
+                              val saved = prefs.savedTabs()
+                              if (saved.isEmpty()) openTab(null)
+                              else { for (u in saved.take(12)) { val t = createTab(); if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) } else { t.pendingUrl = NEWTAB_URL } }; switchTo(if (prefs.savedCurrent() in tabs.indices) prefs.savedCurrent() else 0) }
+                          }
                       }
                   }
+                  val s = startUrl; startUrl = null; if (s != null) openTab(s)
               }
-
-              override fun onPause() {
-                  super.onPause()
-                  if (isInPictureInPictureMode) {
-                      web.blockPause = true
-                      web.onResume()
-                      try { web.evaluateJavascript("try{document.querySelectorAll('video').forEach(v=>{if(v.paused)v.play()})}catch(e){}", null) } catch (_: Exception) {}
-                      return
-                  }
-                  web.onPause()
+              private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
+              @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
+              private fun createTab(incognito: Boolean = false): BTab {
+                  val web = BgWebView(this); val bridge = PusulaBridge(prefs); val tab = BTab(web, bridge, incognito); val s = web.settings
+                  s.javaScriptEnabled = true; s.domStorageEnabled = true; s.mediaPlaybackRequiresUserGesture = false; s.setSupportMultipleWindows(true); s.javaScriptCanOpenWindowsAutomatically = false; s.setSupportZoom(true); s.builtInZoomControls = true; s.displayZoomControls = false; s.loadWithOverviewMode = true; s.useWideViewPort = true; s.allowFileAccess = false; s.allowContentAccess = false; s.setGeolocationEnabled(false); s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                  val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), ""); s.userAgentString = ua; tab.mobileUa = ua
+                  web.addJavascriptInterface(bridge, "Pusula"); syncScripts(tab)
+                  if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) { try { WebViewCompat.addDocumentStartJavaScript(web, MEDIA_HOOK_JS, setOf("*")) } catch (_: Exception) { } }
+                  web.setFindListener { active, total, _ -> if (tabs.getOrNull(cur) === tab) { findCount.text = if (total == 0) "0" else "${active + 1}/$total" } }
+                  web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ -> startDownload(url, userAgent, contentDisposition, mimeType) }
+                  web.webViewClient = makeClient(tab); web.webChromeClient = makeChrome(tab); tabs.add(tab); updateTabCount(); return tab
               }
-
-              override fun onStop() {
-                  super.onStop()
-                  if (isInPictureInPictureMode) {
-                      web.blockPause = true
-                      web.onResume()
-                  }
+              private fun syncScripts(t: BTab) {
+                  if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+                  try {
+                      if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
+                      if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*")) else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
+                      if (prefs.bgPlay && t.keepScript == null) t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS, setOf("*")) else if (!prefs.bgPlay && t.keepScript != null) { t.keepScript?.remove(); t.keepScript = null }
+                  } catch (_: Exception) { }
               }
-
-              override fun onResume() {
-                  super.onResume()
-                  web.onResume()
+              private fun settingsChanged() { for (t in tabs) syncScripts(t); val c = tabs.getOrNull(cur) ?: return; if (c.url.startsWith("http")) c.web.reload() }
+              private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? { if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme"); return null }; val t = createTab(incognito); switchTo(tabs.size - 1); if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL)); return t }
+              private fun switchTo(i: Int) {
+                  if (i !in tabs.indices) return
+                  shown?.let { tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }; content.removeView(it) }
+                  for (idx in tabs.indices) { if (idx != i) { try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {} } }
+                  cur = i; val t = tabs[i]; shown = t.web; content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); t.web.onResume()
+                  try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
+                  val p = t.pendingUrl; if (p != null) { t.pendingUrl = null; t.web.loadUrl(p) }
+                  closeFind(); privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE; topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg); syncUi()
               }
-
-              override fun onUserLeaveHint() {
-                  super.onUserLeaveHint()
-                  if (Build.VERSION.SDK_INT >= 26) {
-                      try {
-                          web.blockPause = true
-                          web.onResume()
-                          val params = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()
-                          enterPictureInPictureMode(params)
-                      } catch (_: Exception) {}
-                  }
+              private fun closeTab(index: Int) {
+                  if (index !in tabs.indices) return; val t = tabs[index]; val wasCurrent = index == cur
+                  if (wasCurrent) { content.removeView(t.web); shown = null }; t.web.stopLoading(); t.web.clearHistory(); t.web.clearCache(true); t.web.destroy(); tabs.removeAt(index)
+                  if (tabs.isEmpty()) { cur = -1; openTab(null); return }
+                  if (wasCurrent) switchTo(minOf(index, tabs.size - 1)) else if (index < cur) cur--; updateTabCount()
+              }
+              private fun updateTabCount() { tabCount.text = tabs.size.toString() }
+              private fun saveTabs() { if (tabs.isEmpty()) return; val urls = ArrayList<String>(); for (t in tabs) { if (t.incognito) continue; val u = t.pendingUrl ?: t.url; urls.add(if (u.startsWith("http")) u else NEWTAB_URL) }; prefs.saveTabs(urls, 0) }
+              private fun shownUrl(u: String): String = if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) "" else u.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
+              private fun syncUrlText() { val t = tabs.getOrNull(cur); urlField.setText(if (t == null) "" else shownUrl(t.pendingUrl ?: t.url)) }
+              private fun syncUi() { val t = tabs.getOrNull(cur) ?: return; if (!urlField.hasFocus()) syncUrlText(); setLoadProgress(t.progress); refreshNav(); updateTabCount() }
+              private fun setLoadProgress(p: Int) { progress.progress = p; progress.visibility = if (p in 1..99) View.VISIBLE else View.INVISIBLE }
+              private fun refreshNav() { val web = currentWeb(); backBtn.alpha = if (web != null && (web.canGoBack() || tabs.size > 1)) 1f else 0.35f; fwdBtn.alpha = if (web != null && web.canGoForward()) 1f else 0.35f }
+              private fun loadInCurrent(url: String) { val t = tabs.getOrNull(cur) ?: return; t.pendingUrl = null; t.web.loadUrl(url) }
+              private fun submitUrl() { val text = urlField.text.toString(); loadInCurrent(resolveInput(text, Engines.get(prefs.engine))); hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
+              private fun goBack() { val web = currentWeb() ?: return; if (web.canGoBack()) web.goBack() else if (tabs.size > 1) closeTab(cur) }
+              private fun goForward() { val web = currentWeb() ?: return; if (web.canGoForward()) web.goForward() }
+              private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
+              private fun reloadCurrent() { val t = tabs.getOrNull(cur) ?: return; if (t.progress in 1..99) t.web.stopLoading() else t.web.reload() }
+              private fun handleBack() { val web = currentWeb(); when { customView != null -> hideCustom(); findBar.visibility == View.VISIBLE -> closeFind(); urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }; web != null && web.canGoBack() -> web.goBack(); tabs.size > 1 -> closeTab(cur); else -> finish() } }
+              private fun shouldBlockAd(uri: Uri): Boolean { val host = (uri.host ?: "").lowercase(); val path = (uri.encodedPath ?: "").lowercase(); val blockedHosts = listOf("doubleclick.net", "googlesyndication.com"); if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true; return path.contains("/ads/") || path.contains("/pagead/") }
+              private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
+                  override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? { val uri = request?.url ?: return null; if (prefs.adBlock && shouldBlockAd(uri)) { return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0))) }; return loader.shouldInterceptRequest(uri) }
+                  override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean { val u = request?.url ?: return false; val scheme = u.scheme ?: return false; return when (scheme) { "http", "https", "about", "blob", "data" -> false; else -> openExternal(u.toString()) } }
+                  override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) { val u = url ?: ""; tab.bridge.trusted = u.startsWith(ASSET_PREFIX); tab.url = u; tab.progress = 5; if (tabs.getOrNull(cur) === tab) syncUi() }
+                  override fun onPageFinished(view: WebView?, url: String?) { tab.progress = 100; val u = url ?: return; if (u.startsWith("http") && !tab.incognito) { val title = view?.title; prefs.addHistory(if (title.isNullOrBlank()) u else title, u) }; if (tabs.getOrNull(cur) === tab) syncUi() }
+              }
+              private fun makeChrome(tab: BTab): WebChromeClient = object : WebChromeClient() {
+                  override fun onProgressChanged(view: WebView?, newProgress: Int) { tab.progress = newProgress; if (tabs.getOrNull(cur) === tab) setLoadProgress(newProgress) }
+                  override fun onReceivedTitle(view: WebView?, title: String?) { if (!title.isNullOrBlank()) tab.title = title }
+                  override fun onShowCustomView(view: View?, callback: CustomViewCallback?) { if (view == null || customView != null) { callback?.onCustomViewHidden(); return }; customView = view; customCb = callback; fullscreen.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); fullscreen.visibility = View.VISIBLE; setBars(false) }
+                  override fun onHideCustomView() { hideCustom() }
+              }
+              private fun hideCustom() { val v = customView ?: return; fullscreen.removeView(v); fullscreen.visibility = View.GONE; customView = null; customCb?.onCustomViewHidden(); customCb = null; setBars(true) }
+              private fun setBars(show: Boolean) { val c = WindowInsetsControllerCompat(window, window.decorView); if (show) { c.show(WindowInsetsCompat.Type.systemBars()) } else { c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE; c.hide(WindowInsetsCompat.Type.systemBars()) } }
+              private fun openExternal(url: String): Boolean { try { val i = if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url)); i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null; startActivity(i) } catch (_: Exception) { toast("Açılamadı") }; return true }
+              private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) { if (!url.startsWith("http")) return; try { val name = URLUtil.guessFileName(url, cd, mime); val req = DownloadManager.Request(Uri.parse(url)); if (mime != null) req.setMimeType(mime); val cookie = CookieManager.getInstance().getCookie(url); if (cookie != null) req.addRequestHeader("Cookie", cookie); if (ua != null) req.addRequestHeader("User-Agent", ua); req.setTitle(name); req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED); req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name); (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req); toast("İndiriliyor: $name") } catch (_: Exception) { toast("İndirilemedi") } }
+              private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+              private fun hideKeyboard() { val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager; imm.hideSoftInputFromWindow(root.windowToken, 0) }
+              private fun sheetWindow(d: Dialog, view: View, full: Boolean) { d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE); d.setContentView(view); d.window?.let { w -> w.setBackgroundDrawable(ColorDrawable(if (full) cBg else Color.TRANSPARENT)); w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, if (full) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT); if (!full) w.setGravity(Gravity.BOTTOM) } }
+              // Basit stublar - orijinalinde dolu, burada crash engellemek için minimal
+              private fun showMenu(anchor: View) { val pm = PopupMenu(this, anchor); pm.menu.add("Yeni sekme").setOnMenuItemClickListener { openTab(null); true }; pm.menu.add("Ayarlar").setOnMenuItemClickListener { showSettings(); true }; pm.menu.add("Küçük pencere").setOnMenuItemClickListener { enterPip(); true }; pm.show() }
+              private fun showTabs() { val d = Dialog(this); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setBackgroundColor(cBg); col.setPadding(dp(12), dp(12), dp(12), dp(12)); for (i in tabs.indices) { val b = textBtn(tabs[i].title.ifEmpty { "Sekme ${i+1}" }) { d.dismiss(); switchTo(i) }; col.addView(b) }; val sv = ScrollView(this); sv.addView(col); sheetWindow(d, sv, true); d.show() }
+              private fun showSettings() { val d = Dialog(this); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(20), dp(20), dp(20), dp(20)); col.setBackgroundColor(cBg); col.addView(textBtn("Tema: ${Themes.get(prefs.theme).name}") { d.dismiss(); chooseTheme { showSettings() } }); col.addView(textBtn("Kapat") { d.dismiss() }); sheetWindow(d, col, true); d.show() }
+              private fun chooseTheme(onDone: () -> Unit) { val d = Dialog(this); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setBackgroundColor(cSurface); col.setPadding(dp(12), dp(12), dp(12), dp(12)); for (p in Themes.all) { val b = textBtn(p.name) { prefs.theme = p.id; d.dismiss(); applyTheme(); onDone() }; col.addView(b) }; sheetWindow(d, col, false); d.show() }
+              private fun isDefaultBrowser(): Boolean = false
+              private fun afterRole() {}
+              private fun askDefaultBrowser() {}
+              private fun resolveInput(text: String, engine: Engine): String { val t = text.trim(); if (t.startsWith("http")) return t; if (t.contains(".") && !t.contains(" ")) return "https://$t"; return engine.search.replace("%s", Uri.encode(t)) }
+              private fun capturePreview(tab: BTab) {}
+              private fun closeFind() { findBar.visibility = View.GONE; currentWeb()?.clearMatches() }
+              private companion object {
+                  const val ASSET_PREFIX = "https://appassets.androidplatform.net/"; const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"; const val MAX_TABS = 20
+                  const val KEEP_PLAYING_JS = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});}catch(e){}})();"
+                  const val STABLE_AD_BLOCKER_JS = "true"
+                  const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(m.dataset.pusulaWasPlaying==='1' && m.paused){m.play();}});}catch(e){}})();"
+                  const val MEDIA_TOGGLE_JS = "(function(){var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();"
+                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video').forEach(function(v){v.pause();})})();"
+                  const val MEDIA_PREVIOUS_JS = "(function(){})();"
+                  const val MEDIA_NEXT_JS = "(function(){})();"
+                  const val MEDIA_HOOK_JS = ""
+                  const val MEDIA_STATE_JS = "(function(){var v=document.querySelector('video');if(!v)return '';return JSON.stringify({p:!v.paused,t:document.title,a:''});})();"
+                  const val KEEP_MEDIA_PLAYING_JS = "(function(){document.querySelectorAll('video').forEach(function(v){if(v.paused)v.play();})})();"
+                  const val PIP_ON_JS = "true"
+                  const val PIP_OFF_JS = "true"
+              }
+          }
+          
+          EOF
+          cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
+          package com.pusula.browser
+          class Palette(val id: String, val name: String, val dark: Boolean, val bg: Int, val surface: Int, val field: Int, val text: Int, val sub: Int, val icon: Int, val accent: Int, val accent2: Int)
+          object Themes {
+              private fun c(v: Long): Int = v.toInt()
+              val all: List<Palette> = listOf(
+                  Palette("gece", "Gece Mavisi", true, c(0xFF0B1020), c(0xFF131B33), c(0xFF1D2848), c(0xFFEAF0FF), c(0xFF8FA0C8), c(0xFFC9D6FF), c(0xFF4C8DFF), c(0xFF8A5CFF))
+              )
+              fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
+          package com.pusula.browser
+          import android.app.*
+          import android.content.*
+          import android.os.*
+          import androidx.core.content.ContextCompat
+          class PlaybackService : Service() {
+              override fun onBind(intent: Intent?): IBinder? = null
+              companion object {
+                  const val ACTION_PLAY = "PLAY"
+                  const val ACTION_TOGGLE = "TOGGLE"
+                  const val ACTION_PAUSE = "PAUSE"
+                  const val ACTION_PREVIOUS = "PREV"
+                  const val ACTION_NEXT = "NEXT"
+                  var running = false
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {}
+                  fun stop(ctx: Context) {}
               }
           }
           EOF
+          cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.content.Context
+          import android.net.Uri
+          import org.json.JSONArray
+          import org.json.JSONObject
+
+          object Engines {
+              class E(val id: String, val name: String, val search: String, val home: String)
+              val all = listOf(
+                  E("google", "Google", "https://www.google.com/search?q=%s", "https://www.google.com/"),
+                  E("ddg", "DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com/"),
+                  E("bing", "Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com/")
+              )
+              fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
+          }
+
+          val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$")
+
+          fun resolveInput(raw: String, engine: Engines.E): String {
+              val t = raw.trim()
+              if (t.isEmpty()) return engine.home
+              if (t.startsWith("http://", true) || t.startsWith("https://", true)) return t
+              if (!t.contains(' ') && HOST_LIKE.matches(t)) return "https://" + t
+              return engine.search.replace("%s", Uri.encode(t))
+          }
+
+          class Prefs(context: Context) {
+              class Entry(val title: String, val url: String)
+              private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
+
+              var engine: String get() = sp.getString("engine", "google") ?: "google"
+                set(v) { sp.edit().putString("engine", v).apply() }
+              var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
+                set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
+              var theme: String get() = sp.getString("theme", "gece") ?: "gece"
+                set(v) { sp.edit().putString("theme", v).apply() }
+              var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
+                set(v) { sp.edit().putBoolean("barBottom", v).apply() }
+              var pins: String get() = sp.getString("pins", "") ?: ""
+                set(v) { sp.edit().putString("pins", v).apply() }
+              var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false)
+                set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
+              var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
+                set(v) { sp.edit().putBoolean("adBlock", v).apply() }
+              /** home | resume | blank */
+              var startMode: String get() = sp.getString("startMode", "resume") ?: "resume"
+                set(v) { sp.edit().putString("startMode", v).apply() }
+              var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
+                set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
+
+              private fun readList(key: String): MutableList<Entry> {
+                  val out = ArrayList<Entry>()
+                  try {
+                      val arr = JSONArray(sp.getString(key, "[]") ?: "[]")
+                      for (i in 0 until arr.length()) {
+                          val o = arr.getJSONObject(i)
+                          out.add(Entry(o.optString("t"), o.optString("u")))
+                      }
+                  } catch (_: Exception) {}
+                  return out
+              }
+              private fun writeList(key: String, list: List<Entry>) {
+                  val arr = JSONArray()
+                  for (e in list) arr.put(JSONObject().put("t", e.title).put("u", e.url))
+                  sp.edit().putString(key, arr.toString()).apply()
+              }
+              fun bookmarks(): List<Entry> = readList("bookmarks")
+              fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
+              fun toggleBookmark(title: String, url: String): Boolean {
+                  val list = readList("bookmarks")
+                  val had = list.removeAll { it.url == url }
+                  if (!had) list.add(0, Entry(title, url))
+                  writeList("bookmarks", list)
+                  return !had
+              }
+              fun removeBookmark(url: String) { val l = readList("bookmarks"); l.removeAll { it.url == url }; writeList("bookmarks", l) }
+              fun history(): List<Entry> = readList("history")
+              fun addHistory(title: String, url: String) {
+                  val l = readList("history")
+                  if (l.isNotEmpty() && l[0].url == url) return
+                  l.add(0, Entry(title, url))
+                  while (l.size > 300) l.removeAt(l.size - 1)
+                  writeList("history", l)
+              }
+              fun removeHistory(url: String) { val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l) }
+              fun clearHistory() { sp.edit().putString("history", "[]").apply() }
+              fun saveTabs(urls: List<String>, current: Int) {
+                  val arr = JSONArray()
+                  for (u in urls) arr.put(u)
+                  sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
+              }
+              fun savedTabs(): List<String> {
+                  val out = ArrayList<String>()
+                  try {
+                      val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
+                      for (i in 0 until arr.length()) out.add(arr.getString(i))
+                  } catch (_: Exception) {}
+                  return out
+              }
+              fun savedCurrent(): Int = sp.getInt("tabCur", 0)
+          }
+
+          EOF
+          cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
+          package com.pusula.browser
+          import android.webkit.JavascriptInterface
+          class PusulaBridge(private val prefs: Prefs) {
+              @Volatile var trusted = false
+              @JavascriptInterface fun savePins(json: String) {}
+              @JavascriptInterface fun config(): String = "{}"
+          }
+          EOF
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96"><path android:fillColor="#FF4C8DFF" android:pathData="M0,0h96v96h-96z"/></vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96"><path android:fillColor="#FF000000" android:pathData="M0,0h96v96h-96z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_prev.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#FFFFFFFF" android:pathData="M12,12h6v24h-6zM36,12 L18,24 36,36z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_next.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#FFFFFFFF" android:pathData="M30,12h6v24h-6zM12,12 L30,24 12,36z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_play.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#FFFFFFFF" android:pathData="M14,10 L14,38 L40,24z"/></vector>
           EOF
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Pusula</string></resources>
           EOF
           cat > app/src/main/res/values/themes.xml <<'EOF'
-          <resources><style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="android:statusBarColor">@android:color/transparent</item></style></resources>
+          <resources><style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="android:windowBackground">@color/bg</item><item name="android:statusBarColor">@android:color/transparent</item><item name="android:navigationBarColor">@android:color/transparent</item></style></resources>
           EOF
           cat > app/src/main/res/values/colors.xml <<'EOF'
           <resources><color name="bg">#0F1115</color></resources>
