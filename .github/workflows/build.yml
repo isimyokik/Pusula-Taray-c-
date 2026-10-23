@@ -1,13 +1,16 @@
 name: Pusula APK
 on: [push, workflow_dispatch]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: '17' }
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Android SDK Kurulumu
         run: |
@@ -17,18 +20,21 @@ jobs:
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
           mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
+
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.7.3" apply false
               id("org.jetbrains.kotlin.android") version "2.0.21" apply false
           }
           EOF
+
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           kotlin.code.style=official
           EOF
+
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
               repositories {
@@ -47,6 +53,7 @@ jobs:
           rootProject.name = "Pusula"
           include(":app")
           EOF
+
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -82,6 +89,7 @@ jobs:
               implementation("androidx.media:media:1.7.0")
           }
           EOF
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -118,360 +126,361 @@ jobs:
           cat > app/src/main/assets/newtab.html <<'EOF'
           <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Yeni Sekme</title></head><body style="background:#0b1020;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh">Rota</body></html>
           EOF
-          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'MAIN_KT_EOF'
-package com.pusula.browser
 
-import android.annotation.SuppressLint
-import android.app.Dialog
-import android.app.DownloadManager
-import android.graphics.Matrix
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.content.res.ColorStateList
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.RippleDrawable
-import android.net.Uri
-import android.os.Build
-import android.os.Bundle
-import android.os.Environment
-import android.os.Handler
-import android.os.Looper
-import android.os.Message
-import android.text.Html
-import android.text.InputType
-import android.view.Gravity
-import android.view.KeyEvent
-import android.view.View
-import android.view.ViewGroup
-import android.view.Window
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
-import android.webkit.CookieManager
-import android.webkit.JsResult
-import android.webkit.URLUtil
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebStorage
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.EditText
-import android.widget.FrameLayout
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.ScrollView
-import android.widget.TextView
-import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.widget.doAfterTextChanged
-import androidx.appcompat.widget.SwitchCompat
-import androidx.webkit.ScriptHandler
-import androidx.webkit.WebViewAssetLoader
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.ByteArrayInputStream
+          cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
+          package com.pusula.browser
 
-class MainActivity : AppCompatActivity() {
-    private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
-        var title: String = "Yeni Sekme"
-        var url: String = ""
-        var pendingUrl: String? = null
-        var desktop: Boolean = false
-        var mobileUa: String = ""
-        var progress: Int = 100
-        var preview: Bitmap? = null
-        var adScript: ScriptHandler? = null
-        var keepScript: ScriptHandler? = null
-        var hookScript: ScriptHandler? = null
-    }
-    private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
-    private class BgWebView(c: Context) : WebView(c) {
-        override fun onWindowVisibilityChanged(visibility: Int) {
-            if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
-        }
-    }
-    private val tabs = ArrayList<BTab>()
-    private var cur = -1
-    private var shown: WebView? = null
-    private lateinit var prefs: Prefs
-    private lateinit var loader: WebViewAssetLoader
-    private val handler = Handler(Looper.getMainLooper())
-    private var appInBackground = false
-    private var hasMedia = false
-    private var lastPlaying = false
-    private var lastTitle = ""
-    private var lastArtist = ""
-    private lateinit var dockBar: LinearLayout
-    private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
-    private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    private val mediaStatePoll = object : Runnable { override fun run() { pollMedia(); handler.postDelayed(this, 1500L) } }
-    private fun pollMedia() { val t = tabs.getOrNull(cur) ?: return; try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { } }
-    private fun onMediaState(raw: String?) {
-        var has = false; var playing = false; var title = ""; var artist = ""
-        try {
-            if (raw != null && raw != "null" && raw != "\"\"") {
-                val inner = JSONArray("[" + raw + "]").getString(0)
-                if (inner.isNotEmpty()) { val o = JSONObject(inner); has = true; playing = o.optBoolean("p"); title = o.optString("t"); artist = o.optString("a") }
-            }
-        } catch (_: Exception) { return }
-        if (!has) { if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }; return }
-        val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
-        hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
-        if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
-    }
-    private fun enterPip() { if (Build.VERSION.SDK_INT < 26) { toast("Bu Android surumu kucuk pencereyi desteklemiyor"); return }; try { val p = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build(); enterPictureInPictureMode(p) } catch (_: Exception) { toast("Kucuk pencere acilamadi") } }
-    private fun onPipChanged(pip: Boolean) { topBar.visibility = if (pip) View.GONE else View.VISIBLE; dockBar.visibility = if (pip) View.GONE else View.VISIBLE; if (pip) { closeFind(); shown?.onResume(); if (customView == null) { try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { } } } else { for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } } } }
-    override fun onUserLeaveHint() { super.onUserLeaveHint(); if (customView != null && Build.VERSION.SDK_INT >= 26) enterPip() }
-    private val mediaControlReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val act = intent?.action ?: return
-            val js = when (act) { PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS; PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS; PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS; PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS; else -> return }
-            val targets = if (act == PlaybackService.ACTION_PAUSE) tabs.toList() else listOfNotNull(tabs.getOrNull(cur))
-            targets.forEach { t -> try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { } }
-        }
-    }
-    private val backgroundMediaPump = object : Runnable { override fun run() { if (!appInBackground || !prefs.bgPlay) return; val t = tabs.getOrNull(cur); try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }; handler.postDelayed(this, 1200L) } }
-    private lateinit var root: LinearLayout; private lateinit var content: FrameLayout; private lateinit var fullscreen: FrameLayout; private lateinit var urlField: EditText; private lateinit var progress: ProgressBar; private lateinit var backBtn: ImageButton; private lateinit var fwdBtn: ImageButton; private lateinit var tabCount: TextView; private lateinit var privateBadge: TextView; private lateinit var findBar: LinearLayout; private lateinit var findInput: EditText; private lateinit var findCount: TextView
-    private var dark = false; private var cBg = 0; private var cSurface = 0; private var cField = 0; private var cText = 0; private var cSub = 0; private var cIcon = 0; private var cAccent = 0; private var cAccent2 = 0; private lateinit var topBar: LinearLayout
-    private var customView: View? = null; private var customCb: WebChromeClient.CustomViewCallback? = null; private var fileCb: ValueCallback<Array<Uri>>? = null; private var startUrl: String? = null
-    private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res -> fileCb?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res.resultCode, res.data)); fileCb = null }
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState); prefs = Prefs(this); loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build(); loadPalette(); WindowCompat.setDecorFitsSystemWindows(window, false); buildUi()
-        val bars = WindowInsetsControllerCompat(window, window.decorView); bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark; startUrl = intent?.dataString
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) { override fun handleOnBackPressed() { handleBack() } })
-        val mediaFilter = IntentFilter().apply { addAction(PlaybackService.ACTION_PLAY); addAction(PlaybackService.ACTION_TOGGLE); addAction(PlaybackService.ACTION_PAUSE); addAction(PlaybackService.ACTION_PREVIOUS); addAction(PlaybackService.ACTION_NEXT) }
-        ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED); startBrowsing(); addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }; handler.removeCallbacks(mediaStatePoll); handler.postDelayed(mediaStatePoll, 1500L)
-        if (Build.VERSION.SDK_INT >= 33 && !prefs.askedNotif && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) { prefs.askedNotif = true; notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
-    }
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); val u = intent.dataString ?: return; openTab(u) }
-    override fun onPause() { super.onPause(); saveTabs(); CookieManager.getInstance().flush(); if (prefs.bgPlay) { appInBackground = true; handler.removeCallbacks(backgroundMediaPump); handler.post(backgroundMediaPump); if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist) } else { appInBackground = true; shown?.onPause() } }
-    override fun onResume() { super.onResume(); appInBackground = false; handler.removeCallbacks(backgroundMediaPump); shown?.onResume() }
-    override fun onDestroy() { try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }; handler.removeCallbacks(backgroundMediaPump); handler.removeCallbacks(mediaStatePoll); PlaybackService.stop(this); for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }; super.onDestroy() }
-    private fun loadPalette() { val pal = Themes.get(prefs.theme); dark = pal.dark; cBg = pal.bg; cSurface = pal.surface; cField = pal.field; cText = pal.text; cSub = pal.sub; cIcon = pal.icon; cAccent = pal.accent; cAccent2 = pal.accent2; window.setBackgroundDrawable(ColorDrawable(cBg)) }
-    private fun applyTheme() { if (customView != null) hideCustom(); val web = shown; if (web != null) content.removeView(web); loadPalette(); buildUi(); if (web != null) content.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); val bars = WindowInsetsControllerCompat(window, window.decorView); bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark; val t = tabs.getOrNull(cur); if (t != null) { privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE; topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg); if (t.url.startsWith(ASSET_PREFIX)) t.web.reload() }; syncUi() }
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
-    private fun shape(color: Int, radiusDp: Int): GradientDrawable { val g = GradientDrawable(); g.setColor(color); g.cornerRadius = dp(radiusDp).toFloat(); return g }
-    private fun ripple(content: Drawable?): RippleDrawable = RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
-    private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton { val b = ImageButton(this); b.setImageResource(res); b.setColorFilter(cIcon); b.background = ripple(null); b.contentDescription = desc; b.scaleType = ImageView.ScaleType.CENTER; b.setOnClickListener { v -> onClick(v) }; return b }
-    private fun textBtn(label: String, onClick: () -> Unit): TextView { val t = TextView(this); t.text = label; t.textSize = 16f; t.setTextColor(cIcon); t.gravity = Gravity.CENTER; t.background = ripple(null); t.setOnClickListener { onClick() }; return t }
-    private fun buildUi() {
-        val match = ViewGroup.LayoutParams.MATCH_PARENT; val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
-        root = LinearLayout(this); root.orientation = LinearLayout.VERTICAL; root.setBackgroundColor(cBg); root.isFocusable = true; root.isFocusableInTouchMode = true
-        topBar = LinearLayout(this); topBar.orientation = LinearLayout.HORIZONTAL; topBar.gravity = Gravity.CENTER_VERTICAL; topBar.setPadding(dp(10), dp(8), dp(10), dp(8)); topBar.setBackgroundColor(cBg)
-        privateBadge = TextView(this); privateBadge.text = "GIZLI"; privateBadge.textSize = 11f; privateBadge.setTypeface(null, Typeface.BOLD); privateBadge.setTextColor(Color.WHITE); privateBadge.gravity = Gravity.CENTER; privateBadge.setPadding(dp(10), 0, dp(10), 0); privateBadge.background = shape(0xFF8B3DFF.toInt(), 16); privateBadge.visibility = View.GONE
-        val blp = LinearLayout.LayoutParams(wrap, dp(32)); blp.rightMargin = dp(8); topBar.addView(privateBadge, blp)
-        val pill = LinearLayout(this); pill.orientation = LinearLayout.HORIZONTAL; pill.gravity = Gravity.CENTER_VERTICAL; pill.background = shape(cSurface, 24); pill.elevation = dp(3).toFloat()
-        val lead = TextView(this); lead.text = "🔎"; lead.textSize = 15f; lead.gravity = Gravity.CENTER; pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
-        urlField = EditText(this); urlField.hint = "Ara veya adres yaz"; urlField.setHintTextColor(cSub); urlField.setTextColor(cText); urlField.textSize = 15f; urlField.isSingleLine = true; urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; urlField.imeOptions = EditorInfo.IME_ACTION_GO; urlField.setSelectAllOnFocus(true); urlField.background = null; urlField.setPadding(0, 0, 0, 0)
-        urlField.setOnEditorActionListener { _, actionId, event -> if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) { submitUrl(); true } else false }
-        urlField.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) syncUrlText() }
-        pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f)); pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
-        topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
-        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.max = 100; progress.progressTintList = ColorStateList.valueOf(cAccent); progress.progressBackgroundTintList = ColorStateList.valueOf(cBg); progress.visibility = View.INVISIBLE
-        content = FrameLayout(this); content.setBackgroundColor(cBg)
-        if (!prefs.barBottom) { root.addView(topBar, LinearLayout.LayoutParams(match, wrap)); root.addView(progress, LinearLayout.LayoutParams(match, dp(3))) }
-        root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
-        findBar = LinearLayout(this); findBar.orientation = LinearLayout.HORIZONTAL; findBar.gravity = Gravity.CENTER_VERTICAL; findBar.setBackgroundColor(cSurface); findBar.setPadding(dp(8), dp(4), dp(4), dp(4)); findBar.visibility = View.GONE
-        findInput = EditText(this); findInput.hint = "Sayfada bul"; findInput.setHintTextColor(cSub); findInput.setTextColor(cText); findInput.textSize = 15f; findInput.isSingleLine = true; findInput.background = shape(cField, 18); findInput.setPadding(dp(14), 0, dp(14), 0)
-        findInput.doAfterTextChanged { text -> val t = text?.toString() ?: ""; val web = currentWeb(); if (web != null) { if (t.isEmpty()) { web.clearMatches(); findCount.text = "" } else { web.findAllAsync(t) } } }
-        findBar.addView(findInput, LinearLayout.LayoutParams(0, dp(36), 1f))
-        findCount = TextView(this); findCount.setTextColor(cSub); findCount.textSize = 13f; findCount.setPadding(dp(8), 0, dp(8), 0); findBar.addView(findCount, LinearLayout.LayoutParams(wrap, wrap))
-        findBar.addView(textBtn("▲") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40))); findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40))); findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
-        root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
-        if (prefs.barBottom) { root.addView(progress, LinearLayout.LayoutParams(match, dp(3))); root.addView(topBar, LinearLayout.LayoutParams(match, wrap)) }
-        dockBar = LinearLayout(this); val dock = dockBar; dock.orientation = LinearLayout.VERTICAL; dock.setBackgroundColor(cBg); dock.setPadding(dp(12), dp(6), dp(12), dp(8)); dock.clipToPadding = false; dock.clipChildren = false
-        val bottom = LinearLayout(this); bottom.orientation = LinearLayout.HORIZONTAL; bottom.gravity = Gravity.CENTER_VERTICAL; bottom.background = shape(cSurface, 30); bottom.elevation = dp(8).toFloat(); bottom.setPadding(dp(6), dp(4), dp(6), dp(4))
-        backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }; fwdBtn = iconBtn(R.drawable.ic_forward, "Ileri") { goForward() }
-        val homeBtn = iconBtn(R.drawable.ic_home, "Ana Sayfa") { goHome() }; homeBtn.setColorFilter(Color.WHITE); val hg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2)); hg.shape = GradientDrawable.OVAL; homeBtn.background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), hg, null)
-        val addBtn = iconBtn(R.drawable.ic_add, "Yeni Sekme") { openTab(null) }; val menuBtn = iconBtn(R.drawable.ic_menu, "Menu") { v -> showMenu(v) }
-        val tabsWrap = FrameLayout(this); tabsWrap.background = ripple(null); tabsWrap.contentDescription = "Sekmeler"; tabsWrap.setOnClickListener { showTabs() }
-        tabCount = TextView(this); tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f; tabCount.setTypeface(null, Typeface.BOLD); tabCount.setTextColor(cIcon); val tcBg = GradientDrawable(); tcBg.setColor(0); tcBg.cornerRadius = dp(7).toFloat(); tcBg.setStroke(dp(2), cIcon); tabCount.background = tcBg; tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
-        for (v in listOf<View>(backBtn, fwdBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f)); val hlp = LinearLayout.LayoutParams(dp(48), dp(48)); hlp.leftMargin = dp(4); hlp.rightMargin = dp(4); bottom.addView(homeBtn, hlp); for (v in listOf<View>(addBtn, tabsWrap, menuBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f)); dock.addView(bottom, LinearLayout.LayoutParams(match, wrap)); root.addView(dock, LinearLayout.LayoutParams(match, wrap))
-        fullscreen = FrameLayout(this); fullscreen.setBackgroundColor(Color.BLACK); fullscreen.visibility = View.GONE
-        val frame = FrameLayout(this); frame.addView(root, FrameLayout.LayoutParams(match, match)); frame.addView(fullscreen, FrameLayout.LayoutParams(match, match)); setContentView(frame)
-        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets -> val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime()); v.setPadding(b.left, b.top, b.right, b.bottom); insets }
-        root.requestFocus(); updateTabCount()
-    }
-    private fun startBrowsing() { if (tabs.isEmpty()) { val saved = prefs.savedTabs(); if (saved.isEmpty()) { openTab(null) } else { val want = prefs.savedCurrent(); for (u in saved.take(12)) { val t = createTab(); if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) } else { t.pendingUrl = NEWTAB_URL } }; switchTo(if (want in tabs.indices) want else 0) } }; val s = startUrl; startUrl = null; if (s != null) openTab(s) }
-    private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
-    @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
-    private fun createTab(incognito: Boolean = false): BTab {
-        val web = BgWebView(this); val bridge = PusulaBridge(prefs); val tab = BTab(web, bridge, incognito); val s = web.settings
-        s.javaScriptEnabled = true; s.domStorageEnabled = true; s.mediaPlaybackRequiresUserGesture = false; s.setSupportMultipleWindows(true); s.javaScriptCanOpenWindowsAutomatically = false; s.setSupportZoom(true); s.builtInZoomControls = true; s.displayZoomControls = false; s.loadWithOverviewMode = true; s.useWideViewPort = true; s.allowFileAccess = false; s.allowContentAccess = false; s.setGeolocationEnabled(false); s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), ""); s.userAgentString = ua; tab.mobileUa = ua; web.addJavascriptInterface(bridge, "Pusula"); syncScripts(tab)
-        web.setFindListener { active, total, _ -> if (tabs.getOrNull(cur) === tab) { findCount.text = if (total == 0) "0" else "${active + 1}/$total" } }
-        web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ -> startDownload(url, userAgent, contentDisposition, mimeType) }
-        web.webViewClient = makeClient(tab); web.webChromeClient = makeChrome(tab); tabs.add(tab); updateTabCount(); return tab
-    }
-    private fun syncScripts(t: BTab) {
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
-        try {
-            if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
-            if (t.keepScript != null) t.keepScript?.remove()
-            t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS + "\n" + SMOOTH_CROSSFADE_JS, setOf("*"))
-            if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
-            else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
-        } catch (_: Exception) { }
-    }
-    private fun settingsChanged() { for (t in tabs) syncScripts(t); val c = tabs.getOrNull(cur) ?: return; if (c.url.startsWith("http")) c.web.reload() }
-    private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? { if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme acilabilir"); return null }; val t = createTab(incognito); switchTo(tabs.size - 1); if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL)); return t }
-    private fun switchTo(i: Int) {
-        if (i !in tabs.indices) return
-        shown?.let { tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }; content.removeView(it) }
-        for (idx in tabs.indices) { if (idx != i) { try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {} } }
-        cur = i; val t = tabs[i]; shown = t.web; content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); t.web.onResume()
-        try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
-        val p = t.pendingUrl; if (p != null) { t.pendingUrl = null; t.web.loadUrl(p) }; closeFind(); privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE; topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg); syncUi()
-    }
-    private fun closeTab(index: Int) { if (index !in tabs.indices) return; val t = tabs[index]; val wasCurrent = index == cur; if (wasCurrent) { content.removeView(t.web); shown = null }; t.web.stopLoading(); t.web.clearHistory(); t.web.clearCache(true); t.web.destroy(); tabs.removeAt(index); if (t.incognito) { CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush(); WebStorage.getInstance().deleteAllData() }; if (tabs.isEmpty()) { cur = -1; openTab(null); return }; if (wasCurrent) switchTo(minOf(index, tabs.size - 1)) else if (index < cur) cur--; updateTabCount() }
-    private fun updateTabCount() { tabCount.text = tabs.size.toString() }
-    private fun saveTabs() { if (tabs.isEmpty()) return; val urls = ArrayList<String>(); for (t in tabs) { if (t.incognito) continue; val u = t.pendingUrl ?: t.url; urls.add(if (u.startsWith("http")) u else NEWTAB_URL) }; prefs.saveTabs(urls, 0) }
-    private fun shownUrl(u: String): String = if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) "" else u.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
-    private fun syncUrlText() { val t = tabs.getOrNull(cur); urlField.setText(if (t == null) "" else shownUrl(t.pendingUrl ?: t.url)) }
-    private fun syncUi() { val t = tabs.getOrNull(cur) ?: return; if (!urlField.hasFocus()) syncUrlText(); setLoadProgress(t.progress); refreshNav(); updateTabCount() }
-    private fun setLoadProgress(p: Int) { progress.progress = p; progress.visibility = if (p in 1..99) View.VISIBLE else View.INVISIBLE }
-    private fun refreshNav() { val web = currentWeb(); backBtn.alpha = if (web != null && (web.canGoBack() || tabs.size > 1)) 1f else 0.35f; fwdBtn.alpha = if (web != null && web.canGoForward()) 1f else 0.35f }
-    private fun loadInCurrent(url: String) { val t = tabs.getOrNull(cur) ?: return; t.pendingUrl = null; t.web.loadUrl(url) }
-    private fun submitUrl() { val text = urlField.text.toString(); loadInCurrent(resolveInput(text, Engines.get(prefs.engine))); hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
-    private fun goBack() { val web = currentWeb() ?: return; if (web.canGoBack()) web.goBack() else if (tabs.size > 1) closeTab(cur) }
-    private fun goForward() { val web = currentWeb() ?: return; if (web.canGoForward()) web.goForward() }
-    private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
-    private fun reloadCurrent() { val t = tabs.getOrNull(cur) ?: return; if (t.progress in 1..99) t.web.stopLoading() else t.web.reload() }
-    private fun handleBack() { val web = currentWeb(); when { customView != null -> hideCustom(); findBar.visibility == View.VISIBLE -> closeFind(); urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }; web != null && web.canGoBack() -> web.goBack(); tabs.size > 1 -> closeTab(cur); else -> finish() } }
-    private fun shouldBlockAd(uri: Uri): Boolean { val host = (uri.host ?: "").lowercase(); val path = (uri.encodedPath ?: "").lowercase(); val blockedHosts = listOf("doubleclick.net","googlesyndication.com","googleadservices.com","adservice.google.com","adnxs.com","adsrvr.org","adform.net","adcolony.com","taboola.com","outbrain.com","scorecardresearch.com","amazon-adsystem.com","criteo.com","hotjar.com","pagead2.googlesyndication.com"); if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true; return path.contains("/ads/") || path.contains("/adserver/") || path.contains("/pagead/") || path.contains("/advertisement/") || path.contains("/api/stats/ads") }
-    private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
-        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? { val uri = request?.url ?: return null; if (prefs.adBlock && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) { return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0))) }; return loader.shouldInterceptRequest(uri) }
-        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean { val u = request?.url ?: return false; val scheme = u.scheme ?: return false; return when (scheme) { "http","https","about","blob","data" -> false; "file","content","javascript" -> true; else -> openExternal(u.toString()) } }
-        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) { val u = url ?: ""; tab.bridge.trusted = u.startsWith(ASSET_PREFIX); tab.url = u; tab.progress = 5; if (tabs.getOrNull(cur) === tab) syncUi() }
-        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) { if (url != null && !url.startsWith("data:")) tab.url = url; if (tabs.getOrNull(cur) === tab) syncUi() }
-        override fun onPageFinished(view: WebView?, url: String?) { tab.progress = 100; val u = url ?: return; if (u.startsWith("http") && !tab.incognito) { val title = view?.title; prefs.addHistory(if (title.isNullOrBlank()) u else title, u) }; if (tabs.getOrNull(cur) === tab) syncUi() }
-        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) { if (view == null || request == null || error == null) return; if (!request.isForMainFrame) return; val desc = error.description?.toString() ?: ""; if (desc.contains("ERR_ABORTED")) return; val failing = request.url.toString(); view.loadDataWithBaseURL(failing, errorHtml(failing, desc), "text/html", "utf-8", failing) }
-    }
-    private fun makeChrome(tab: BTab): WebChromeClient = object : WebChromeClient() {
-        override fun onProgressChanged(view: WebView?, newProgress: Int) { tab.progress = newProgress; if (tabs.getOrNull(cur) === tab) setLoadProgress(newProgress) }
-        override fun onReceivedTitle(view: WebView?, title: String?) { if (!title.isNullOrBlank()) tab.title = title }
-        override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean { if (!isUserGesture || resultMsg == null) return false; val nt = openTab(null, false) ?: return false; val transport = resultMsg.obj as WebView.WebViewTransport; transport.webView = nt.web; resultMsg.sendToTarget(); return true }
-        override fun onCloseWindow(window: WebView?) { handler.post { val i = tabs.indexOfFirst { it.web === window }; if (i >= 0) closeTab(i) } }
-        override fun onShowFileChooser(webView: WebView?, filePathCallback: ValueCallback<Array<Uri>>?, fileChooserParams: FileChooserParams?): Boolean { fileCb?.onReceiveValue(null); fileCb = filePathCallback; return try { fileLauncher.launch(fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).setType("*/*")); true } catch (_: Exception) { fileCb?.onReceiveValue(null); fileCb = null; false } }
-        override fun onShowCustomView(view: View?, callback: CustomViewCallback?) { if (view == null || customView != null) { callback?.onCustomViewHidden(); return }; customView = view; customCb = callback; fullscreen.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); fullscreen.visibility = View.VISIBLE; setBars(false) }
-        override fun onHideCustomView() { hideCustom() }
-        override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean { AlertDialog.Builder(this@MainActivity).setMessage(message).setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }.setOnCancelListener { result?.confirm() }.show(); return true }
-    }
-    private fun hideCustom() { val v = customView ?: return; fullscreen.removeView(v); fullscreen.visibility = View.GONE; customView = null; customCb?.onCustomViewHidden(); customCb = null; setBars(true) }
-    private fun setBars(show: Boolean) { val c = WindowInsetsControllerCompat(window, window.decorView); if (show) { c.show(WindowInsetsCompat.Type.systemBars()) } else { c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE; c.hide(WindowInsetsCompat.Type.systemBars()) } }
-    private fun openExternal(url: String): Boolean { try { val i = if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url)); i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null; startActivity(i) } catch (_: Exception) { toast("Baglanti acilamadi") }; return true }
-    private fun errorHtml(url: String, desc: String): String { val bg = String.format("#%06X", 0xFFFFFF and cBg); val fg = String.format("#%06X", 0xFFFFFF and cText); val js = Html.escapeHtml("location.href=" + JSONObject.quote(url)); return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" + "<style>body{font-family:sans-serif;margin:0;padding:32px 24px;background:$bg;color:$fg}h1{font-size:22px}p{opacity:.75}" + "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" + "</style></head><body><h1>Yuklenemedi</h1><p>$url</p><button onclick=\"$js\">Tekrar Dene</button></body></html>" }
-    private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) { if (!url.startsWith("http")) return; try { val name = URLUtil.guessFileName(url, cd, mime); val req = DownloadManager.Request(Uri.parse(url)); if (mime != null) req.setMimeType(mime); val cookie = CookieManager.getInstance().getCookie(url); if (cookie != null) req.addRequestHeader("Cookie", cookie); if (ua != null) req.addRequestHeader("User-Agent", ua); req.setTitle(name); req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED); if (Build.VERSION.SDK_INT >= 29) req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name) else req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name); (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req); toast("Indiriliyor: $name") } catch (_: Exception) { toast("Indirilemedi") } }
-    private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
-    private fun hideKeyboard() { val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager; imm.hideSoftInputFromWindow(root.windowToken, 0) }
-    private fun sheetWindow(d: Dialog, view: View, full: Boolean) { d.requestWindowFeature(Window.FEATURE_NO_TITLE); d.setContentView(view); d.window?.let { w -> w.setBackgroundDrawable(ColorDrawable(if (full) cBg else Color.TRANSPARENT)); w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, if (full) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT); if (!full) w.setGravity(Gravity.BOTTOM) } }
-    private fun showMenu(anchor: View) {
-        val t = tabs.getOrNull(cur) ?: return; val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url); val d = Dialog(this)
-        val items = listOf(SheetItem("➕","Yeni sekme",false){ openTab(null) }, SheetItem("🕶","Gizli sekme",false){ openTab(null,true,true) }, SheetItem(if(marked)"⭐"else"☆",if(marked)"Imi kaldir"else"Yer imi ekle",marked){ prefs.toggleBookmark(if(t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri guncellendi") }, SheetItem("🔖","Yer imleri",false){ showEntries("Yer Imleri",prefs.bookmarks(),{prefs.removeBookmark(it.url)},null) }, SheetItem("🕘","Gecmis",false){ showEntries("Gecmis",prefs.history(),{prefs.removeHistory(it.url)},Pair("Temizle"){prefs.clearHistory()}) }, SheetItem("🔍","Sayfada bul",false){ openFind() }, SheetItem("🖥","Masaustu sitesi",t.desktop){ toggleDesktop() }, SheetItem("🪟","Kucuk pencere",false){ enterPip() }, SheetItem("📤","Paylas",false){ shareCurrent() }, SheetItem("🎨","Tema",false){ chooseTheme{} }, SheetItem("⚙","Ayarlar",false){ showSettings() })
-        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(14),dp(10),dp(14),dp(22)); val r = dp(28).toFloat(); val bgd = GradientDrawable(); bgd.setColor(cSurface); bgd.cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f); col.background = bgd
-        val handle = View(this); handle.background = shape(cField,3); val hlp = LinearLayout.LayoutParams(dp(42),dp(5)); hlp.gravity = Gravity.CENTER_HORIZONTAL; hlp.bottomMargin = dp(14); col.addView(handle,hlp)
-        for (rowItems in items.chunked(4)) { val lr = LinearLayout(this); lr.orientation = LinearLayout.HORIZONTAL; for (item in rowItems) { val cell = LinearLayout(this); cell.orientation = LinearLayout.VERTICAL; cell.gravity = Gravity.CENTER_HORIZONTAL; cell.setPadding(0,dp(8),0,dp(8)); cell.background = ripple(null); val ic = TextView(this); ic.text = item.icon; ic.textSize = 22f; ic.gravity = Gravity.CENTER; ic.setTextColor(cText); ic.background = if(item.on){ val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(19).toFloat(); g } else shape(cField,19); cell.addView(ic,LinearLayout.LayoutParams(dp(56),dp(56))); val lb = TextView(this); lb.text = item.label; lb.textSize = 11.5f; lb.gravity = Gravity.CENTER; lb.maxLines = 2; lb.setTextColor(cText); lb.setPadding(dp(2),dp(6),dp(2),0); cell.addView(lb,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)); cell.setOnClickListener{ d.dismiss(); item.act() }; lr.addView(cell,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)) }; for(k in rowItems.size until 4) lr.addView(View(this),LinearLayout.LayoutParams(0,1,1f)); col.addView(lr,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)) }
-        sheetWindow(d,col,false); d.show()
-    }
-    private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
-        val items = ArrayList(list); val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(14),dp(34),dp(14),dp(14))
-        val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(10)); val tv = TextView(this); tv.text = title; tv.textSize = 24f; tv.setTypeface(null,Typeface.BOLD); tv.setTextColor(cText); head.addView(tv,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-        val listCol = LinearLayout(this); listCol.orientation = LinearLayout.VERTICAL; var query = ""
-        fun render() {
-            listCol.removeAllViews(); val q = query.trim().lowercase(); val shownList = items.filter{ q.isEmpty() || it.title.lowercase().contains(q) || it.url.lowercase().contains(q) }
-            if (shownList.isEmpty()) { val e = TextView(this); e.text = if(items.isEmpty()) "Bos" else "Sonuc yok"; e.textSize = 15f; e.setTextColor(cSub); e.gravity = Gravity.CENTER; e.setPadding(0,dp(60),0,0); listCol.addView(e,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)); return }
-            for (en in shownList) { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(12),dp(10),dp(4),dp(10)); row.background = ripple(shape(cSurface,18)); row.setOnClickListener{ d.dismiss(); loadInCurrent(en.url) }; val host = shownUrl(en.url).substringBefore("/"); val av = TextView(this); av.text = (host.firstOrNull() ?: '?').uppercaseChar().toString(); av.textSize = 17f; av.setTypeface(null,Typeface.BOLD); av.setTextColor(Color.WHITE); av.gravity = Gravity.CENTER; val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(14).toFloat(); av.background = g; row.addView(av,LinearLayout.LayoutParams(dp(42),dp(42))); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12),0,dp(6),0); val t1 = TextView(this); t1.text = if(en.title.isBlank()) host else en.title; t1.textSize = 15f; t1.setTextColor(cText); t1.maxLines = 1; t1.ellipsize = android.text.TextUtils.TruncateAt.END; col.addView(t1); val t2 = TextView(this); t2.text = shownUrl(en.url); t2.textSize = 12.5f; t2.setTextColor(cSub); t2.maxLines = 1; t2.ellipsize = android.text.TextUtils.TruncateAt.END; col.addView(t2); row.addView(col,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); val x = textBtn("✕"){ onDelete(en); items.remove(en); render() }; x.setTextColor(cSub); row.addView(x,LinearLayout.LayoutParams(dp(44),dp(44))); val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); listCol.addView(row,lp) }
-        }
-        if (neutral != null) { val nb = textBtn(neutral.first){ neutral.second(); items.clear(); render() }; nb.setTextColor(cAccent); nb.setTypeface(null,Typeface.BOLD); head.addView(nb,LinearLayout.LayoutParams(dp(84),dp(40))) }
-        val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD); head.addView(done,LinearLayout.LayoutParams(dp(64),dp(40))); rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-        val search = EditText(this); search.hint = "Ara"; search.setHintTextColor(cSub); search.setTextColor(cText); search.textSize = 15f; search.isSingleLine = true; search.background = shape(cSurface,22); search.setPadding(dp(16),0,dp(16),0); search.doAfterTextChanged{ t -> query = t?.toString() ?: ""; render() }; val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44)); slp.bottomMargin = dp(12); rootV.addView(search,slp)
-        val scroll = ScrollView(this); scroll.addView(listCol); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f)); render(); sheetWindow(d,rootV,true); d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); d.show()
-    }
-    private fun openFind() { findBar.visibility = View.VISIBLE; findInput.setText(""); findCount.text = ""; findInput.requestFocus(); (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(findInput,0) }
-    private fun closeFind() { if (findBar.visibility != View.VISIBLE) return; findBar.visibility = View.GONE; currentWeb()?.clearMatches(); hideKeyboard(); root.requestFocus() }
-    private fun toggleDesktop() { val t = tabs.getOrNull(cur) ?: return; t.desktop = !t.desktop; val s = t.web.settings; if(t.desktop){ val chrome = Regex("Chrome/[\\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0"; s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36" } else { s.userAgentString = t.mobileUa }; t.web.reload() }
-    private fun shareCurrent() { val t = tabs.getOrNull(cur) ?: return; if (!t.url.startsWith("http")) return; startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,t.url),"Paylas")) }
-    private fun capturePreview(tab: BTab) { try { val w = tab.web.width; val h = tab.web.height; if (w <= 0 || h <= 0) return; val sc = 360f / w; val bh = (h * sc).toInt().coerceIn(1,700); val bmp = Bitmap.createBitmap(360,bh,Bitmap.Config.RGB_565); val canvas = Canvas(bmp); canvas.scale(sc,sc); tab.web.draw(canvas); tab.preview = bmp } catch (_: Exception) {} }
-    private fun pillBtn(label: String, colors: IntArray, onClick: () -> Unit): TextView { val t = TextView(this); t.text = label; t.textSize = 14f; t.setTypeface(null,Typeface.BOLD); t.setTextColor(Color.WHITE); val g = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,colors); g.cornerRadius = dp(24).toFloat(); t.background = g; t.setOnClickListener{ onClick() }; return t }
-    private fun showTabs() {
-        tabs.getOrNull(cur)?.let { capturePreview(it) }; val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(12),dp(34),dp(12),dp(16))
-        val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(8)); val title = TextView(this); title.textSize = 24f; title.setTypeface(null,Typeface.BOLD); title.setTextColor(cText); head.addView(title,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD); head.addView(done,LinearLayout.LayoutParams(dp(72),dp(40))); rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-        val grid = LinearLayout(this); grid.orientation = LinearLayout.VERTICAL; val scroll = ScrollView(this); scroll.addView(grid); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
-        val actions = LinearLayout(this); actions.orientation = LinearLayout.HORIZONTAL; actions.setPadding(0,dp(10),0,0); val b1 = pillBtn("+ Yeni sekme",intArrayOf(cAccent,cAccent2)){ d.dismiss(); openTab(null) }; val b2 = pillBtn("Gizli sekme",intArrayOf(0xFF6D2BD9.toInt(),0xFFC026D3.toInt())){ d.dismiss(); openTab(null,true,true) }; val l1 = LinearLayout.LayoutParams(0,dp(48),1f); l1.rightMargin = dp(6); val l2 = LinearLayout.LayoutParams(0,dp(48),1f); l2.leftMargin = dp(6); actions.addView(b1,l1); actions.addView(b2,l2); rootV.addView(actions,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-        fillTabs(grid,title,d); sheetWindow(d,rootV,true); d.show()
-    }
-    private fun fillTabs(grid: LinearLayout, title: TextView, d: Dialog) { grid.removeAllViews(); title.text = "Sekmeler - " + tabs.size; for (rowStart in 0 until tabs.size step 2) { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; for (i in rowStart until minOf(rowStart+2,tabs.size)) { val lp = LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f); lp.setMargins(dp(5),dp(5),dp(5),dp(5)); row.addView(tabCard(i,grid,title,d),lp) }; if (rowStart+1 >= tabs.size) row.addView(View(this),LinearLayout.LayoutParams(0,1,1f)); grid.addView(row,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)) } }
-    private fun tabCard(i: Int, grid: LinearLayout, title: TextView, d: Dialog): View { val t = tabs[i]; val card = LinearLayout(this); card.orientation = LinearLayout.VERTICAL; card.setPadding(dp(8),dp(4),dp(8),dp(8)); val bg = GradientDrawable(); bg.setColor(if(t.incognito)0xFF2B1A55.toInt() else cSurface); bg.cornerRadius = dp(20).toFloat(); if(i==cur) bg.setStroke(dp(2),if(t.incognito)0xFFA46BFF.toInt() else cAccent); card.background = bg; card.setOnClickListener{ d.dismiss(); switchTo(i) }; val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; val label = TextView(this); val name = if(t.title.isBlank() || t.title=="Yeni Sekme") shownUrl(t.pendingUrl ?: t.url).ifEmpty{ "Yeni sekme" } else t.title; label.text = (if(t.incognito)"GIZLI " else "") + name; label.textSize = 12.5f; label.maxLines = 1; label.ellipsize = android.text.TextUtils.TruncateAt.END; label.setTextColor(if(t.incognito)0xFFF3ECFF.toInt() else cText); if(i==cur) label.setTypeface(null,Typeface.BOLD); label.setPadding(dp(4),0,0,0); head.addView(label,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); head.addView(textBtn("x"){ closeTab(i); fillTabs(grid,title,d) },LinearLayout.LayoutParams(dp(34),dp(34))); card.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)); val img = ImageView(this); img.scaleType = ImageView.ScaleType.MATRIX; img.background = shape(if(t.incognito)0xFF3A2470.toInt() else cField,14); img.clipToOutline = true; val bmp = t.preview; if (bmp != null) { img.setImageBitmap(bmp); img.post{ val sc = img.width.toFloat()/bmp.width; val m = Matrix(); m.setScale(sc,sc); img.imageMatrix = m } }; card.addView(img,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(170))); return card }
-    private fun settingsRow(icon: String, title: String, sub: String?, trailing: View?, onClick: () -> Unit): View { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(12),dp(10),dp(14),dp(10)); row.background = ripple(shape(cSurface,18)); row.setOnClickListener{ onClick() }; val ic = TextView(this); ic.text = icon; ic.textSize = 19f; ic.gravity = Gravity.CENTER; val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(13).toFloat(); ic.background = g; row.addView(ic,LinearLayout.LayoutParams(dp(42),dp(42))); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12),0,dp(8),0); val tt = TextView(this); tt.text = title; tt.textSize = 15.5f; tt.setTextColor(cText); tt.setTypeface(null,Typeface.BOLD); col.addView(tt); if(sub!=null){ val st = TextView(this); st.text = sub; st.textSize = 12.5f; st.setTextColor(cSub); col.addView(st) }; row.addView(col,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); if(trailing!=null) row.addView(trailing,LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT)); return row }
-    private fun chevron(): TextView { val c = TextView(this); c.text = ">"; c.textSize = 24f; c.setTextColor(cSub); return c }
-    private fun switchRow(icon: String, title: String, sub: String, value: Boolean, onChange: (Boolean) -> Unit): View { val sw = SwitchCompat(this); sw.isChecked = value; val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()); sw.thumbTintList = ColorStateList(states,intArrayOf(Color.WHITE,cSub)); sw.trackTintList = ColorStateList(states,intArrayOf(cAccent,cField)); sw.setOnCheckedChangeListener{ _,v -> onChange(v) }; return settingsRow(icon,title,sub,sw){ sw.toggle() } }
-    private fun showSettings() {
-        val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(14),dp(34),dp(14),dp(14))
-        val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(10)); val title = TextView(this); title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null,Typeface.BOLD); title.setTextColor(cText); head.addView(title,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD); head.addView(done,LinearLayout.LayoutParams(dp(72),dp(40))); rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
-        val list = LinearLayout(this); list.orientation = LinearLayout.VERTICAL
-        fun add(v: View){ val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); list.addView(v,lp) }
-        fun label(t: String){ val l = TextView(this); l.text = t.uppercase(); l.textSize = 11.5f; l.setTextColor(cSub); l.setTypeface(null,Typeface.BOLD); l.letterSpacing = 0.1f; l.setPadding(dp(6),dp(10),0,dp(6)); list.addView(l) }
-        label("Gezinme"); add(switchRow("AD","Reklam engelleyici","YouTube reklamlarini atlar",prefs.adBlock){ v -> prefs.adBlock = v; settingsChanged() }); add(switchRow("BG","Arka planda calma","Uygulamadan cikinca muzik surer",prefs.bgPlay){ v -> prefs.bgPlay = v; settingsChanged() }); add(switchRow("BAR","Adres cubugu altta","Aciksa adres cubugu altta olur",prefs.barBottom){ v -> prefs.barBottom = v; applyTheme() }); add(settingsRow("WEB","Varsayilan tarayici yap",if(isDefaultBrowser())"Su an varsayilan" else "Linkler Rota ile acilsin",chevron()){ d.dismiss(); askDefaultBrowser() })
-        label("Gorunum ve arama"); add(settingsRow("TEMA","Tema",Themes.get(prefs.theme).name,chevron()){ chooseTheme{ d.dismiss(); showSettings() } }); add(settingsRow("ARA","Arama motoru",Engines.get(prefs.engine).name,chevron()){ chooseEngine{ d.dismiss(); showSettings() } })
-        label("Gizlilik"); add(settingsRow("SIL","Gecmisi temizle",null,null){ prefs.clearHistory(); toast("Gecmis temizlendi") }); add(settingsRow("TEM","Onbellegi ve cerezleri temizle",null,null){ clearBrowsingData(); toast("Temizlendi") })
-        val scroll = ScrollView(this); scroll.addView(list); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f)); sheetWindow(d,rootV,true); d.show()
-    }
-    private fun isDefaultBrowser(): Boolean { return try { if (Build.VERSION.SDK_INT >= 29) { val rm = getSystemService(android.app.role.RoleManager::class.java); rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER) } else { val i = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com")); val ri = packageManager.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY); ri?.activityInfo?.packageName == packageName } } catch (_: Exception) { false } }
-    private fun openDefaultAppsSettings() { try { startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)); toast("Tarayici uygulamasini sec, sonra Rota'yi isaretle") } catch (_: Exception) { try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar acilamadi") } } }
-    private fun afterRole() { if (isDefaultBrowser()) toast("Rota artik varsayilan") else openDefaultAppsSettings() }
-    private fun askDefaultBrowser() { if (isDefaultBrowser()) { toast("Rota zaten varsayilan"); return }; if (Build.VERSION.SDK_INT >= 29) { try { val rm = getSystemService(android.app.role.RoleManager::class.java); if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) { roleLauncher.launch(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER)); return } } catch (_: Exception) { } }; openDefaultAppsSettings() }
-    private fun chooseTheme(onDone: () -> Unit) {
-        val d = Dialog(this); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(14),dp(12),dp(14),dp(22)); val r = dp(28).toFloat(); val bgd = GradientDrawable(); bgd.setColor(cSurface); bgd.cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f); col.background = bgd
-        val tt = TextView(this); tt.text = "Tema sec"; tt.textSize = 18f; tt.setTypeface(null,Typeface.BOLD); tt.setTextColor(cText); tt.setPadding(dp(6),0,0,dp(10)); col.addView(tt)
-        for (p in Themes.all) { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(14),dp(10),dp(14),dp(10)); val rb = GradientDrawable(); rb.setColor(p.bg); rb.cornerRadius = dp(18).toFloat(); if(p.id==prefs.theme) rb.setStroke(dp(2),p.accent) else rb.setStroke(dp(1),p.field); row.background = rb; val dot = View(this); val dg = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(p.accent,p.accent2)); dg.shape = GradientDrawable.OVAL; dot.background = dg; row.addView(dot,LinearLayout.LayoutParams(dp(30),dp(30))); val nm = TextView(this); nm.text = p.name; nm.textSize = 15.5f; nm.setTextColor(p.text); nm.setTypeface(null,Typeface.BOLD); nm.setPadding(dp(14),0,0,0); row.addView(nm,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); if(p.id==prefs.theme){ val ck = TextView(this); ck.text = "v"; ck.textSize = 18f; ck.setTextColor(p.accent); ck.setTypeface(null,Typeface.BOLD); row.addView(ck) }; row.setOnClickListener{ d.dismiss(); prefs.theme = p.id; applyTheme(); onDone() }; val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); col.addView(row,lp) }
-        val sc = ScrollView(this); sc.addView(col); sheetWindow(d,sc,false); d.show()
-    }
-    private fun chooseEngine(onDone: () -> Unit) { val names = Engines.all.map{ it.name }.toTypedArray(); val sel = Engines.all.indexOfFirst{ it.id==prefs.engine }.coerceAtLeast(0); AlertDialog.Builder(this).setTitle("Arama Motoru").setSingleChoiceItems(names,sel){ dlg,which -> prefs.engine = Engines.all[which].id; dlg.dismiss(); onDone() }.show() }
-    private fun clearBrowsingData() { CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush(); WebStorage.getInstance().deleteAllData(); for(t in tabs) t.web.clearCache(true) }
+          import android.annotation.SuppressLint
+          import android.app.Dialog
+          import android.app.DownloadManager
+          import android.graphics.Matrix
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.res.ColorStateList
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.Drawable
+          import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.RippleDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Environment
+          import android.os.Handler
+          import android.os.Looper
+          import android.os.Message
+          import android.text.Html
+          import android.text.InputType
+          import android.view.Gravity
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.ViewGroup
+          import android.view.Window
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.webkit.CookieManager
+          import android.webkit.JsResult
+          import android.webkit.URLUtil
+          import android.webkit.ValueCallback
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceError
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebResourceResponse
+          import android.webkit.WebStorage
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.ImageButton
+          import android.widget.ImageView
+          import android.widget.LinearLayout
+          import android.widget.ProgressBar
+          import android.widget.ScrollView
+          import android.widget.TextView
+          import android.widget.Toast
+          import androidx.activity.OnBackPressedCallback
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.appcompat.app.AlertDialog
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.content.ContextCompat
+          import androidx.core.view.ViewCompat
+          import androidx.core.view.WindowCompat
+          import androidx.core.view.WindowInsetsCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+          import androidx.core.widget.doAfterTextChanged
+          import androidx.appcompat.widget.SwitchCompat
+          import androidx.webkit.ScriptHandler
+          import androidx.webkit.WebViewAssetLoader
+          import androidx.webkit.WebViewCompat
+          import androidx.webkit.WebViewFeature
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.ByteArrayInputStream
 
-    private companion object {
-        const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
-        const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
-        const val MAX_TABS = 20
-        const val KEEP_PLAYING_JS = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);}catch(e){}})();"
-        const val STABLE_AD_BLOCKER_JS = "(function(){if(location.hostname.indexOf('youtube.com')<0 && location.hostname.indexOf('music.youtube.com')<0)return;var fast=false,adn=0;setInterval(function(){try{var pl=document.querySelector('.html5-video-player');if(!pl)return;var vd=pl.querySelector('video');var ad=pl.classList.contains('ad-showing');adn=ad?adn+1:0;if(ad&&adn>=2){var va=pl.querySelector('.video-ads');if(va)va.style.visibility='hidden';if(vd){if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';}vd.style.visibility='hidden';vd.muted=true;vd.playbackRate=16;var n=vd.buffered.length;if(n){var e=vd.buffered.end(n-1);if(e-vd.currentTime>0.3){vd.currentTime=e-0.1;}}}var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button');if(b)b.click();}else if(!ad&&fast){fast=false;var va2=pl.querySelector('.video-ads');if(va2)va2.style.visibility='';if(vd){vd.style.visibility='';vd.playbackRate=1;if(vd.dataset.pm!=='1'){var tv=vd.volume;vd.volume=0;vd.muted=false;var k=0;var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*k/6);if(k>=6)clearInterval(iv);},40);}}}catch(e){}},120);})();"
-        const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}});}catch(e){}})();"
-        const val FADE_JS = "window.__pFade=function(m,a,b,d,cb){try{var s=(b-a)/(d/25),v=a,iv=setInterval(function(){v+=s;if((s>0&&v>=b)||(s<0&&v<=b)){clearInterval(iv);m.volume=Math.max(0,Math.min(1,b));if(cb)cb();}else m.volume=Math.max(0,Math.min(1,v));},25);}catch(e){if(cb)cb();}};"
-        const val MEDIA_TOGGLE_JS = FADE_JS + "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(!v){var b=document.querySelector('.ytp-play-button');if(b)b.click();return;}if(v.paused){v.volume=0;var p=v.play();if(p&&p.then)p.then(function(){__pFade(v,0,1,250);});else __pFade(v,0,1,250);}else{__pFade(v,v.volume,0,200,function(){v.pause();v.volume=1;});}})();"
-        const val MEDIA_PAUSE_JS = FADE_JS + "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){__pFade(m,m.volume,0,200,function(){m.pause();m.volume=1;});}});})();"
-        const val MEDIA_PREVIOUS_JS = FADE_JS + "(function(){try{var h=window.__msh&&window.__msh.previoustrack;if(h){h();return;}var sels=[\"ytmusic-player-bar .previous-button\",\"ytmusic-player-bar [aria-label='Previous']\",\".ytp-prev-button\"];for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){b.click();return;}}var v=document.querySelector('video,audio');if(v)v.currentTime=0;}catch(e){}})();"
-        const val MEDIA_NEXT_JS = FADE_JS + "(function(){try{var h=window.__msh&&window.__msh.nexttrack;if(h){h();return;}var sels=[\"ytmusic-player-bar .next-button\",\"ytmusic-player-bar [aria-label='Next']\",\".ytp-next-button\"];for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){b.click();return;}}var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration-0.05;}catch(e){}})();"
-        const val SMOOTH_CROSSFADE_JS = "(function(){if(window.__pusulaSmooth)return;window.__pusulaSmooth=1;function fade(m,a,b,d,cb){try{var s=(b-a)/(d/25),v=a,iv=setInterval(function(){v+=s;if((s>0&&v>=b)||(s<0&&v<=b)){clearInterval(iv);m.volume=Math.max(0,Math.min(1,b));if(cb)cb();}else m.volume=Math.max(0,Math.min(1,v));},25);}catch(e){if(cb)cb();}}function hookMedia(m){if(!m||m.__pusulaHooked)return;m.__pusulaHooked=true;m.addEventListener('play',function(){try{if(m.dataset.pusulaFading)return;if(m.volume<0.9){if(m.volume<0.1)m.volume=0;m.dataset.pusulaFading='1';fade(m,0,1,380,function(){delete m.dataset.pusulaFading;});}}catch(e){}});}var lastTitle='';setInterval(function(){try{var v=document.querySelector('video,audio');if(v)hookMedia(v);var tEl=document.querySelector('ytmusic-player-bar .title');var curTitle=tEl?tEl.textContent:'';if(curTitle&&curTitle!==lastTitle&&lastTitle!==''){var media=document.querySelector('video,audio');if(media&&!media.paused){fade(media,media.volume,0,180,function(){setTimeout(function(){if(media)fade(media,0,1,380,null);},120);});}lastTitle=curTitle;}else if(curTitle){lastTitle=curTitle;}}catch(e){}},500);document.addEventListener('ended',function(e){var m=e.target;if(m&&(m.tagName==='VIDEO'||m.tagName==='AUDIO')){try{fade(m,m.volume,0,180,null);}catch(x){}}},true);})();"
-        const val MEDIA_HOOK_JS = "(function(){try{if(window.__msh)return;window.__msh={};var ms=navigator.mediaSession;if(ms&&ms.setActionHandler){var orig=ms.setActionHandler.bind(ms);ms.setActionHandler=function(a,f){window.__msh[a]=f;return orig(a,f);};}}catch(e){}})();"
-        const val MEDIA_STATE_JS = "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(!v||!(v.currentSrc||v.src))return '';var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}function site(t){return !t||/^YouTube( Music)?$/i.test(t.trim());}var t=(md&&md.title)||'';if(site(t))t=tx('ytmusic-player-bar .title')||tx('.player-bar-title')||tx('ytm-slim-video-metadata-section-renderer h2')||tx('.slim-video-information-title')||tx('ytd-watch-metadata h1')||tx('h1.title')||'';if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});}catch(e){return '';}})();"
-        const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;var s=document.createElement('style');s.id='__pip';s.textContent='html,body{overflow:hidden!important}.__pipa{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important}.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important}';document.documentElement.appendChild(s);v.classList.add('__pipv');var e=v.parentElement;while(e&&e!==document.documentElement){e.classList.add('__pipa');e=e.parentElement;}window.dispatchEvent(new Event('resize'));}catch(e){}})();"
-        const val PIP_OFF_JS = "(function(){try{var s=document.getElementById('__pip');if(s)s.remove();document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});document.querySelectorAll('.__pipa').forEach(function(x){x.classList.remove('__pipa');});window.dispatchEvent(new Event('resize'));}catch(e){}})();"
-    }
-}
+          class MainActivity : AppCompatActivity() {
+              private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
+                  var title: String = "Yeni Sekme"
+                  var url: String = ""
+                  var pendingUrl: String? = null
+                  var desktop: Boolean = false
+                  var mobileUa: String = ""
+                  var progress: Int = 100
+                  var preview: Bitmap? = null
+                  var adScript: ScriptHandler? = null
+                  var keepScript: ScriptHandler? = null
+                  var hookScript: ScriptHandler? = null
+              }
+              private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
+              private class BgWebView(c: Context) : WebView(c) {
+                  override fun onWindowVisibilityChanged(visibility: Int) {
+                      if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
+                  }
+              }
+              private val tabs = ArrayList<BTab>()
+              private var cur = -1
+              private var shown: WebView? = null
+              private lateinit var prefs: Prefs
+              private lateinit var loader: WebViewAssetLoader
+              private val handler = Handler(Looper.getMainLooper())
+              private var appInBackground = false
+              private var hasMedia = false
+              private var lastPlaying = false
+              private var lastTitle = ""
+              private var lastArtist = ""
+              private lateinit var dockBar: LinearLayout
+              private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
+              private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+              private val mediaStatePoll = object : Runnable { override fun run() { pollMedia(); handler.postDelayed(this, 1500L) } }
+              private fun pollMedia() { val t = tabs.getOrNull(cur) ?: return; try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { } }
+              private fun onMediaState(raw: String?) {
+                  var has = false; var playing = false; var title = ""; var artist = ""
+                  try {
+                      if (raw != null && raw != "null" && raw != "\"\"") {
+                          val inner = JSONArray("[" + raw + "]").getString(0)
+                          if (inner.isNotEmpty()) { val o = JSONObject(inner); has = true; playing = o.optBoolean("p"); title = o.optString("t"); artist = o.optString("a") }
+                      }
+                  } catch (_: Exception) { return }
+                  if (!has) { if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }; return }
+                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
+                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
+                  if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
+              }
+              private fun enterPip() { if (Build.VERSION.SDK_INT < 26) { toast("Bu Android surumu kucuk pencereyi desteklemiyor"); return }; try { val p = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build(); enterPictureInPictureMode(p) } catch (_: Exception) { toast("Kucuk pencere acilamadi") } }
+              private fun onPipChanged(pip: Boolean) { topBar.visibility = if (pip) View.GONE else View.VISIBLE; dockBar.visibility = if (pip) View.GONE else View.VISIBLE; if (pip) { closeFind(); shown?.onResume(); if (customView == null) { try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { } } } else { for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } } } }
+              override fun onUserLeaveHint() { super.onUserLeaveHint(); if (customView != null && Build.VERSION.SDK_INT >= 26) enterPip() }
+              private val mediaControlReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(context: Context?, intent: Intent?) {
+                      val act = intent?.action ?: return
+                      val js = when (act) { PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS; PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS; PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS; PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS; else -> return }
+                      val targets = if (act == PlaybackService.ACTION_PAUSE) tabs.toList() else listOfNotNull(tabs.getOrNull(cur))
+                      targets.forEach { t -> try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { } }
+                  }
+              }
+              private val backgroundMediaPump = object : Runnable { override fun run() { if (!appInBackground || !prefs.bgPlay) return; val t = tabs.getOrNull(cur); try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }; handler.postDelayed(this, 1200L) } }
+              private lateinit var root: LinearLayout; private lateinit var content: FrameLayout; private lateinit var fullscreen: FrameLayout; private lateinit var urlField: EditText; private lateinit var progress: ProgressBar; private lateinit var backBtn: ImageButton; private lateinit var fwdBtn: ImageButton; private lateinit var tabCount: TextView; private lateinit var privateBadge: TextView; private lateinit var findBar: LinearLayout; private lateinit var findInput: EditText; private lateinit var findCount: TextView
+              private var dark = false; private var cBg = 0; private var cSurface = 0; private var cField = 0; private var cText = 0; private var cSub = 0; private var cIcon = 0; private var cAccent = 0; private var cAccent2 = 0; private lateinit var topBar: LinearLayout
+              private var customView: View? = null; private var customCb: WebChromeClient.CustomViewCallback? = null; private var fileCb: ValueCallback<Array<Uri>>? = null; private var startUrl: String? = null
+              private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res -> fileCb?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res.resultCode, res.data)); fileCb = null }
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState); prefs = Prefs(this); loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build(); loadPalette(); WindowCompat.setDecorFitsSystemWindows(window, false); buildUi()
+                  val bars = WindowInsetsControllerCompat(window, window.decorView); bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark; startUrl = intent?.dataString
+                  onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) { override fun handleOnBackPressed() { handleBack() } })
+                  val mediaFilter = IntentFilter().apply { addAction(PlaybackService.ACTION_PLAY); addAction(PlaybackService.ACTION_TOGGLE); addAction(PlaybackService.ACTION_PAUSE); addAction(PlaybackService.ACTION_PREVIOUS); addAction(PlaybackService.ACTION_NEXT) }
+                  ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED); startBrowsing(); addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }; handler.removeCallbacks(mediaStatePoll); handler.postDelayed(mediaStatePoll, 1500L)
+                  if (Build.VERSION.SDK_INT >= 33 && !prefs.askedNotif && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) { prefs.askedNotif = true; notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+              }
+              override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); val u = intent.dataString ?: return; openTab(u) }
+              override fun onPause() { super.onPause(); saveTabs(); CookieManager.getInstance().flush(); if (prefs.bgPlay) { appInBackground = true; handler.removeCallbacks(backgroundMediaPump); handler.post(backgroundMediaPump); if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist) } else { appInBackground = true; shown?.onPause() } }
+              override fun onResume() { super.onResume(); appInBackground = false; handler.removeCallbacks(backgroundMediaPump); shown?.onResume() }
+              override fun onDestroy() { try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }; handler.removeCallbacks(backgroundMediaPump); handler.removeCallbacks(mediaStatePoll); PlaybackService.stop(this); for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }; super.onDestroy() }
+              private fun loadPalette() { val pal = Themes.get(prefs.theme); dark = pal.dark; cBg = pal.bg; cSurface = pal.surface; cField = pal.field; cText = pal.text; cSub = pal.sub; cIcon = pal.icon; cAccent = pal.accent; cAccent2 = pal.accent2; window.setBackgroundDrawable(ColorDrawable(cBg)) }
+              private fun applyTheme() { if (customView != null) hideCustom(); val web = shown; if (web != null) content.removeView(web); loadPalette(); buildUi(); if (web != null) content.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); val bars = WindowInsetsControllerCompat(window, window.decorView); bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark; val t = tabs.getOrNull(cur); if (t != null) { privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE; topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg); if (t.url.startsWith(ASSET_PREFIX)) t.web.reload() }; syncUi() }
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
+              private fun shape(color: Int, radiusDp: Int): GradientDrawable { val g = GradientDrawable(); g.setColor(color); g.cornerRadius = dp(radiusDp).toFloat(); return g }
+              private fun ripple(content: Drawable?): RippleDrawable = RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
+              private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton { val b = ImageButton(this); b.setImageResource(res); b.setColorFilter(cIcon); b.background = ripple(null); b.contentDescription = desc; b.scaleType = ImageView.ScaleType.CENTER; b.setOnClickListener { v -> onClick(v) }; return b }
+              private fun textBtn(label: String, onClick: () -> Unit): TextView { val t = TextView(this); t.text = label; t.textSize = 16f; t.setTextColor(cIcon); t.gravity = Gravity.CENTER; t.background = ripple(null); t.setOnClickListener { onClick() }; return t }
+              private fun buildUi() {
+                  val match = ViewGroup.LayoutParams.MATCH_PARENT; val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+                  root = LinearLayout(this); root.orientation = LinearLayout.VERTICAL; root.setBackgroundColor(cBg); root.isFocusable = true; root.isFocusableInTouchMode = true
+                  topBar = LinearLayout(this); topBar.orientation = LinearLayout.HORIZONTAL; topBar.gravity = Gravity.CENTER_VERTICAL; topBar.setPadding(dp(10), dp(8), dp(10), dp(8)); topBar.setBackgroundColor(cBg)
+                  privateBadge = TextView(this); privateBadge.text = "GIZLI"; privateBadge.textSize = 11f; privateBadge.setTypeface(null, Typeface.BOLD); privateBadge.setTextColor(Color.WHITE); privateBadge.gravity = Gravity.CENTER; privateBadge.setPadding(dp(10), 0, dp(10), 0); privateBadge.background = shape(0xFF8B3DFF.toInt(), 16); privateBadge.visibility = View.GONE
+                  val blp = LinearLayout.LayoutParams(wrap, dp(32)); blp.rightMargin = dp(8); topBar.addView(privateBadge, blp)
+                  val pill = LinearLayout(this); pill.orientation = LinearLayout.HORIZONTAL; pill.gravity = Gravity.CENTER_VERTICAL; pill.background = shape(cSurface, 24); pill.elevation = dp(3).toFloat()
+                  val lead = TextView(this); lead.text = "🔎"; lead.textSize = 15f; lead.gravity = Gravity.CENTER; pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
+                  urlField = EditText(this); urlField.hint = "Ara veya adres yaz"; urlField.setHintTextColor(cSub); urlField.setTextColor(cText); urlField.textSize = 15f; urlField.isSingleLine = true; urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; urlField.imeOptions = EditorInfo.IME_ACTION_GO; urlField.setSelectAllOnFocus(true); urlField.background = null; urlField.setPadding(0, 0, 0, 0)
+                  urlField.setOnEditorActionListener { _, actionId, event -> if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) { submitUrl(); true } else false }
+                  urlField.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) syncUrlText() }
+                  pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f)); pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
+                  topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
+                  progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.max = 100; progress.progressTintList = ColorStateList.valueOf(cAccent); progress.progressBackgroundTintList = ColorStateList.valueOf(cBg); progress.visibility = View.INVISIBLE
+                  content = FrameLayout(this); content.setBackgroundColor(cBg)
+                  if (!prefs.barBottom) { root.addView(topBar, LinearLayout.LayoutParams(match, wrap)); root.addView(progress, LinearLayout.LayoutParams(match, dp(3))) }
+                  root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
+                  findBar = LinearLayout(this); findBar.orientation = LinearLayout.HORIZONTAL; findBar.gravity = Gravity.CENTER_VERTICAL; findBar.setBackgroundColor(cSurface); findBar.setPadding(dp(8), dp(4), dp(4), dp(4)); findBar.visibility = View.GONE
+                  findInput = EditText(this); findInput.hint = "Sayfada bul"; findInput.setHintTextColor(cSub); findInput.setTextColor(cText); findInput.textSize = 15f; findInput.isSingleLine = true; findInput.background = shape(cField, 18); findInput.setPadding(dp(14), 0, dp(14), 0)
+                  findInput.doAfterTextChanged { text -> val t = text?.toString() ?: ""; val web = currentWeb(); if (web != null) { if (t.isEmpty()) { web.clearMatches(); findCount.text = "" } else { web.findAllAsync(t) } } }
+                  findBar.addView(findInput, LinearLayout.LayoutParams(0, dp(36), 1f))
+                  findCount = TextView(this); findCount.setTextColor(cSub); findCount.textSize = 13f; findCount.setPadding(dp(8), 0, dp(8), 0); findBar.addView(findCount, LinearLayout.LayoutParams(wrap, wrap))
+                  findBar.addView(textBtn("▲") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40))); findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40))); findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
+                  if (prefs.barBottom) { root.addView(progress, LinearLayout.LayoutParams(match, dp(3))); root.addView(topBar, LinearLayout.LayoutParams(match, wrap)) }
+                  dockBar = LinearLayout(this); val dock = dockBar; dock.orientation = LinearLayout.VERTICAL; dock.setBackgroundColor(cBg); dock.setPadding(dp(12), dp(6), dp(12), dp(8)); dock.clipToPadding = false; dock.clipChildren = false
+                  val bottom = LinearLayout(this); bottom.orientation = LinearLayout.HORIZONTAL; bottom.gravity = Gravity.CENTER_VERTICAL; bottom.background = shape(cSurface, 30); bottom.elevation = dp(8).toFloat(); bottom.setPadding(dp(6), dp(4), dp(6), dp(4))
+                  backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }; fwdBtn = iconBtn(R.drawable.ic_forward, "Ileri") { goForward() }
+                  val homeBtn = iconBtn(R.drawable.ic_home, "Ana Sayfa") { goHome() }; homeBtn.setColorFilter(Color.WHITE); val hg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2)); hg.shape = GradientDrawable.OVAL; homeBtn.background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), hg, null)
+                  val addBtn = iconBtn(R.drawable.ic_add, "Yeni Sekme") { openTab(null) }; val menuBtn = iconBtn(R.drawable.ic_menu, "Menu") { v -> showMenu(v) }
+                  val tabsWrap = FrameLayout(this); tabsWrap.background = ripple(null); tabsWrap.contentDescription = "Sekmeler"; tabsWrap.setOnClickListener { showTabs() }
+                  tabCount = TextView(this); tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f; tabCount.setTypeface(null, Typeface.BOLD); tabCount.setTextColor(cIcon); val tcBg = GradientDrawable(); tcBg.setColor(0); tcBg.cornerRadius = dp(7).toFloat(); tcBg.setStroke(dp(2), cIcon); tabCount.background = tcBg; tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+                  for (v in listOf<View>(backBtn, fwdBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f)); val hlp = LinearLayout.LayoutParams(dp(48), dp(48)); hlp.leftMargin = dp(4); hlp.rightMargin = dp(4); bottom.addView(homeBtn, hlp); for (v in listOf<View>(addBtn, tabsWrap, menuBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f)); dock.addView(bottom, LinearLayout.LayoutParams(match, wrap)); root.addView(dock, LinearLayout.LayoutParams(match, wrap))
+                  fullscreen = FrameLayout(this); fullscreen.setBackgroundColor(Color.BLACK); fullscreen.visibility = View.GONE
+                  val frame = FrameLayout(this); frame.addView(root, FrameLayout.LayoutParams(match, match)); frame.addView(fullscreen, FrameLayout.LayoutParams(match, match)); setContentView(frame)
+                  ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets -> val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime()); v.setPadding(b.left, b.top, b.right, b.bottom); insets }
+                  root.requestFocus(); updateTabCount()
+              }
+              private fun startBrowsing() { if (tabs.isEmpty()) { val saved = prefs.savedTabs(); if (saved.isEmpty()) { openTab(null) } else { val want = prefs.savedCurrent(); for (u in saved.take(12)) { val t = createTab(); if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) } else { t.pendingUrl = NEWTAB_URL } }; switchTo(if (want in tabs.indices) want else 0) } }; val s = startUrl; startUrl = null; if (s != null) openTab(s) }
+              private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
+              @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
+              private fun createTab(incognito: Boolean = false): BTab {
+                  val web = BgWebView(this); val bridge = PusulaBridge(prefs); val tab = BTab(web, bridge, incognito); val s = web.settings
+                  s.javaScriptEnabled = true; s.domStorageEnabled = true; s.mediaPlaybackRequiresUserGesture = false; s.setSupportMultipleWindows(true); s.javaScriptCanOpenWindowsAutomatically = false; s.setSupportZoom(true); s.builtInZoomControls = true; s.displayZoomControls = false; s.loadWithOverviewMode = true; s.useWideViewPort = true; s.allowFileAccess = false; s.allowContentAccess = false; s.setGeolocationEnabled(false); s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                  val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), ""); s.userAgentString = ua; tab.mobileUa = ua; web.addJavascriptInterface(bridge, "Pusula"); syncScripts(tab)
+                  web.setFindListener { active, total, _ -> if (tabs.getOrNull(cur) === tab) { findCount.text = if (total == 0) "0" else "${active + 1}/$total" } }
+                  web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ -> startDownload(url, userAgent, contentDisposition, mimeType) }
+                  web.webViewClient = makeClient(tab); web.webChromeClient = makeChrome(tab); tabs.add(tab); updateTabCount(); return tab
+              }
+              private fun syncScripts(t: BTab) {
+                  if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+                  try {
+                      if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
+                      if (t.keepScript != null) t.keepScript?.remove()
+                      t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS + "\n" + SMOOTH_CROSSFADE_JS, setOf("*"))
+                      if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
+                      else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
+                  } catch (_: Exception) { }
+              }
+              private fun settingsChanged() { for (t in tabs) syncScripts(t); val c = tabs.getOrNull(cur) ?: return; if (c.url.startsWith("http")) c.web.reload() }
+              private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? { if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme acilabilir"); return null }; val t = createTab(incognito); switchTo(tabs.size - 1); if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL)); return t }
+              private fun switchTo(i: Int) {
+                  if (i !in tabs.indices) return
+                  shown?.let { tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }; content.removeView(it) }
+                  for (idx in tabs.indices) { if (idx != i) { try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {} } }
+                  cur = i; val t = tabs[i]; shown = t.web; content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); t.web.onResume()
+                  try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
+                  val p = t.pendingUrl; if (p != null) { t.pendingUrl = null; t.web.loadUrl(p) }; closeFind(); privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE; topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg); syncUi()
+              }
+              private fun closeTab(index: Int) { if (index !in tabs.indices) return; val t = tabs[index]; val wasCurrent = index == cur; if (wasCurrent) { content.removeView(t.web); shown = null }; t.web.stopLoading(); t.web.clearHistory(); t.web.clearCache(true); t.web.destroy(); tabs.removeAt(index); if (t.incognito) { CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush(); WebStorage.getInstance().deleteAllData() }; if (tabs.isEmpty()) { cur = -1; openTab(null); return }; if (wasCurrent) switchTo(minOf(index, tabs.size - 1)) else if (index < cur) cur--; updateTabCount() }
+              private fun updateTabCount() { tabCount.text = tabs.size.toString() }
+              private fun saveTabs() { if (tabs.isEmpty()) return; val urls = ArrayList<String>(); for (t in tabs) { if (t.incognito) continue; val u = t.pendingUrl ?: t.url; urls.add(if (u.startsWith("http")) u else NEWTAB_URL) }; prefs.saveTabs(urls, 0) }
+              private fun shownUrl(u: String): String = if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) "" else u.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
+              private fun syncUrlText() { val t = tabs.getOrNull(cur); urlField.setText(if (t == null) "" else shownUrl(t.pendingUrl ?: t.url)) }
+              private fun syncUi() { val t = tabs.getOrNull(cur) ?: return; if (!urlField.hasFocus()) syncUrlText(); setLoadProgress(t.progress); refreshNav(); updateTabCount() }
+              private fun setLoadProgress(p: Int) { progress.progress = p; progress.visibility = if (p in 1..99) View.VISIBLE else View.INVISIBLE }
+              private fun refreshNav() { val web = currentWeb(); backBtn.alpha = if (web != null && (web.canGoBack() || tabs.size > 1)) 1f else 0.35f; fwdBtn.alpha = if (web != null && web.canGoForward()) 1f else 0.35f }
+              private fun loadInCurrent(url: String) { val t = tabs.getOrNull(cur) ?: return; t.pendingUrl = null; t.web.loadUrl(url) }
+              private fun submitUrl() { val text = urlField.text.toString(); loadInCurrent(resolveInput(text, Engines.get(prefs.engine))); hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
+              private fun goBack() { val web = currentWeb() ?: return; if (web.canGoBack()) web.goBack() else if (tabs.size > 1) closeTab(cur) }
+              private fun goForward() { val web = currentWeb() ?: return; if (web.canGoForward()) web.goForward() }
+              private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
+              private fun reloadCurrent() { val t = tabs.getOrNull(cur) ?: return; if (t.progress in 1..99) t.web.stopLoading() else t.web.reload() }
+              private fun handleBack() { val web = currentWeb(); when { customView != null -> hideCustom(); findBar.visibility == View.VISIBLE -> closeFind(); urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }; web != null && web.canGoBack() -> web.goBack(); tabs.size > 1 -> closeTab(cur); else -> finish() } }
+              private fun shouldBlockAd(uri: Uri): Boolean { val host = (uri.host ?: "").lowercase(); val path = (uri.encodedPath ?: "").lowercase(); val blockedHosts = listOf("doubleclick.net","googlesyndication.com","googleadservices.com","adservice.google.com","adnxs.com","adsrvr.org","adform.net","adcolony.com","taboola.com","outbrain.com","scorecardresearch.com","amazon-adsystem.com","criteo.com","hotjar.com","pagead2.googlesyndication.com"); if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true; return path.contains("/ads/") || path.contains("/adserver/") || path.contains("/pagead/") || path.contains("/advertisement/") || path.contains("/api/stats/ads") }
+              private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
+                  override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? { val uri = request?.url ?: return null; if (prefs.adBlock && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) { return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0))) }; return loader.shouldInterceptRequest(uri) }
+                  override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean { val u = request?.url ?: return false; val scheme = u.scheme ?: return false; return when (scheme) { "http","https","about","blob","data" -> false; "file","content","javascript" -> true; else -> openExternal(u.toString()) } }
+                  override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) { val u = url ?: ""; tab.bridge.trusted = u.startsWith(ASSET_PREFIX); tab.url = u; tab.progress = 5; if (tabs.getOrNull(cur) === tab) syncUi() }
+                  override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) { if (url != null && !url.startsWith("data:")) tab.url = url; if (tabs.getOrNull(cur) === tab) syncUi() }
+                  override fun onPageFinished(view: WebView?, url: String?) { tab.progress = 100; val u = url ?: return; if (u.startsWith("http") && !tab.incognito) { val title = view?.title; prefs.addHistory(if (title.isNullOrBlank()) u else title, u) }; if (tabs.getOrNull(cur) === tab) syncUi() }
+                  override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) { if (view == null || request == null || error == null) return; if (!request.isForMainFrame) return; val desc = error.description?.toString() ?: ""; if (desc.contains("ERR_ABORTED")) return; val failing = request.url.toString(); view.loadDataWithBaseURL(failing, errorHtml(failing, desc), "text/html", "utf-8", failing) }
+              }
+              private fun makeChrome(tab: BTab): WebChromeClient = object : WebChromeClient() {
+                  override fun onProgressChanged(view: WebView?, newProgress: Int) { tab.progress = newProgress; if (tabs.getOrNull(cur) === tab) setLoadProgress(newProgress) }
+                  override fun onReceivedTitle(view: WebView?, title: String?) { if (!title.isNullOrBlank()) tab.title = title }
+                  override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean { if (!isUserGesture || resultMsg == null) return false; val nt = openTab(null, false) ?: return false; val transport = resultMsg.obj as WebView.WebViewTransport; transport.webView = nt.web; resultMsg.sendToTarget(); return true }
+                  override fun onCloseWindow(window: WebView?) { handler.post { val i = tabs.indexOfFirst { it.web === window }; if (i >= 0) closeTab(i) } }
+                  override fun onShowFileChooser(webView: WebView?, filePathCallback: ValueCallback<Array<Uri>>?, fileChooserParams: FileChooserParams?): Boolean { fileCb?.onReceiveValue(null); fileCb = filePathCallback; return try { fileLauncher.launch(fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).setType("*/*")); true } catch (_: Exception) { fileCb?.onReceiveValue(null); fileCb = null; false } }
+                  override fun onShowCustomView(view: View?, callback: CustomViewCallback?) { if (view == null || customView != null) { callback?.onCustomViewHidden(); return }; customView = view; customCb = callback; fullscreen.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)); fullscreen.visibility = View.VISIBLE; setBars(false) }
+                  override fun onHideCustomView() { hideCustom() }
+                  override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean { AlertDialog.Builder(this@MainActivity).setMessage(message).setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }.setOnCancelListener { result?.confirm() }.show(); return true }
+              }
+              private fun hideCustom() { val v = customView ?: return; fullscreen.removeView(v); fullscreen.visibility = View.GONE; customView = null; customCb?.onCustomViewHidden(); customCb = null; setBars(true) }
+              private fun setBars(show: Boolean) { val c = WindowInsetsControllerCompat(window, window.decorView); if (show) { c.show(WindowInsetsCompat.Type.systemBars()) } else { c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE; c.hide(WindowInsetsCompat.Type.systemBars()) } }
+              private fun openExternal(url: String): Boolean { try { val i = if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url)); i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null; startActivity(i) } catch (_: Exception) { toast("Baglanti acilamadi") }; return true }
+              private fun errorHtml(url: String, desc: String): String { val bg = String.format("#%06X", 0xFFFFFF and cBg); val fg = String.format("#%06X", 0xFFFFFF and cText); val js = Html.escapeHtml("location.href=" + JSONObject.quote(url)); return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" + "<style>body{font-family:sans-serif;margin:0;padding:32px 24px;background:$bg;color:$fg}h1{font-size:22px}p{opacity:.75}" + "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" + "</style></head><body><h1>Yuklenemedi</h1><p>$url</p><button onclick=\"$js\">Tekrar Dene</button></body></html>" }
+              private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) { if (!url.startsWith("http")) return; try { val name = URLUtil.guessFileName(url, cd, mime); val req = DownloadManager.Request(Uri.parse(url)); if (mime != null) req.setMimeType(mime); val cookie = CookieManager.getInstance().getCookie(url); if (cookie != null) req.addRequestHeader("Cookie", cookie); if (ua != null) req.addRequestHeader("User-Agent", ua); req.setTitle(name); req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED); if (Build.VERSION.SDK_INT >= 29) req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name) else req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name); (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req); toast("Indiriliyor: $name") } catch (_: Exception) { toast("Indirilemedi") } }
+              private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+              private fun hideKeyboard() { val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager; imm.hideSoftInputFromWindow(root.windowToken, 0) }
+              private fun sheetWindow(d: Dialog, view: View, full: Boolean) { d.requestWindowFeature(Window.FEATURE_NO_TITLE); d.setContentView(view); d.window?.let { w -> w.setBackgroundDrawable(ColorDrawable(if (full) cBg else Color.TRANSPARENT)); w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, if (full) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT); if (!full) w.setGravity(Gravity.BOTTOM) } }
+              private fun showMenu(anchor: View) {
+                  val t = tabs.getOrNull(cur) ?: return; val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url); val d = Dialog(this)
+                  val items = listOf(SheetItem("➕","Yeni sekme",false){ openTab(null) }, SheetItem("🕶","Gizli sekme",false){ openTab(null,true,true) }, SheetItem(if(marked)"⭐"else"☆",if(marked)"Imi kaldir"else"Yer imi ekle",marked){ prefs.toggleBookmark(if(t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri guncellendi") }, SheetItem("🔖","Yer imleri",false){ showEntries("Yer Imleri",prefs.bookmarks(),{prefs.removeBookmark(it.url)},null) }, SheetItem("🕘","Gecmis",false){ showEntries("Gecmis",prefs.history(),{prefs.removeHistory(it.url)},Pair("Temizle"){prefs.clearHistory()}) }, SheetItem("🔍","Sayfada bul",false){ openFind() }, SheetItem("🖥","Masaustu sitesi",t.desktop){ toggleDesktop() }, SheetItem("🪟","Kucuk pencere",false){ enterPip() }, SheetItem("📤","Paylas",false){ shareCurrent() }, SheetItem("🎨","Tema",false){ chooseTheme{} }, SheetItem("⚙","Ayarlar",false){ showSettings() })
+                  val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(14),dp(10),dp(14),dp(22)); val r = dp(28).toFloat(); val bgd = GradientDrawable(); bgd.setColor(cSurface); bgd.cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f); col.background = bgd
+                  val handle = View(this); handle.background = shape(cField,3); val hlp = LinearLayout.LayoutParams(dp(42),dp(5)); hlp.gravity = Gravity.CENTER_HORIZONTAL; hlp.bottomMargin = dp(14); col.addView(handle,hlp)
+                  for (rowItems in items.chunked(4)) { val lr = LinearLayout(this); lr.orientation = LinearLayout.HORIZONTAL; for (item in rowItems) { val cell = LinearLayout(this); cell.orientation = LinearLayout.VERTICAL; cell.gravity = Gravity.CENTER_HORIZONTAL; cell.setPadding(0,dp(8),0,dp(8)); cell.background = ripple(null); val ic = TextView(this); ic.text = item.icon; ic.textSize = 22f; ic.gravity = Gravity.CENTER; ic.setTextColor(cText); ic.background = if(item.on){ val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(19).toFloat(); g } else shape(cField,19); cell.addView(ic,LinearLayout.LayoutParams(dp(56),dp(56))); val lb = TextView(this); lb.text = item.label; lb.textSize = 11.5f; lb.gravity = Gravity.CENTER; lb.maxLines = 2; lb.setTextColor(cText); lb.setPadding(dp(2),dp(6),dp(2),0); cell.addView(lb,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)); cell.setOnClickListener{ d.dismiss(); item.act() }; lr.addView(cell,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)) }; for(k in rowItems.size until 4) lr.addView(View(this),LinearLayout.LayoutParams(0,1,1f)); col.addView(lr,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)) }
+                  sheetWindow(d,col,false); d.show()
+              }
+              private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
+                  val items = ArrayList(list); val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(14),dp(34),dp(14),dp(14))
+                  val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(10)); val tv = TextView(this); tv.text = title; tv.textSize = 24f; tv.setTypeface(null,Typeface.BOLD); tv.setTextColor(cText); head.addView(tv,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
+                  val listCol = LinearLayout(this); listCol.orientation = LinearLayout.VERTICAL; var query = ""
+                  fun render() {
+                      listCol.removeAllViews(); val q = query.trim().lowercase(); val shownList = items.filter{ q.isEmpty() || it.title.lowercase().contains(q) || it.url.lowercase().contains(q) }
+                      if (shownList.isEmpty()) { val e = TextView(this); e.text = if(items.isEmpty()) "Bos" else "Sonuc yok"; e.textSize = 15f; e.setTextColor(cSub); e.gravity = Gravity.CENTER; e.setPadding(0,dp(60),0,0); listCol.addView(e,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)); return }
+                      for (en in shownList) { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(12),dp(10),dp(4),dp(10)); row.background = ripple(shape(cSurface,18)); row.setOnClickListener{ d.dismiss(); loadInCurrent(en.url) }; val host = shownUrl(en.url).substringBefore("/"); val av = TextView(this); av.text = (host.firstOrNull() ?: '?').uppercaseChar().toString(); av.textSize = 17f; av.setTypeface(null,Typeface.BOLD); av.setTextColor(Color.WHITE); av.gravity = Gravity.CENTER; val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(14).toFloat(); av.background = g; row.addView(av,LinearLayout.LayoutParams(dp(42),dp(42))); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12),0,dp(6),0); val t1 = TextView(this); t1.text = if(en.title.isBlank()) host else en.title; t1.textSize = 15f; t1.setTextColor(cText); t1.maxLines = 1; t1.ellipsize = android.text.TextUtils.TruncateAt.END; col.addView(t1); val t2 = TextView(this); t2.text = shownUrl(en.url); t2.textSize = 12.5f; t2.setTextColor(cSub); t2.maxLines = 1; t2.ellipsize = android.text.TextUtils.TruncateAt.END; col.addView(t2); row.addView(col,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); val x = textBtn("✕"){ onDelete(en); items.remove(en); render() }; x.setTextColor(cSub); row.addView(x,LinearLayout.LayoutParams(dp(44),dp(44))); val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); listCol.addView(row,lp) }
+                  }
+                  if (neutral != null) { val nb = textBtn(neutral.first){ neutral.second(); items.clear(); render() }; nb.setTextColor(cAccent); nb.setTypeface(null,Typeface.BOLD); head.addView(nb,LinearLayout.LayoutParams(dp(84),dp(40))) }
+                  val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD); head.addView(done,LinearLayout.LayoutParams(dp(64),dp(40))); rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+                  val search = EditText(this); search.hint = "Ara"; search.setHintTextColor(cSub); search.setTextColor(cText); search.textSize = 15f; search.isSingleLine = true; search.background = shape(cSurface,22); search.setPadding(dp(16),0,dp(16),0); search.doAfterTextChanged{ t -> query = t?.toString() ?: ""; render() }; val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44)); slp.bottomMargin = dp(12); rootV.addView(search,slp)
+                  val scroll = ScrollView(this); scroll.addView(listCol); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f)); render(); sheetWindow(d,rootV,true); d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); d.show()
+              }
+              private fun openFind() { findBar.visibility = View.VISIBLE; findInput.setText(""); findCount.text = ""; findInput.requestFocus(); (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(findInput,0) }
+              private fun closeFind() { if (findBar.visibility != View.VISIBLE) return; findBar.visibility = View.GONE; currentWeb()?.clearMatches(); hideKeyboard(); root.requestFocus() }
+              private fun toggleDesktop() { val t = tabs.getOrNull(cur) ?: return; t.desktop = !t.desktop; val s = t.web.settings; if(t.desktop){ val chrome = Regex("Chrome/[\\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0"; s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36" } else { s.userAgentString = t.mobileUa }; t.web.reload() }
+              private fun shareCurrent() { val t = tabs.getOrNull(cur) ?: return; if (!t.url.startsWith("http")) return; startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,t.url),"Paylas")) }
+              private fun capturePreview(tab: BTab) { try { val w = tab.web.width; val h = tab.web.height; if (w <= 0 || h <= 0) return; val sc = 360f / w; val bh = (h * sc).toInt().coerceIn(1,700); val bmp = Bitmap.createBitmap(360,bh,Bitmap.Config.RGB_565); val canvas = Canvas(bmp); canvas.scale(sc,sc); tab.web.draw(canvas); tab.preview = bmp } catch (_: Exception) {} }
+              private fun pillBtn(label: String, colors: IntArray, onClick: () -> Unit): TextView { val t = TextView(this); t.text = label; t.textSize = 14f; t.setTypeface(null,Typeface.BOLD); t.setTextColor(Color.WHITE); val g = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,colors); g.cornerRadius = dp(24).toFloat(); t.background = g; t.setOnClickListener{ onClick() }; return t }
+              private fun showTabs() {
+                  tabs.getOrNull(cur)?.let { capturePreview(it) }; val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(12),dp(34),dp(12),dp(16))
+                  val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(8)); val title = TextView(this); title.textSize = 24f; title.setTypeface(null,Typeface.BOLD); title.setTextColor(cText); head.addView(title,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD); head.addView(done,LinearLayout.LayoutParams(dp(72),dp(40))); rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+                  val grid = LinearLayout(this); grid.orientation = LinearLayout.VERTICAL; val scroll = ScrollView(this); scroll.addView(grid); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
+                  val actions = LinearLayout(this); actions.orientation = LinearLayout.HORIZONTAL; actions.setPadding(0,dp(10),0,0); val b1 = pillBtn("+ Yeni sekme",intArrayOf(cAccent,cAccent2)){ d.dismiss(); openTab(null) }; val b2 = pillBtn("Gizli sekme",intArrayOf(0xFF6D2BD9.toInt(),0xFFC026D3.toInt())){ d.dismiss(); openTab(null,true,true) }; val l1 = LinearLayout.LayoutParams(0,dp(48),1f); l1.rightMargin = dp(6); val l2 = LinearLayout.LayoutParams(0,dp(48),1f); l2.leftMargin = dp(6); actions.addView(b1,l1); actions.addView(b2,l2); rootV.addView(actions,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+                  fillTabs(grid,title,d); sheetWindow(d,rootV,true); d.show()
+              }
+              private fun fillTabs(grid: LinearLayout, title: TextView, d: Dialog) { grid.removeAllViews(); title.text = "Sekmeler - " + tabs.size; for (rowStart in 0 until tabs.size step 2) { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; for (i in rowStart until minOf(rowStart+2,tabs.size)) { val lp = LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f); lp.setMargins(dp(5),dp(5),dp(5),dp(5)); row.addView(tabCard(i,grid,title,d),lp) }; if (rowStart+1 >= tabs.size) row.addView(View(this),LinearLayout.LayoutParams(0,1,1f)); grid.addView(row,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)) } }
+              private fun tabCard(i: Int, grid: LinearLayout, title: TextView, d: Dialog): View { val t = tabs[i]; val card = LinearLayout(this); card.orientation = LinearLayout.VERTICAL; card.setPadding(dp(8),dp(4),dp(8),dp(8)); val bg = GradientDrawable(); bg.setColor(if(t.incognito)0xFF2B1A55.toInt() else cSurface); bg.cornerRadius = dp(20).toFloat(); if(i==cur) bg.setStroke(dp(2),if(t.incognito)0xFFA46BFF.toInt() else cAccent); card.background = bg; card.setOnClickListener{ d.dismiss(); switchTo(i) }; val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; val label = TextView(this); val name = if(t.title.isBlank() || t.title=="Yeni Sekme") shownUrl(t.pendingUrl ?: t.url).ifEmpty{ "Yeni sekme" } else t.title; label.text = (if(t.incognito)"GIZLI " else "") + name; label.textSize = 12.5f; label.maxLines = 1; label.ellipsize = android.text.TextUtils.TruncateAt.END; label.setTextColor(if(t.incognito)0xFFF3ECFF.toInt() else cText); if(i==cur) label.setTypeface(null,Typeface.BOLD); label.setPadding(dp(4),0,0,0); head.addView(label,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); head.addView(textBtn("x"){ closeTab(i); fillTabs(grid,title,d) },LinearLayout.LayoutParams(dp(34),dp(34))); card.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)); val img = ImageView(this); img.scaleType = ImageView.ScaleType.MATRIX; img.background = shape(if(t.incognito)0xFF3A2470.toInt() else cField,14); img.clipToOutline = true; val bmp = t.preview; if (bmp != null) { img.setImageBitmap(bmp); img.post{ val sc = img.width.toFloat()/bmp.width; val m = Matrix(); m.setScale(sc,sc); img.imageMatrix = m } }; card.addView(img,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(170))); return card }
+              private fun settingsRow(icon: String, title: String, sub: String?, trailing: View?, onClick: () -> Unit): View { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(12),dp(10),dp(14),dp(10)); row.background = ripple(shape(cSurface,18)); row.setOnClickListener{ onClick() }; val ic = TextView(this); ic.text = icon; ic.textSize = 19f; ic.gravity = Gravity.CENTER; val g = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(cAccent,cAccent2)); g.cornerRadius = dp(13).toFloat(); ic.background = g; row.addView(ic,LinearLayout.LayoutParams(dp(42),dp(42))); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12),0,dp(8),0); val tt = TextView(this); tt.text = title; tt.textSize = 15.5f; tt.setTextColor(cText); tt.setTypeface(null,Typeface.BOLD); col.addView(tt); if(sub!=null){ val st = TextView(this); st.text = sub; st.textSize = 12.5f; st.setTextColor(cSub); col.addView(st) }; row.addView(col,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); if(trailing!=null) row.addView(trailing,LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT)); return row }
+              private fun chevron(): TextView { val c = TextView(this); c.text = ">"; c.textSize = 24f; c.setTextColor(cSub); return c }
+              private fun switchRow(icon: String, title: String, sub: String, value: Boolean, onChange: (Boolean) -> Unit): View { val sw = SwitchCompat(this); sw.isChecked = value; val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()); sw.thumbTintList = ColorStateList(states,intArrayOf(Color.WHITE,cSub)); sw.trackTintList = ColorStateList(states,intArrayOf(cAccent,cField)); sw.setOnCheckedChangeListener{ _,v -> onChange(v) }; return settingsRow(icon,title,sub,sw){ sw.toggle() } }
+              private fun showSettings() {
+                  val d = Dialog(this); val rootV = LinearLayout(this); rootV.orientation = LinearLayout.VERTICAL; rootV.setBackgroundColor(cBg); rootV.setPadding(dp(14),dp(34),dp(14),dp(14))
+                  val head = LinearLayout(this); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL; head.setPadding(dp(6),0,dp(6),dp(10)); val title = TextView(this); title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null,Typeface.BOLD); title.setTextColor(cText); head.addView(title,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); val done = textBtn("Bitti"){ d.dismiss() }; done.setTextColor(cAccent); done.setTypeface(null,Typeface.BOLD); head.addView(done,LinearLayout.LayoutParams(dp(72),dp(40))); rootV.addView(head,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+                  val list = LinearLayout(this); list.orientation = LinearLayout.VERTICAL
+                  fun add(v: View){ val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); list.addView(v,lp) }
+                  fun label(t: String){ val l = TextView(this); l.text = t.uppercase(); l.textSize = 11.5f; l.setTextColor(cSub); l.setTypeface(null,Typeface.BOLD); l.letterSpacing = 0.1f; l.setPadding(dp(6),dp(10),0,dp(6)); list.addView(l) }
+                  label("Gezinme"); add(switchRow("AD","Reklam engelleyici","YouTube reklamlarini atlar",prefs.adBlock){ v -> prefs.adBlock = v; settingsChanged() }); add(switchRow("BG","Arka planda calma","Uygulamadan cikinca muzik surer",prefs.bgPlay){ v -> prefs.bgPlay = v; settingsChanged() }); add(switchRow("BAR","Adres cubugu altta","Aciksa adres cubugu altta olur",prefs.barBottom){ v -> prefs.barBottom = v; applyTheme() }); add(settingsRow("WEB","Varsayilan tarayici yap",if(isDefaultBrowser())"Su an varsayilan" else "Linkler Rota ile acilsin",chevron()){ d.dismiss(); askDefaultBrowser() })
+                  label("Gorunum ve arama"); add(settingsRow("TEMA","Tema",Themes.get(prefs.theme).name,chevron()){ chooseTheme{ d.dismiss(); showSettings() } }); add(settingsRow("ARA","Arama motoru",Engines.get(prefs.engine).name,chevron()){ chooseEngine{ d.dismiss(); showSettings() } })
+                  label("Gizlilik"); add(settingsRow("SIL","Gecmisi temizle",null,null){ prefs.clearHistory(); toast("Gecmis temizlendi") }); add(settingsRow("TEM","Onbellegi ve cerezleri temizle",null,null){ clearBrowsingData(); toast("Temizlendi") })
+                  val scroll = ScrollView(this); scroll.addView(list); rootV.addView(scroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f)); sheetWindow(d,rootV,true); d.show()
+              }
+              private fun isDefaultBrowser(): Boolean { return try { if (Build.VERSION.SDK_INT >= 29) { val rm = getSystemService(android.app.role.RoleManager::class.java); rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER) } else { val i = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com")); val ri = packageManager.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY); ri?.activityInfo?.packageName == packageName } } catch (_: Exception) { false } }
+              private fun openDefaultAppsSettings() { try { startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)); toast("Tarayici uygulamasini sec, sonra Rota'yi isaretle") } catch (_: Exception) { try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar acilamadi") } } }
+              private fun afterRole() { if (isDefaultBrowser()) toast("Rota artik varsayilan") else openDefaultAppsSettings() }
+              private fun askDefaultBrowser() { if (isDefaultBrowser()) { toast("Rota zaten varsayilan"); return }; if (Build.VERSION.SDK_INT >= 29) { try { val rm = getSystemService(android.app.role.RoleManager::class.java); if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) { roleLauncher.launch(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER)); return } } catch (_: Exception) { } }; openDefaultAppsSettings() }
+              private fun chooseTheme(onDone: () -> Unit) {
+                  val d = Dialog(this); val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(14),dp(12),dp(14),dp(22)); val r = dp(28).toFloat(); val bgd = GradientDrawable(); bgd.setColor(cSurface); bgd.cornerRadii = floatArrayOf(r,r,r,r,0f,0f,0f,0f); col.background = bgd
+                  val tt = TextView(this); tt.text = "Tema sec"; tt.textSize = 18f; tt.setTypeface(null,Typeface.BOLD); tt.setTextColor(cText); tt.setPadding(dp(6),0,0,dp(10)); col.addView(tt)
+                  for (p in Themes.all) { val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL; row.setPadding(dp(14),dp(10),dp(14),dp(10)); val rb = GradientDrawable(); rb.setColor(p.bg); rb.cornerRadius = dp(18).toFloat(); if(p.id==prefs.theme) rb.setStroke(dp(2),p.accent) else rb.setStroke(dp(1),p.field); row.background = rb; val dot = View(this); val dg = GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(p.accent,p.accent2)); dg.shape = GradientDrawable.OVAL; dot.background = dg; row.addView(dot,LinearLayout.LayoutParams(dp(30),dp(30))); val nm = TextView(this); nm.text = p.name; nm.textSize = 15.5f; nm.setTextColor(p.text); nm.setTypeface(null,Typeface.BOLD); nm.setPadding(dp(14),0,0,0); row.addView(nm,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)); if(p.id==prefs.theme){ val ck = TextView(this); ck.text = "v"; ck.textSize = 18f; ck.setTextColor(p.accent); ck.setTypeface(null,Typeface.BOLD); row.addView(ck) }; row.setOnClickListener{ d.dismiss(); prefs.theme = p.id; applyTheme(); onDone() }; val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); col.addView(row,lp) }
+                  val sc = ScrollView(this); sc.addView(col); sheetWindow(d,sc,false); d.show()
+              }
+              private fun chooseEngine(onDone: () -> Unit) { val names = Engines.all.map{ it.name }.toTypedArray(); val sel = Engines.all.indexOfFirst{ it.id==prefs.engine }.coerceAtLeast(0); AlertDialog.Builder(this).setTitle("Arama Motoru").setSingleChoiceItems(names,sel){ dlg,which -> prefs.engine = Engines.all[which].id; dlg.dismiss(); onDone() }.show() }
+              private fun clearBrowsingData() { CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush(); WebStorage.getInstance().deleteAllData(); for(t in tabs) t.web.clearCache(true) }
 
-          MAIN_KT_EOF
+              private companion object {
+                  const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
+                  const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
+                  const val MAX_TABS = 20
+                  const val KEEP_PLAYING_JS = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);}catch(e){}})();"
+                  const val STABLE_AD_BLOCKER_JS = "(function(){if(location.hostname.indexOf('youtube.com')<0 && location.hostname.indexOf('music.youtube.com')<0)return;var fast=false,adn=0;setInterval(function(){try{var pl=document.querySelector('.html5-video-player');if(!pl)return;var vd=pl.querySelector('video');var ad=pl.classList.contains('ad-showing');adn=ad?adn+1:0;if(ad&&adn>=2){var va=pl.querySelector('.video-ads');if(va)va.style.visibility='hidden';if(vd){if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';}vd.style.visibility='hidden';vd.muted=true;vd.playbackRate=16;var n=vd.buffered.length;if(n){var e=vd.buffered.end(n-1);if(e-vd.currentTime>0.3){vd.currentTime=e-0.1;}}}var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button');if(b)b.click();}else if(!ad&&fast){fast=false;var va2=pl.querySelector('.video-ads');if(va2)va2.style.visibility='';if(vd){vd.style.visibility='';vd.playbackRate=1;if(vd.dataset.pm!=='1'){var tv=vd.volume;vd.volume=0;vd.muted=false;var k=0;var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*k/6);if(k>=6)clearInterval(iv);},40);}}}catch(e){}},120);})();"
+                  const val BACKGROUND_MEDIA_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}});}catch(e){}})();"
+                  const val FADE_JS = "window.__pFade=function(m,a,b,d,cb){try{var s=(b-a)/(d/25),v=a,iv=setInterval(function(){v+=s;if((s>0&&v>=b)||(s<0&&v<=b)){clearInterval(iv);m.volume=Math.max(0,Math.min(1,b));if(cb)cb();}else m.volume=Math.max(0,Math.min(1,v));},25);}catch(e){if(cb)cb();}};"
+                  const val MEDIA_TOGGLE_JS = FADE_JS + "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(!v){var b=document.querySelector('.ytp-play-button');if(b)b.click();return;}if(v.paused){v.volume=0;var p=v.play();if(p&&p.then)p.then(function(){__pFade(v,0,1,250);});else __pFade(v,0,1,250);}else{__pFade(v,v.volume,0,200,function(){v.pause();v.volume=1;});}})();"
+                  const val MEDIA_PAUSE_JS = FADE_JS + "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){__pFade(m,m.volume,0,200,function(){m.pause();m.volume=1;});}});})();"
+                  const val MEDIA_PREVIOUS_JS = FADE_JS + "(function(){try{var h=window.__msh&&window.__msh.previoustrack;if(h){h();return;}var sels=[\"ytmusic-player-bar .previous-button\",\"ytmusic-player-bar [aria-label='Previous']\",\".ytp-prev-button\"];for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){b.click();return;}}var v=document.querySelector('video,audio');if(v)v.currentTime=0;}catch(e){}})();"
+                  const val MEDIA_NEXT_JS = FADE_JS + "(function(){try{var h=window.__msh&&window.__msh.nexttrack;if(h){h();return;}var sels=[\"ytmusic-player-bar .next-button\",\"ytmusic-player-bar [aria-label='Next']\",\".ytp-next-button\"];for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){b.click();return;}}var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration-0.05;}catch(e){}})();"
+                  const val SMOOTH_CROSSFADE_JS = "(function(){if(window.__pusulaSmooth)return;window.__pusulaSmooth=1;function fade(m,a,b,d,cb){try{var s=(b-a)/(d/25),v=a,iv=setInterval(function(){v+=s;if((s>0&&v>=b)||(s<0&&v<=b)){clearInterval(iv);m.volume=Math.max(0,Math.min(1,b));if(cb)cb();}else m.volume=Math.max(0,Math.min(1,v));},25);}catch(e){if(cb)cb();}}function hookMedia(m){if(!m||m.__pusulaHooked)return;m.__pusulaHooked=true;m.addEventListener('play',function(){try{if(m.dataset.pusulaFading)return;if(m.volume<0.9){if(m.volume<0.1)m.volume=0;m.dataset.pusulaFading='1';fade(m,0,1,380,function(){delete m.dataset.pusulaFading;});}}catch(e){}});}var lastTitle='';setInterval(function(){try{var v=document.querySelector('video,audio');if(v)hookMedia(v);var tEl=document.querySelector('ytmusic-player-bar .title');var curTitle=tEl?tEl.textContent:'';if(curTitle&&curTitle!==lastTitle&&lastTitle!==''){var media=document.querySelector('video,audio');if(media&&!media.paused){fade(media,media.volume,0,180,function(){setTimeout(function(){if(media)fade(media,0,1,380,null);},120);});}lastTitle=curTitle;}else if(curTitle){lastTitle=curTitle;}}catch(e){}},500);document.addEventListener('ended',function(e){var m=e.target;if(m&&(m.tagName==='VIDEO'||m.tagName==='AUDIO')){try{fade(m,m.volume,0,180,null);}catch(x){}}},true);})();"
+                  const val MEDIA_HOOK_JS = "(function(){try{if(window.__msh)return;window.__msh={};var ms=navigator.mediaSession;if(ms&&ms.setActionHandler){var orig=ms.setActionHandler.bind(ms);ms.setActionHandler=function(a,f){window.__msh[a]=f;return orig(a,f);};}}catch(e){}})();"
+                  const val MEDIA_STATE_JS = "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(!v||!(v.currentSrc||v.src))return '';var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}function site(t){return !t||/^YouTube( Music)?$/i.test(t.trim());}var t=(md&&md.title)||'';if(site(t))t=tx('ytmusic-player-bar .title')||tx('.player-bar-title')||tx('ytm-slim-video-metadata-section-renderer h2')||tx('.slim-video-information-title')||tx('ytd-watch-metadata h1')||tx('h1.title')||'';if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});}catch(e){return '';}})();"
+                  const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;var s=document.createElement('style');s.id='__pip';s.textContent='html,body{overflow:hidden!important}.__pipa{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important}.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important}';document.documentElement.appendChild(s);v.classList.add('__pipv');var e=v.parentElement;while(e&&e!==document.documentElement){e.classList.add('__pipa');e=e.parentElement;}window.dispatchEvent(new Event('resize'));}catch(e){}})();"
+                  const val PIP_OFF_JS = "(function(){try{var s=document.getElementById('__pip');if(s)s.remove();document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});document.querySelectorAll('.__pipa').forEach(function(x){x.classList.remove('__pipa');});window.dispatchEvent(new Event('resize'));}catch(e){}})();"
+              }
+          }
+          EOF
+
           cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
           package com.pusula.browser
           class Palette(val id: String, val name: String, val dark: Boolean, val bg: Int, val surface: Int, val field: Int, val text: Int, val sub: Int, val icon: Int, val accent: Int, val accent2: Int)
@@ -488,6 +497,7 @@ class MainActivity : AppCompatActivity() {
               fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
           }
           EOF
+
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
           package com.pusula.browser
           import android.app.Notification
@@ -572,6 +582,7 @@ class MainActivity : AppCompatActivity() {
               }
           }
           EOF
+
           cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
           package com.pusula.browser
           import android.content.Context
@@ -610,6 +621,7 @@ class MainActivity : AppCompatActivity() {
               fun savedCurrent(): Int = sp.getInt("tabCur", 0)
           }
           EOF
+
           cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
           package com.pusula.browser
           import android.webkit.JavascriptInterface
@@ -629,48 +641,60 @@ class MainActivity : AppCompatActivity() {
               }
           }
           EOF
+
           cat > app/src/main/res/drawable/ic_add.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></vector>
           EOF
+
           cat > app/src/main/res/drawable/ic_back.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/></vector>
           EOF
+
           cat > app/src/main/res/drawable/ic_forward.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"/></vector>
           EOF
+
           cat > app/src/main/res/drawable/ic_home.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
           EOF
+
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96"><path android:pathData="M24,0 H72 A24,24 0 0 1 96,24 V72 A24,24 0 0 1 72,96 H24 A24,24 0 0 1 0,72 V24 A24,24 0 0 1 24,0 Z"><aapt:attr name="android:fillColor"><gradient android:startX="0" android:startY="0" android:endX="96" android:endY="96" android:type="linear"><item android:offset="0" android:color="#FF2F6BFF"/><item android:offset="0.55" android:color="#FF7A4DFF"/><item android:offset="1" android:color="#FFFF4D9D"/></gradient></aapt:attr></path></vector>
           EOF
+
           cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z"/></vector>
           EOF
+
           cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z"/></vector>
           EOF
+
           cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
           EOF
+
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Rota</string></resources>
           EOF
+
           cat > app/src/main/res/values/themes.xml <<'EOF'
           <resources><style name="Theme.Pusula" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="android:windowBackground">@color/bg</item><item name="android:statusBarColor">@android:color/transparent</item><item name="android:navigationBarColor">@android:color/transparent</item></style></resources>
           EOF
+
           cat > app/src/main/res/values/colors.xml <<'EOF'
           <resources><color name="bg">#0F1115</color></resources>
           EOF
 
-      - name: Gradle 8.9
+      - name: Gradle Setup
         uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: 8.9 }
+        with:
+          gradle-version: 8.9
 
-      - name: APK derleme
+      - name: APK derle
         run: gradle assembleDebug --no-daemon
 
-      - name: APK yukleme
+      - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
           name: Pusula-APK
