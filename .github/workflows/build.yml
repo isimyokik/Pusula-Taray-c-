@@ -569,20 +569,10 @@ jobs:
                   return android.app.RemoteAction(android.graphics.drawable.Icon.createWithResource(this, icon), label, label, pi)
               }
 
-              private val pipMediaPump = object : Runnable {
-                  override fun run() {
-                      if (!isInPictureInPictureMode) return
-                      try { shown?.onResume() } catch (_: Exception) { }
-                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                      handler.postDelayed(this, 2500L)
-                  }
-              }
-
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
                   try {
                       try { shown?.onResume() } catch (_: Exception) { }
-                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
                       val b = android.app.PictureInPictureParams.Builder()
                           .setAspectRatio(android.util.Rational(16, 9))
                       if (Build.VERSION.SDK_INT >= 26) {
@@ -599,7 +589,6 @@ jobs:
               private fun onPipChanged(pip: Boolean) {
                   topBar.visibility = if (pip) View.GONE else View.VISIBLE
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
-                  handler.removeCallbacks(pipMediaPump)
                   if (pip) {
                       closeFind()
                       appInBackground = false
@@ -607,12 +596,7 @@ jobs:
                       if (customView == null) {
                           try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
                       }
-                      handler.postDelayed({
-                          try { shown?.onResume() } catch (_: Exception) { }
-                          try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                      }, 200)
                       if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
-                      handler.postDelayed(pipMediaPump, 2500L)
                   } else {
                       for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
                   }
@@ -636,12 +620,8 @@ jobs:
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
-                      if (act == PlaybackService.ACTION_PAUSE && isInPictureInPictureMode) {
-                          try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                          return
-                      }
                       val js = when (act) {
-                          PlaybackService.ACTION_PLAY -> KEEP_MEDIA_PLAYING_JS
+                          PlaybackService.ACTION_PLAY -> MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
                           PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
@@ -752,14 +732,7 @@ jobs:
                   super.onPause()
                   saveTabs()
                   CookieManager.getInstance().flush()
-                  if (isInPictureInPictureMode) {
-                      try { shown?.onResume() } catch (_: Exception) { }
-                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                      if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
-                      handler.removeCallbacks(pipMediaPump)
-                      handler.post(pipMediaPump)
-                      return
-                  }
+                  if (isInPictureInPictureMode) return
                   if (prefs.bgPlay) {
                       appInBackground = true
                       handler.removeCallbacks(backgroundMediaPump)
@@ -768,16 +741,6 @@ jobs:
                   } else {
                       appInBackground = true
                       shown?.onPause()
-                  }
-              }
-
-              override fun onStop() {
-                  super.onStop()
-                  if (isInPictureInPictureMode) {
-                      try { shown?.onResume() } catch (_: Exception) { }
-                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                      handler.removeCallbacks(pipMediaPump)
-                      handler.post(pipMediaPump)
                   }
               }
 
@@ -792,7 +755,6 @@ jobs:
                   try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
                   handler.removeCallbacks(backgroundMediaPump)
                   handler.removeCallbacks(mediaStatePoll)
-                  handler.removeCallbacks(pipMediaPump)
                   PlaybackService.stop(this)
                   if (prefs.clearOnExit) {
                       try {
@@ -2250,7 +2212,7 @@ jobs:
                       "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
                       "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
                       "function doNext(){var h=window.__msh&&window.__msh.nexttrack;if(h){try{h({action:'nexttrack'});fadeInAll(500);return;}catch(x){}}" +
-                      "var sels=['.ytp-next-button','.ytp-chrome-bottom .ytp-next-button','ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','#left-controls .next-button','.next-button','[aria-label=\"Next\"]','[aria-label=\"Sonraki\"]','[aria-label*=\"Next track\"]','[aria-label*=\"Sonraki parça\"]','[aria-label*=\"next\"]'];" +
+                      "var sels=['.ytp-next-button','.ytp-chrome-bottom .ytp-next-button','ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','#left-controls .next-button','.previous-button','[aria-label=\"Next\"]','[aria-label=\"Sonraki\"]','[aria-label*=\"Next track\"]','[aria-label*=\"Sonraki parça\"]','[aria-label*=\"next\"]'];" +
                       "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v&&isFinite(v.duration)){v.currentTime=v.duration;}fadeInAll(500);}" +
                       "fadeOutAll(400,doNext);" +
@@ -2275,44 +2237,27 @@ jobs:
                       "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
                       "}catch(e){return '';}})();"
 
-                  const val KEEP_MEDIA_PLAYING_JS =
-                      "(function(){try{" +
-                      "document.querySelectorAll('video,audio').forEach(function(m){" +
-                      "try{" +
-                      "if(m.ended)return;" +
-                      "if(!m.paused)return;" +
-                      "if(m.dataset.userPaused==='1')return;" +
-                      "var p=m.play();if(p&&p.catch)p.catch(function(){});" +
-                      "}catch(x){}" +
-                      "});" +
-                      "}catch(e){}})();"
-
                   const val PIP_ON_JS =
                       "(function(){try{" +
                       "if(document.getElementById('__pip'))return;" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
                       "if(!v)return;" +
-                      "v.dataset.pipKeep='1';" +
-                      "var wasPaused=v.paused;" +
                       "var s=document.createElement('style');s.id='__pip';" +
                       "s.textContent='" +
                       "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:100%!important}" +
                       "body>*{opacity:0!important;pointer-events:none!important}" +
                       ".html5-video-player,ytmusic-player-page,ytmusic-player,#movie_player{opacity:1!important;pointer-events:auto!important}" +
                       ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
-                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:none!important;opacity:1!important}" +
+                      "video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:none!important;opacity:1!important}" +
                       "';" +
                       "document.documentElement.appendChild(s);" +
-                      "v.classList.add('__pipv');" +
                       "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('opacity','1','important');e.style.setProperty('pointer-events','auto','important');e.style.setProperty('transform','none','important');e=e.parentElement;}" +
-                      "if(!wasPaused){var p=v.play();if(p&&p.catch)p.catch(function(){});}" +
                       "window.dispatchEvent(new Event('resize'));" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
                       "(function(){try{" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
-                      "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
                       "window.dispatchEvent(new Event('resize'));" +
                       "}catch(e){}})();"
 
@@ -2510,7 +2455,7 @@ jobs:
 
                   @Volatile var running = false
 
-                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                  fn update(ctx: Context, playing: Boolean, title: String, artist: String) {
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
                           .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist)
                       try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
@@ -2542,7 +2487,7 @@ jobs:
 
           val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:\\/?#].*)?|^(\\d{1,3}\\.){3}\\d{1,3}([:\\/?#].*)?|^localhost([:\\/?#].*)?$")
 
-          fun resolveInput(raw: String, engine: Engines.E): String {
+          fn resolveInput(raw: String, engine: Engines.E): String {
               val t = raw.trim()
               if (t.isEmpty()) return engine.home
               if (t.startsWith("http://", true) || t.startsWith("https://", true)) return t
@@ -2559,7 +2504,7 @@ jobs:
               var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
-                set(v) { sp.edit().putString("theme", v).apply() }
+                set(v) { sp.edit().putBoolean("theme", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
@@ -2569,7 +2514,7 @@ jobs:
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
               var startMode: String get() = sp.getString("startMode", "resume") ?: "resume"
-                set(v) { sp.edit().putString("startMode", v).apply() }
+                set(v) { sp.edit().putBoolean("startMode", v).apply() }
               var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
                 set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
 
