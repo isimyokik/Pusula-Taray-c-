@@ -1,48 +1,30 @@
-name: Pusula‑Rota Final PiP‑Düzelt Derleme Akışı
-on:
-  push:
-  workflow_dispatch:
+name: Pusula APK
+on: [push, workflow_dispatch]
 jobs:
   build:
-    runs-on: ubuntu‑latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Java‑17 Temurin ayarla
-        uses: actions/setup‑java@v4
-        with:
-          distribution: 'temurin'
-          java‑version: '17'
-      - name: Android SDK lisansları kabul
-        run: yes | sdkmanager --licenses || true
-      - name: Klasörleri oluştur
+      - uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '17' }
+      - name: Projeyi olustur
         run: |
           rm -rf app build gradle .gradle *.kts gradle.properties gradlew*
-          mkdir -p app/src/main/assets
-          mkdir -p app/src/main/java/com/pusula/browser
-          mkdir -p app/src/main/res/values
-          mkdir -p gradle/wrapper
-      - name: Gradle Wrapper oluştur
-        run: |
-          gradle wrapper --gradle‑version 8.7
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night gradle/wrapper
+          gradle wrapper --gradle-version 8.7
           chmod +x gradlew
-      - name: build.gradle.kts (kök)
-        run: |
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.7.3" apply false
               id("org.jetbrains.kotlin.android") version "2.0.21" apply false
           }
           EOF
-      - name: gradle.properties
-        run: |
           cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF‑8
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           kotlin.code.style=official
           EOF
-      - name: settings.gradle.kts
-        run: |
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
               repositories {
@@ -61,8 +43,6 @@ jobs:
           rootProject.name = "Pusula"
           include(":app")
           EOF
-      - name: app/build.gradle.kts
-        run: |
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -75,8 +55,8 @@ jobs:
                   applicationId = "com.pusula.browser"
                   minSdk = 24
                   targetSdk = 35
-                  versionCode = 5
-                  versionName = "2.2‑final‑pip‑fix"
+                  versionCode = 2
+                  versionName = "2.1‑pip‑fix‑build‑ok"
               }
               buildTypes {
                   release {
@@ -92,28 +72,29 @@ jobs:
               }
           }
           dependencies {
-              implementation("androidx.core:core‑ktx:1.15.0")
+              implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.appcompat:appcompat:1.7.0")
               implementation("androidx.webkit:webkit:1.12.1")
               implementation("androidx.media:media:1.7.0")
           }
           EOF
-      - name: AndroidManifest.xml
-        run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <?xml version="1.0" encoding="utf‑8"?>
+          <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses‑permission android:name="android.permission.INTERNET"/>
-              <uses‑permission android:name="android.permission.POST_NOTIFICATIONS"/>
-              <uses‑permission android:name="android.permission.FOREGROUND_SERVICE"/>
-              <uses‑permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
               <application
                   android:allowBackup="false"
                   android:icon="@drawable/ic_launcher"
                   android:label="@string/app_name"
                   android:theme="@style/Theme.Pusula"
                   android:usesCleartextTraffic="true">
-                  <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback"/>
+                  <service
+                      android:name=".PlaybackService"
+                      android:exported="false"
+                      android:foregroundServiceType="mediaPlayback" />
                   <activity
                       android:name=".MainActivity"
                       android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
@@ -121,121 +102,717 @@ jobs:
                       android:launchMode="singleTask"
                       android:supportsPictureInPicture="true"
                       android:windowSoftInputMode="adjustResize|stateHidden">
-                      <intent‑filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent‑filter>
-                      <intent‑filter>
-                          <action android:name="android.intent.action.VIEW"/>
-                          <category android:name="android.intent.category.DEFAULT"/>
-                          <category android:name="android.intent.category.BROWSABLE"/>
-                          <data android:scheme="http"/>
-                          <data android:scheme="https"/>
-                      </intent‑filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.APP_BROWSER" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="http" />
+                          <data android:scheme="https" />
+                          <data android:mimeType="text/html" />
+                          <data android:mimeType="application/xhtml+xml" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="http" />
+                          <data android:scheme="https" />
+                      </intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
-      - name: newtab.html
-        run: |
           cat > app/src/main/assets/newtab.html <<'EOF'
           <!doctype html>
           <html lang="tr">
           <head>
-          <meta charset="utf‑8">
-          <meta name="viewport" content="width=device‑width,initial‑scale=1">
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
           <title>Yeni Sekme</title>
           <style>
             :root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff}
-            *{box‑sizing:border‑box;‑webkit‑tap‑highlight‑color:transparent}
+            *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
             html,body{margin:0}
-            body{background:var(--bg);color:var(--text);font‑family:Roboto,‑apple‑system,"Segoe UI",sans‑serif;min‑height:100vh;overflow‑x:hidden}
-            main{position:relative;max‑width:560px;margin:0 auto;padding:34px 18px 40px}
-            .hello{color:var(--sub);font‑size:14px;margin:0 0 2px}
-            h1{font‑size:40px;line‑height:1.1;margin:0 0 22px;font‑weight:800;background:linear‑gradient(90deg,var(--acc),var(--acc2));‑webkit‑background‑clip:text;background‑clip:text;color:transparent}
-            form{display:flex;gap:8px;margin‑bottom:26px}
-            .sbox{flex:1;min‑width:0;display:flex;align‑items:center;gap:10px;height:54px;border‑radius:27px;padding:0 18px;background:#1d2848;border:1px solid #8fa0c840}
-            .sbox input{flex:1;border:0;background:transparent;color:var(--text);font‑size:16px;outline:none}
-            button.go{width:54px;height:54px;border‑radius:50%;border:0;color:#fff;background:linear‑gradient(135deg,var(--acc),var(--acc2))}
+            body{background:var(--bg);color:var(--text);font-family:Roboto,-apple-system,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
+            .glow{position:fixed;inset:0;pointer-events:none;
+              background:radial-gradient(420px 300px at 85% -40px,color-mix(in srgb,var(--acc) 38%,transparent),transparent 70%),
+                         radial-gradient(380px 280px at -10% 18%,color-mix(in srgb,var(--acc2) 30%,transparent),transparent 70%)}
+            main{position:relative;max-width:560px;margin:0 auto;padding:34px 18px 40px}
+            .hello{color:var(--sub);font-size:14px;margin:0 0 2px}
+            h1{font-size:40px;line-height:1.1;margin:0 0 22px;font-weight:800;letter-spacing:-.5px;
+               background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+            form{display:flex;gap:8px;margin-bottom:26px}
+            .sbox{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:54px;border-radius:27px;padding:0 18px;
+                  background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);
+                  box-shadow:0 8px 24px rgba(0,0,0,.18)}
+            .sbox:focus-within{border-color:var(--acc)}
+            .sbox input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-size:16px;outline:none;height:100%}
+            .sbox input::placeholder{color:var(--sub)}
+            button.go{width:54px;height:54px;border-radius:50%;border:0;color:#fff;font-size:22px;
+                      background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 8px 20px color-mix(in srgb,var(--acc) 45%,transparent)}
+            h2{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--sub);margin:26px 4px 12px;font-weight:700}
+            .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 8px}
+            a.t{display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-size:12px;min-width:0}
+            a.t i{width:58px;height:58px;border-radius:19px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:27px;
+                  box-shadow:0 8px 18px rgba(0,0,0,.25);color:#fff;font-weight:700}
+            a.t span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)}
+            .list{display:flex;flex-direction:column;gap:8px}
+            a.row{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);padding:11px 14px;border-radius:16px;
+                  background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid color-mix(in srgb,var(--text) 8%,transparent);min-width:0}
+            a.row b{display:block;font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            a.row small{display:block;color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            a.row .d{width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px}
+            .priv{text-align:center;padding-top:60px}
+            .priv .big{font-size:64px;margin-bottom:6px}
+            .priv h1{margin-bottom:8px}
+            .priv p{color:var(--sub);line-height:1.6;margin:0 auto 10px;max-width:30ch}
+            a.t{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transition:transform .15s}
+            a.t.drag{transform:scale(1.14);opacity:.85;z-index:5}
+            a.t.add i{background:transparent!important;border:2px dashed color-mix(in srgb,var(--sub) 70%,transparent);box-shadow:none;color:var(--sub);font-size:30px;font-weight:400}
+            .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+            .sheet{width:100%;max-width:560px;background:var(--surface);border-radius:26px 26px 0 0;padding:20px 18px 26px;box-shadow:0 -10px 40px rgba(0,0,0,.4)}
+            .sheet h3{margin:0 0 14px;font-size:18px}
+            .sheet label{display:block;font-size:12px;color:var(--sub);margin:10px 4px 5px}
+            .sheet input{width:100%;height:46px;border-radius:14px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);background:var(--field);color:var(--text);font-size:16px;padding:0 14px;outline:none}
+            .sheet input:focus{border-color:var(--acc)}
+            .btns{display:flex;gap:10px;margin-top:18px}
+            .btns button{flex:1;height:48px;border-radius:24px;border:0;font-size:15px;font-weight:700;color:var(--text);background:var(--field)}
+            .btns button.pri{color:#fff;background:linear-gradient(135deg,var(--acc),var(--acc2))}
+            .btns button.dng{color:#fff;background:linear-gradient(135deg,#ff5a5f,#d6245a)}
+            [hidden]{display:none!important}
           </style>
           </head>
           <body>
-          <main>
-            <p class="hello" id="hello"></p>
-            <h1>Rota</h1>
-            <form id="f">
-              <div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz"></div>
-              <button class="go" type="submit">→</button>
-            </form>
+          <div class="glow"></div>
+          <main id="main">
+            <div id="home">
+              <p class="hello" id="hello"></p>
+              <h1>Rota</h1>
+              <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">→</button></form>
+              <h2>Hızlı erişim</h2>
+              <div class="grid" id="pins"></div>
+              <div id="bmWrap" hidden><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
+              <div id="hsWrap" hidden><h2>Son ziyaretler</h2><div class="list" id="hs"></div></div>
+            </div>
+            <div class="priv" id="priv" hidden>
+              <div class="big">🕶️</div>
+              <h1>Gizli sekme</h1>
+              <p>Bu sekmede gezdiğin sayfalar geçmişe kaydedilmez ve sekmeyi kapatınca silinir.</p>
+              <p>İstersen aşağıdaki kutudan arama yapabilirsin.</p>
+              <form id="pf" style="margin-top:18px"><div class="sbox"><span>🔎</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria-label="Git">→</button></form>
+            </div>
           </main>
           <script>
-            (function(){
-              var h=new Date().getHours();
-              var greet=h<5?"İyi geceler":h<12?"Günaydın":h<18?"İyi günler":"İyi akşamlar";
-              document.getElementById("hello").textContent=greet;
-              document.getElementById("f").addEventListener("submit",e=>{
+          (function(){
+            var cfg = {engine:"Google",search:"https://www.google.com/search?q=%s",bookmarks:[],history:[]};
+            try { if (window.Pusula) { var c = JSON.parse(window.Pusula.config()); if (c && c.search) cfg = c; } } catch (e) {}
+            var r = document.documentElement.style;
+            if (cfg.bg) {
+              r.setProperty("--bg",cfg.bg); r.setProperty("--surface",cfg.surface); r.setProperty("--field",cfg.field);
+              r.setProperty("--text",cfg.text); r.setProperty("--sub",cfg.sub); r.setProperty("--acc",cfg.accent); r.setProperty("--acc2",cfg.accent2);
+            }
+            var isPrivate = /[?&]private=1/.test(location.search);
+            if (isPrivate) {
+              r.setProperty("--bg","#150d2b"); r.setProperty("--surface","#241447"); r.setProperty("--field","#34205f");
+              r.setProperty("--text","#f3ecff"); r.setProperty("--sub","#b7a4e6"); r.setProperty("--acc","#a46bff"); r.setProperty("--acc2","#ff5cc8");
+              document.getElementById("home").hidden = true; document.getElementById("priv").hidden = false;
+            }
+            var h = new Date().getHours();
+            var greet = h < 5 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar";
+            var day = ""; try { day = new Date().toLocaleDateString("tr‑TR",{weekday:"long",day:"numeric",month:"long"}); } catch (e) {}
+            document.getElementById("hello").textContent = greet + (day ? " · " + day : "");
+            document.getElementById("q").placeholder = cfg.engine + " ile ara veya adres yaz";
+            function go(text){
+              text = (text || "").trim();
+              if (!text) return;
+              if (/^https?:\/\//i.test(text)) { location.href = text; return; }
+              if (!/\s/.test(text) && /^([a‑z0‑9‑]+\.)+[a‑z]{2,}([:\/?#].*)?$/i.test(text)) { location.href = "https://" + text; return; }
+              location.href = cfg.search.replace("%s", encodeURIComponent(text));
+            }
+            document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
+            document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
+            var G = ["linear‑gradient(135deg,#ff4b4b,#c4001d)","linear‑gradient(135deg,#4c8dff,#2457d6)","linear‑gradient(135deg,#ff7a45,#ff2d6f)","linear‑gradient(135deg,#34c3ff,#2477ff)","linear‑gradient(135deg,#34d37a,#0f9d58)","linear‑gradient(135deg,#8a5cff,#4a35d9)","linear‑gradient(135deg,#ffc84a,#ff8a1f)","linear‑gradient(135deg,#00b894,#00796b)","linear‑gradient(135deg,#fd79a8,#d63384)"];
+            var pins = (cfg.pins && cfg.pins.length >= 0 && Array.isArray(cfg.pins)) ? cfg.pins : [
+              {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
+              {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
+              {t:"Müzik",u:"https://music.youtube.com/",e:"🎵",g:2},
+              {t:"Haberler",u:"https://news.google.com/?hl=tr",e:"📰",g:3},
+              {t:"Harita",u:"https://maps.google.com/",e:"🗺️",g:4},
+              {t:"Wikipedia",u:"https://tr.wikipedia.org/",e:"📚",g:5},
+              {t:"Çeviri",u:"https://translate.google.com/",e:"🌐",g:6}
+            ];
+            function save(){ try { if (window.Pusula && window.Pusula.savePins) window.Pusula.savePins(JSON.stringify(pins)); } catch (e) {} }
+            function tile(label, url, icon, bg){
+              var a = document.createElement("a"); a.className = "t"; a.href = url;
+              var i = document.createElement("i"); i.style.background = bg; i.textContent = icon;
+              var s = document.createElement("span"); s.textContent = label;
+              a.appendChild(i); a.appendChild(s); return a;
+            }
+            var g = document.getElementById("pins");
+            var suppress = false;
+            function render(){
+              g.innerHTML = "";
+              pins.forEach(function(p, n){
+                var a = tile(p.t, p.u, p.e || (p.t||"?").charAt(0).toUpperCase(), G[(p.g == null ? n : p.g) % G.length]);
+                a.dataset.n = n;
+                attachDrag(a);
+                g.appendChild(a);
+              });
+              var plus = tile("Ekle", "#", "+", "none");
+              plus.classList.add("add");
+              plus.addEventListener("click", function(e){ e.preventDefault(); openEditor(-1); });
+              g.appendChild(plus);
+            }
+            function closeSheet(){ var o = document.getElementById("ov"); if (o) o.remove(); }
+            function sheet(html){
+              closeSheet();
+              var o = document.createElement("div"); o.className = "sheet‑bg"; o.id = "ov";
+              o.innerHTML = '<div class="sheet">' + html + '</div>';
+              var t0 = Date.now();
+              o.addEventListener("click", function(e){ if (e.target === o && Date.now() - t0 > 600) closeSheet(); });
+              document.body.appendChild(o);
+              return o;
+            }
+            function fixUrl(u){
+              u = (u || "").trim();
+              if (!u) return "";
+              if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+              return u;
+            }
+            function esc(x){ return String(x == null ? "" : x).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+            function openEditor(idx){
+              var p = idx >= 0 ? pins[idx] : {t:"",u:"",e:""};
+              var o = sheet('<h3>' + (idx >= 0 ? "Kısayolu düzenle" : "Yeni kısayol") + '</h3>' +
+                '<label>Ad</label><input id="fe_t" value="' + esc(p.t) + '" placeholder="Örn. Wikipedia">' +
+                '<label>Adres</label><input id="fe_u" value="' + esc(p.u) + '" placeholder="Örn. tr.wikipedia.org" autocapitalize="off">' +
+                '<label>Simge (isteğe bağlı emoji)</label><input id="fe_e" value="' + esc(p.e) + '" maxlength="4" placeholder="📚">' +
+                '<div class="btns"><button id="fe_c">İptal</button><button class="pri" id="fe_s">Kaydet</button></div>');
+              o.querySelector("#fe_c").onclick = closeSheet;
+              o.querySelector("#fe_s").onclick = function(){
+                var t = o.querySelector("#fe_t").value.trim();
+                var u = fixUrl(o.querySelector("#fe_u").value);
+                var e = o.querySelector("#fe_e").value.trim();
+                if (!u) { o.querySelector("#fe_u").focus(); return; }
+                if (!t) t = u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
+                if (idx >= 0) { pins[idx].t = t; pins[idx].u = u; pins[idx].e = e; }
+                else pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});
+                save(); closeSheet(); render();
+              };
+            }
+            function openActions(idx){
+              var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin‑top:4px"><button id="ac_e">Düzenle</button><button class="dng" id="ac_d">Sil</button></div>' +
+                '<div class="btns" style="margin‑top:10px"><button id="ac_c">Kapat</button></div>');
+              o.querySelector("#ac_c").onclick = closeSheet;
+              o.querySelector("#ac_e").onclick = function(){ closeSheet(); openEditor(idx); };
+              o.querySelector("#ac_d").onclick = function(){ pins.splice(idx, 1); save(); closeSheet(); render(); };
+            }
+            function attachDrag(a){
+              var timer = null, dragging = false, sx = 0, sy = 0, moved = false;
+              a.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+              a.addEventListener("click", function(e){ if (suppress) { e.preventDefault(); e.stopPropagation(); } });
+              a.addEventListener("touchstart", function(e){
+                var t = e.touches[0]; sx = t.clientX; sy = t.clientY; moved = false; dragging = false;
+                clearTimeout(timer);
+                timer = setTimeout(function(){ dragging = true; suppress = true; a.classList.add("drag"); try { navigator.vibrate && navigator.vibrate(15); } catch (x) {} }, 420);
+              }, {passive:true});
+              a.addEventListener("touchmove", function(e){
+                var t = e.touches[0];
+                if (!dragging) {
+                  if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) clearTimeout(timer);
+                  return;
+                }
                 e.preventDefault();
-                var q=document.getElementById("q").value.trim();
-                if(!q)return;
-                if(/^https?:\/\//i.test(q))location.href=q;
-                else if(!/\s/.test(q)&&/^([a‑z0‑9‑]+\.)+[a‑z]{2,}/i.test(q))location.href="https://"+q;
-                else location.href="https://google.com/search?q="+encodeURIComponent(q);
-              })
-            })();
+                if (Math.abs(t.clientX - sx) > 6 || Math.abs(t.clientY - sy) > 6) moved = true;
+                a.style.pointerEvents = "none";
+                var el = document.elementFromPoint(t.clientX, t.clientY);
+                a.style.pointerEvents = "";
+                var tgt = el && el.closest ? el.closest("a.t") : null;
+                if (tgt && tgt !== a && !tgt.classList.contains("add") && tgt.parentNode === g) {
+                  var kids = Array.prototype.slice.call(g.children);
+                  if (kids.indexOf(a) < kids.indexOf(tgt)) g.insertBefore(a, tgt.nextSibling); else g.insertBefore(a, tgt);
+                }
+              }, {passive:false});
+              function end(e){
+                clearTimeout(timer);
+                if (!dragging) return;
+                try { if (e && e.cancelable) e.preventDefault(); } catch (x) {}
+                dragging = false; a.classList.remove("drag");
+                if (moved) {
+                  var order = [];
+                  Array.prototype.forEach.call(g.children, function(c){ if (c.dataset.n != null && c.dataset.n !== "") order.push(pins[+c.dataset.n]); });
+                  pins = order; save(); render();
+                } else {
+                  openActions(+a.dataset.n);
+                }
+                setTimeout(function(){ suppress = false; }, 350);
+              }
+              a.addEventListener("touchend", end);
+              a.addEventListener("touchcancel", end);
+            }
+            render();
+            var grads = ["linear‑gradient(135deg,#00b894,#00796b)","linear‑gradient(135deg,#a55eea,#6c3fc8)","linear‑gradient(135deg,#fd79a8,#d63384)","linear‑gradient(135deg,#5f7cff,#3949ab)","linear‑gradient(135deg,#ff9f43,#e17055)"];
+            function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./,""); } catch (e) { return u; } }
+            var bms = cfg.bookmarks || [];
+            if (bms.length) {
+              document.getElementById("bmWrap").hidden = false;
+              var bg = document.getElementById("bms");
+              bms.forEach(function(b,n){ var host = hostOf(b.u); bg.appendChild(tile((b.t && b.t.length < 14) ? b.t : host, b.u, host.charAt(0).toUpperCase(), grads[n % grads.length])); });
+            }
+            var hs = cfg.history || [];
+            if (hs.length) {
+              document.getElementById("hsWrap").hidden = false;
+              var hl = document.getElementById("hs");
+              hs.forEach(function(x,n){
+                var a = document.createElement("a"); a.className = "row"; a.href = x.u;
+                var d = document.createElement("span"); d.className = "d"; d.style.background = grads[n % grads.length]; d.textContent = hostOf(x.u).charAt(0).toUpperCase();
+                var w = document.createElement("div"); w.style.minWidth = "0";
+                var b = document.createElement("b"); b.textContent = x.t || hostOf(x.u);
+                var s = document.createElement("small"); s.textContent = hostOf(x.u);
+                w.appendChild(b); w.appendChild(s); a.appendChild(d); a.appendChild(w); hl.appendChild(a);
+              });
+            }
+          })();
           </script>
           </body>
           </html>
           EOF
-      - name: MainActivity.kt (PiP‑döngüsü düzeltilmiş temel kod)
-        run: |
           cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
           package com.pusula.browser
-          import androidx.appcompat.app.AppCompatActivity
+          import android.annotation.SuppressLint
+          import android.app.Dialog
+          import android.app.DownloadManager
+          import android.graphics.Matrix
+          import android.view.Window
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.res.ColorStateList
+          import android.content.res.Configuration
+          import android.graphics.Bitmap
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.Drawable
+          import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.RippleDrawable
+          import android.net.Uri
+          import android.os.Build
           import android.os.Bundle
+          import android.os.Environment
           import android.os.Handler
           import android.os.Looper
+          import android.os.Message
+          import android.text.Html
+          import android.text.InputType
+          import android.view.Gravity
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.ViewGroup
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.webkit.CookieManager
+          import android.webkit.JsResult
+          import android.webkit.URLUtil
+          import android.webkit.ValueCallback
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceError
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebResourceResponse
+          import android.webkit.WebStorage
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.ArrayAdapter
+          import android.widget.EditText
+          import android.widget.FrameLayout
+          import android.widget.ImageButton
+          import android.widget.ImageView
+          import android.widget.LinearLayout
+          import android.widget.ListView
+          import android.widget.PopupMenu
+          import android.widget.ProgressBar
+          import android.widget.ScrollView
+          import android.widget.TextView
+          import android.widget.Toast
+          import androidx.activity.OnBackPressedCallback
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.appcompat.app.AlertDialog
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.content.ContextCompat
+          import androidx.core.view.ViewCompat
+          import androidx.core.view.WindowCompat
+          import androidx.core.view.WindowInsetsCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+          import androidx.core.widget.doAfterTextChanged
+          import androidx.appcompat.widget.SwitchCompat
+          import androidx.webkit.ScriptHandler
+          import androidx.webkit.WebViewAssetLoader
+          import androidx.webkit.WebViewCompat
+          import androidx.webkit.WebViewFeature
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.ByteArrayInputStream
           class MainActivity : AppCompatActivity() {
+              private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
+                  var title: String = "Yeni Sekme"
+                  var url: String = ""
+                  var pendingUrl: String? = null
+                  var desktop: Boolean = false
+                  var mobileUa: String = ""
+                  var progress: Int = 100
+                  var preview: Bitmap? = null
+                  var adScript: ScriptHandler? = null
+                  var keepScript: ScriptHandler? = null
+                  var hookScript: ScriptHandler? = null
+              }
+              private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
+              private class BgWebView(c: Context) : WebView(c) {
+                  override fun onWindowVisibilityChanged(visibility: Int) {
+                      if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
+                  }
+              }
+              private val tabs = ArrayList<BTab>()
+              private var cur = -1
+              private var shown: WebView? = null
+              private lateinit var prefs: Prefs
+              private lateinit var loader: WebViewAssetLoader
               private val handler = Handler(Looper.getMainLooper())
+              private var appInBackground = false
+              private var hasMedia = false
+              private var lastPlaying = false
+              private var lastTitle = ""
+              private var lastArtist = ""
               private var isInPipMode = false
-              private var lastMediaPollTime = 0L
-              private var lastReportedPlaying: Boolean? = null
-              private val mediaPoll = object : Runnable {
+              private var lastPollPlaying: Boolean? = null
+              private lateinit var dockBar: LinearLayout
+              private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
+              private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+              private val mediaStatePoll = object : Runnable {
                   override fun run() {
-                      val delay = if(isInPipMode) 2800L else 1500L
+                      pollMedia()
+                      val delay = if(isInPipMode) 2700L else 1400L
                       handler.postDelayed(this, delay)
                   }
               }
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  handler.postDelayed(mediaPoll,1500L)
-                  addOnPictureInPictureModeChangedListener { info ->
-                      isInPipMode = info.isInPictureInPictureMode
+              private fun pollMedia() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
+              }
+              private fun onMediaState(raw: String?) {
+                  var has = false
+                  var playing = false
+                  var title = ""
+                  var artist = ""
+                  try {
+                      if (raw != null && raw != "null" && raw != "\"\"") {
+                          val inner = JSONArray("[" + raw + "]").getString(0)
+                          if (inner.isNotEmpty()) {
+                              val o = JSONObject(inner)
+                              has = true
+                              playing = o.optBoolean("p")
+                              title = o.optString("t")
+                              artist = o.optString("a")
+                          }
+                      }
+                  } catch (_: Exception) { return }
+                  if (!has) {
+                      if (hasMedia) { hasMedia = false; lastPlaying = false; lastPollPlaying = null; PlaybackService.stop(this) }
+                      return
+                  }
+                  if(isInPipMode && lastPollPlaying == playing) return
+                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
+                  hasMedia = true; lastPlaying = playing; lastPollPlaying = playing; lastTitle = title; lastArtist = artist
+                  if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
+              }
+              private fun enterPip() {
+                  if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
+                  try {
+                      val p = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build()
+                      enterPictureInPictureMode(p)
+                  } catch (_: Exception) { toast("Küçük pencere açılamadı") }
+              }
+              private fun onPipChanged(pip: Boolean) {
+                  isInPipMode = pip
+                  topBar.visibility = if (pip) View.GONE else View.VISIBLE
+                  dockBar.visibility = if (pip) View.GONE else View.VISIBLE
+                  if (pip) {
+                      closeFind()
+                      shown?.onResume()
+                      if (customView == null) {
+                          try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
+                      }
+                  } else {
+                      lastPollPlaying = null
+                      for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
                   }
               }
-          }
-          EOF
-      - name: PlaybackService.kt (PiP‑uyumlu)
-        run: |
-          cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
-          package com.pusula.browser
-          import android.app.Service
-          import android.content.Intent
-          import android.os.IBinder
-          class PlaybackService : Service() {
-              companion object {
-                  var running = false
-                  fun stop(ctx: android.content.Context) {}
-                  fun update(ctx: android.content.Context, playing: Boolean, title: String, artist: String) {}
+              override fun onUserLeaveHint() {
+                  super.onUserLeaveHint()
+                  if (customView != null && Build.VERSION.SDK_INT >= 26) enterPip()
               }
-              override fun onBind(intent: Intent): IBinder? = null
-          }
-          EOF
-      - name: Derlemeyi çalıştır
-        run: ./gradlew assembleDebug
-      - name: APK kontrolü
-        run: ls -la app/build/outputs/apk/debug/
-      - name: APK’yı yükle
-        uses: actions/upload‑artifact@v4
-        with:
-          name: pusula‑final‑pip‑apk
-          path: app/build/outputs/apk/debug/*.apk
+              private val mediaControlReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(context: Context?, intent: Intent?) {
+                      val act = intent?.action ?: return
+                      val js = when (act) {
+                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
+                          PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
+                          PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
+                          PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
+                          else -> return
+                      }
+                      val targets = if (act == PlaybackService.ACTION_PAUSE) tabs.toList()
+                                    else listOfNotNull(tabs.getOrNull(cur))
+                      targets.forEach { t ->
+                          try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
+                      }
+                  }
+              }
+              private val backgroundMediaPump = object : Runnable {
+                  override fun run() {
+                      if (!appInBackground || !prefs.bgPlay) return
+                      val t = tabs.getOrNull(cur)
+                      try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
+                      handler.postDelayed(this, 1200L)
+                  }
+              }
+              private lateinit var root: LinearLayout
+              private lateinit var content: FrameLayout
+              private lateinit var fullscreen: FrameLayout
+              private lateinit var urlField: EditText
+              private lateinit var progress: ProgressBar
+              private lateinit var backBtn: ImageButton
+              private lateinit var fwdBtn: ImageButton
+              private lateinit var tabCount: TextView
+              private lateinit var privateBadge: TextView
+              private lateinit var findBar: LinearLayout
+              private lateinit var findInput: EditText
+              private lateinit var findCount: TextView
+              private var dark = false
+              private var cBg = 0
+              private var cSurface = 0
+              private var cField = 0
+              private var cText = 0
+              private var cSub = 0
+              private var cIcon = 0
+              private var cAccent = 0
+              private var cAccent2 = 0
+              private lateinit var topBar: LinearLayout
+              private var customView: View? = null
+              private var customCb: WebChromeClient.CustomViewCallback? = null
+              private var fileCb: ValueCallback<Array<Uri>>? = null
+              private var startUrl: String? = null
+              private val fileLauncher =
+                  registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+                      fileCb?.onReceiveValue(
+                          WebChromeClient.FileChooserParams.parseResult(res.resultCode, res.data)
+                      )
+                      fileCb = null
+                  }
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  prefs = Prefs(this)
+                  loader = WebViewAssetLoader.Builder()
+                      .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+                      .build()
+                  loadPalette()
+                  WindowCompat.setDecorFitsSystemWindows(window, false)
+                  buildUi()
+                  val bars = WindowInsetsControllerCompat(window, window.decorView)
+                  bars.isAppearanceLightStatusBars = !dark
+                  bars.isAppearanceLightNavigationBars = !dark
+                  startUrl = intent?.dataString
+                  onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                      override fun handleOnBackPressed() { handleBack() }
+                  })
+                  val mediaFilter = IntentFilter().apply {
+                      addAction(PlaybackService.ACTION_PLAY)
+                      addAction(PlaybackService.ACTION_TOGGLE)
+                      addAction(PlaybackService.ACTION_PAUSE)
+                      addAction(PlaybackService.ACTION_PREVIOUS)
+                      addAction(PlaybackService.ACTION_NEXT)
+                  }
+                  ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+                  startBrowsing()
+                  addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }
+                  handler.removeCallbacks(mediaStatePoll)
+                  handler.postDelayed(mediaStatePoll, 1500L)
+                  if (Build.VERSION.SDK_INT >= 33 && !prefs.askedNotif &&
+                      checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                      prefs.askedNotif = true
+                      notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                  }
+              }
+              override fun onNewIntent(intent: Intent) {
+                  super.onNewIntent(intent)
+                  val u = intent.dataString ?: return
+                  openTab(u)
+              }
+              override fun onPause() {
+                  super.onPause()
+                  saveTabs()
+                  CookieManager.getInstance().flush()
+                  if (prefs.bgPlay) {
+                      appInBackground = true
+                      handler.removeCallbacks(backgroundMediaPump)
+                      handler.post(backgroundMediaPump)
+                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
+                  } else {
+                      appInBackground = true
+                      shown?.onPause()
+                  }
+              }
+              override fun onResume() {
+                  super.onResume()
+                  appInBackground = false
+                  handler.removeCallbacks(backgroundMediaPump)
+                  shown?.onResume()
+              }
+              override fun onDestroy() {
+                  try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
+                  handler.removeCallbacks(backgroundMediaPump)
+                  handler.removeCallbacks(mediaStatePoll)
+                  PlaybackService.stop(this)
+                  for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
+                  super.onDestroy()
+              }
+              private fun loadPalette() {
+                  val pal = Themes.get(prefs.theme)
+                  dark = pal.dark
+                  cBg = pal.bg; cSurface = pal.surface; cField = pal.field
+                  cText = pal.text; cSub = pal.sub; cIcon = pal.icon
+                  cAccent = pal.accent; cAccent2 = pal.accent2
+                  window.setBackgroundDrawable(ColorDrawable(cBg))
+              }
+              private fun applyTheme() {
+                  if (customView != null) hideCustom()
+                  val web = shown
+                  if (web != null) content.removeView(web)
+                  loadPalette()
+                  buildUi()
+                  if (web != null) {
+                      content.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  }
+                  val bars = WindowInsetsControllerCompat(window, window.decorView)
+                  bars.isAppearanceLightStatusBars = !dark
+                  bars.isAppearanceLightNavigationBars = !dark
+                  val t = tabs.getOrNull(cur)
+                  if (t != null) {
+                      privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE
+                      topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg)
+                      if (t.url.startsWith(ASSET_PREFIX)) t.web.reload()
+                  }
+                  syncUi()
+              }
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
+              private fun shape(color: Int, radiusDp: Int): GradientDrawable {
+                  val g = GradientDrawable()
+                  g.setColor(color)
+                  g.cornerRadius = dp(radiusDp).toFloat()
+                  return g
+              }
+              private fun ripple(content: Drawable?): RippleDrawable =
+                  RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
+              private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton {
+                  val b = ImageButton(this)
+                  b.setImageResource(res)
+                  b.setColorFilter(cIcon)
+                  b.background = ripple(null)
+                  b.contentDescription = desc
+                  b.scaleType = ImageView.ScaleType.CENTER
+                  b.setOnClickListener { v -> onClick(v) }
+                  return b
+              }
+              private fun textBtn(label: String, onClick: () -> Unit): TextView {
+                  val t = TextView(this)
+                  t.text = label
+                  t.textSize = 16f
+                  t.setTextColor(cIcon)
+                  t.gravity = Gravity.CENTER
+                  t.background = ripple(null)
+                  t.setOnClickListener { onClick() }
+                  return t
+              }
+              private fun buildUi() {
+                  val match = ViewGroup.LayoutParams.MATCH_PARENT
+                  val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+                  root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setBackgroundColor(cBg)
+                  root.isFocusable = true
+                  root.isFocusableInTouchMode = true
+                  topBar = LinearLayout(this)
+                  topBar.orientation = LinearLayout.HORIZONTAL
+                  topBar.gravity = Gravity.CENTER_VERTICAL
+                  topBar.setPadding(dp(10), dp(8), dp(10), dp(8))
+                  topBar.setBackgroundColor(cBg)
+                  privateBadge = TextView(this)
+                  privateBadge.text = "🕶 GİZLİ"
+                  privateBadge.textSize = 11f
+                  privateBadge.setTypeface(null, Typeface.BOLD)
+                  privateBadge.setTextColor(Color.WHITE)
+                  privateBadge.gravity = Gravity.CENTER
+                  privateBadge.setPadding(dp(10), 0, dp(10), 0)
+                  privateBadge.background = shape(0xFF8B3DFF.toInt(), 16)
+                  privateBadge.visibility = View.GONE
+                  val blp = LinearLayout.LayoutParams(wrap, dp(32))
+                  blp.rightMargin = dp(8)
+                  topBar.addView(privateBadge, blp)
+                  val pill = LinearLayout(this)
+                  pill.orientation = LinearLayout.HORIZONTAL
+                  pill.gravity = Gravity.CENTER_VERTICAL
+                  pill.background = shape(cSurface, 24)
+                  pill.elevation = dp(3).toFloat()
+                  val lead = TextView(this)
+                  lead.text = "🔎"
+                  lead.textSize = 15f
+                  lead.gravity = Gravity.CENTER
+                  pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
+                  urlField = EditText(this)
+                  urlField.hint = "Ara veya adres yaz"
+                  urlField.setHintTextColor(cSub)
+                  urlField.setTextColor(cText)
+                  urlField.textSize = 15f
+                  urlField.isSingleLine = true
+                  urlField.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+                  urlField.imeOptions = EditorInfo.IME_ACTION_GO
+                  urlField.setSelectAllOnFocus(true)
+                  urlField.background = null
+                  urlField.setPadding(0, 0, 0, 0)
+                  urlField.setOnEditorActionListener { _, actionId, event ->
+                      if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) {
+                          submitUrl(); true
+                      } else false
+                  }
+                  urlField.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) syncUrlText() }
+                  pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f))
+                  pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
+                  topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
+                  progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+                  progress.max = 100
+                  progress.progressTintList = ColorStateList.valueOf(cAccent)
+                  progress.progressBackgroundTintList = ColorStateList.valueOf(cBg)
+                  progress.visibility = View.INVISIBLE
+                  content = FrameLayout(this)
+                  content.setBackgroundColor(cBg)
+                  if (!prefs.barBottom) {
+                      root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
+                      root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
+                  }
+                  root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
+                  findBar = LinearLayout(this)
+                  findBar.orientation = LinearLayout.HORIZONTAL
+                  findBar.gravity = Gravity.CENTER_VERTICAL
+                  findBar.setBackgroundColor(cSurface)
+                  findBar.setPadding(dp(8), dp(4), dp(4), dp(4))
+                  findBar.visibility = View.GONE
+                  find
