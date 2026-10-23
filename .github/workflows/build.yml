@@ -88,6 +88,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
@@ -108,6 +109,7 @@ jobs:
                       android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
                       android:exported="true"
                       android:launchMode="singleTask"
+                      android:supportsPictureInPicture="true"
                       android:windowSoftInputMode="adjustResize|stateHidden">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -511,6 +513,79 @@ jobs:
               private val handler = Handler(Looper.getMainLooper())
               private var appInBackground = false
 
+              private var hasMedia = false
+              private var lastPlaying = false
+              private var lastTitle = ""
+              private var lastArtist = ""
+              private lateinit var dockBar: LinearLayout
+              private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
+              private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+              private val mediaStatePoll = object : Runnable {
+                  override fun run() {
+                      pollMedia()
+                      handler.postDelayed(this, 1500L)
+                  }
+              }
+
+              private fun pollMedia() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
+              }
+
+              private fun onMediaState(raw: String?) {
+                  var has = false
+                  var playing = false
+                  var title = ""
+                  var artist = ""
+                  try {
+                      if (raw != null && raw != "null" && raw != "\"\"") {
+                          val inner = JSONArray("[" + raw + "]").getString(0)
+                          if (inner.isNotEmpty()) {
+                              val o = JSONObject(inner)
+                              has = true
+                              playing = o.optBoolean("p")
+                              title = o.optString("t")
+                              artist = o.optString("a")
+                          }
+                      }
+                  } catch (_: Exception) { return }
+                  if (!has) {
+                      if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
+                      return
+                  }
+                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
+                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
+                  if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
+              }
+
+              private fun enterPip() {
+                  if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
+                  try {
+                      val p = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build()
+                      enterPictureInPictureMode(p)
+                  } catch (_: Exception) { toast("Küçük pencere açılamadı") }
+              }
+
+              private fun onPipChanged(pip: Boolean) {
+                  topBar.visibility = if (pip) View.GONE else View.VISIBLE
+                  dockBar.visibility = if (pip) View.GONE else View.VISIBLE
+                  if (pip) {
+                      closeFind()
+                      shown?.onResume()
+                      if (customView == null) {
+                          try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
+                      }
+                  } else {
+                      for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
+                  }
+              }
+
+              override fun onUserLeaveHint() {
+                  super.onUserLeaveHint()
+                  if (customView != null && Build.VERSION.SDK_INT >= 26) enterPip()
+              }
+
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
@@ -605,6 +680,14 @@ jobs:
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
                   startBrowsing()
+                  addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }
+                  handler.removeCallbacks(mediaStatePoll)
+                  handler.postDelayed(mediaStatePoll, 1500L)
+                  if (Build.VERSION.SDK_INT >= 33 && !prefs.askedNotif &&
+                      checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                      prefs.askedNotif = true
+                      notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                  }
               }
 
               override fun onNewIntent(intent: Intent) {
@@ -621,9 +704,7 @@ jobs:
                       appInBackground = true
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
-                      try {
-                          ContextCompat.startForegroundService(this, Intent(this, PlaybackService::class.java))
-                      } catch (_: Exception) { }
+                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
                   } else {
                       appInBackground = true
                       shown?.onPause()
@@ -634,13 +715,14 @@ jobs:
                   super.onResume()
                   appInBackground = false
                   handler.removeCallbacks(backgroundMediaPump)
-                  stopService(Intent(this, PlaybackService::class.java))
                   shown?.onResume()
               }
 
               override fun onDestroy() {
                   try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
                   handler.removeCallbacks(backgroundMediaPump)
+                  handler.removeCallbacks(mediaStatePoll)
+                  PlaybackService.stop(this)
                   for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
                   super.onDestroy()
               }
@@ -819,7 +901,8 @@ jobs:
                       root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
                   }
 
-                  val dock = LinearLayout(this)
+                  dockBar = LinearLayout(this)
+                  val dock = dockBar
                   dock.orientation = LinearLayout.VERTICAL
                   dock.setBackgroundColor(cBg)
                   dock.setPadding(dp(12), dp(6), dp(12), dp(8))
@@ -932,6 +1015,9 @@ jobs:
                   web.addJavascriptInterface(bridge, "Pusula")
 
                   syncScripts(tab)
+                  if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                      try { WebViewCompat.addDocumentStartJavaScript(web, MEDIA_HOOK_JS, setOf("*")) } catch (_: Exception) { }
+                  }
 
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
@@ -1284,6 +1370,7 @@ jobs:
                       SheetItem("🕘", "Geçmiş", false) { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) },
                       SheetItem("🔍", "Sayfada bul", false) { openFind() },
                       SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() },
+                      SheetItem("🪟", "Küçük pencere", false) { enterPip() },
                       SheetItem("📤", "Paylaş", false) { shareCurrent() },
                       SheetItem("🎨", "Tema", false) { chooseTheme { } },
                       SheetItem("⚙️", "Ayarlar", false) { showSettings() }
@@ -1334,20 +1421,101 @@ jobs:
               }
 
               private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
-                  if (list.isEmpty()) { toast("Liste boş"); return }
-                  val labels = list.map { (if (it.title.isBlank()) it.url else it.title) + "\n" + shownUrl(it.url) }
-                  val lv = ListView(this)
-                  lv.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
-                  val b = AlertDialog.Builder(this).setTitle(title).setView(lv).setNegativeButton("Kapat", null)
-                  if (neutral != null) b.setNeutralButton(neutral.first) { _, _ -> neutral.second() }
-                  val d = b.create()
-                  lv.setOnItemClickListener { _, _, pos, _ -> d.dismiss(); loadInCurrent(list[pos].url) }
-                  lv.setOnItemLongClickListener { _, _, pos, _ ->
-                      AlertDialog.Builder(this).setMessage("Silinsin mi?").setPositiveButton("Sil") { _, _ ->
-                          onDelete(list[pos]); d.dismiss()
-                      }.setNegativeButton("İptal", null).show()
-                      true
+                  val items = ArrayList(list)
+                  val d = Dialog(this)
+                  val rootV = LinearLayout(this)
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  head.setPadding(dp(6), 0, dp(6), dp(10))
+                  val tv = TextView(this)
+                  tv.text = title; tv.textSize = 24f; tv.setTypeface(null, Typeface.BOLD); tv.setTextColor(cText)
+                  head.addView(tv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+                  val listCol = LinearLayout(this)
+                  listCol.orientation = LinearLayout.VERTICAL
+                  var query = ""
+
+                  fun render() {
+                      listCol.removeAllViews()
+                      val q = query.trim().lowercase()
+                      val shownList = items.filter { q.isEmpty() || it.title.lowercase().contains(q) || it.url.lowercase().contains(q) }
+                      if (shownList.isEmpty()) {
+                          val e = TextView(this)
+                          e.text = if (items.isEmpty()) "🗂️\n\nBurada henüz bir şey yok" else "🔍\n\nSonuç bulunamadı"
+                          e.textSize = 15f; e.setTextColor(cSub); e.gravity = Gravity.CENTER
+                          e.setPadding(0, dp(60), 0, 0)
+                          listCol.addView(e, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                          return
+                      }
+                      for (en in shownList) {
+                          val row = LinearLayout(this)
+                          row.orientation = LinearLayout.HORIZONTAL
+                          row.gravity = Gravity.CENTER_VERTICAL
+                          row.setPadding(dp(12), dp(10), dp(4), dp(10))
+                          row.background = ripple(shape(cSurface, 18))
+                          row.setOnClickListener { d.dismiss(); loadInCurrent(en.url) }
+                          val host = shownUrl(en.url).substringBefore("/")
+                          val av = TextView(this)
+                          av.text = (host.firstOrNull() ?: '?').uppercaseChar().toString()
+                          av.textSize = 17f; av.setTypeface(null, Typeface.BOLD); av.setTextColor(Color.WHITE); av.gravity = Gravity.CENTER
+                          val g = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
+                          g.cornerRadius = dp(14).toFloat()
+                          av.background = g
+                          row.addView(av, LinearLayout.LayoutParams(dp(42), dp(42)))
+                          val col = LinearLayout(this)
+                          col.orientation = LinearLayout.VERTICAL
+                          col.setPadding(dp(12), 0, dp(6), 0)
+                          val t1 = TextView(this)
+                          t1.text = if (en.title.isBlank()) host else en.title
+                          t1.textSize = 15f; t1.setTextColor(cText); t1.maxLines = 1
+                          t1.ellipsize = android.text.TextUtils.TruncateAt.END
+                          col.addView(t1)
+                          val t2 = TextView(this)
+                          t2.text = shownUrl(en.url); t2.textSize = 12.5f; t2.setTextColor(cSub); t2.maxLines = 1
+                          t2.ellipsize = android.text.TextUtils.TruncateAt.END
+                          col.addView(t2)
+                          row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                          val x = textBtn("✕") { onDelete(en); items.remove(en); render() }
+                          x.setTextColor(cSub)
+                          row.addView(x, LinearLayout.LayoutParams(dp(44), dp(44)))
+                          val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                          lp.bottomMargin = dp(8)
+                          listCol.addView(row, lp)
+                      }
                   }
+
+                  if (neutral != null) {
+                      val nb = textBtn(neutral.first) { neutral.second(); items.clear(); render() }
+                      nb.setTextColor(cAccent); nb.setTypeface(null, Typeface.BOLD)
+                      head.addView(nb, LinearLayout.LayoutParams(dp(84), dp(40)))
+                  }
+                  val done = textBtn("Bitti") { d.dismiss() }
+                  done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
+                  head.addView(done, LinearLayout.LayoutParams(dp(64), dp(40)))
+                  rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  val search = EditText(this)
+                  search.hint = "🔎  Ara"
+                  search.setHintTextColor(cSub); search.setTextColor(cText); search.textSize = 15f
+                  search.isSingleLine = true
+                  search.background = shape(cSurface, 22)
+                  search.setPadding(dp(16), 0, dp(16), 0)
+                  search.doAfterTextChanged { t -> query = t?.toString() ?: ""; render() }
+                  val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44))
+                  slp.bottomMargin = dp(12)
+                  rootV.addView(search, slp)
+
+                  val scroll = ScrollView(this)
+                  scroll.addView(listCol)
+                  rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+                  render()
+                  sheetWindow(d, rootV, true)
+                  d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                   d.show()
               }
 
@@ -1591,7 +1759,7 @@ jobs:
                   add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
                       prefs.barBottom = v; applyTheme()
                   })
-                  add(settingsRow("🌐", "Varsayılan tarayıcı yap", "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
+                  add(settingsRow("🌐", "Varsayılan tarayıcı yap", if (isDefaultBrowser()) "Şu an varsayılan ✓" else "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
                   label("Görünüm ve arama")
                   add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
                   add(settingsRow("🔎", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
@@ -1606,20 +1774,44 @@ jobs:
                   d.show()
               }
 
-              private fun askDefaultBrowser() {
-                  try {
+              private fun isDefaultBrowser(): Boolean {
+                  return try {
                       if (Build.VERSION.SDK_INT >= 29) {
                           val rm = getSystemService(android.app.role.RoleManager::class.java)
-                          if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
-                              if (rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) { toast("Rota zaten varsayılan tarayıcı"); return }
-                              startActivity(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER))
-                              return
-                          }
+                          rm != null && rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)
+                      } else {
+                          val i = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com"))
+                          val ri = packageManager.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                          ri?.activityInfo?.packageName == packageName
                       }
+                  } catch (_: Exception) { false }
+              }
+
+              private fun openDefaultAppsSettings() {
+                  try {
                       startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+                      toast("\"Tarayıcı uygulaması\"nı seç, sonra Rota'yı işaretle")
                   } catch (_: Exception) {
                       try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar açılamadı") }
                   }
+              }
+
+              private fun afterRole() {
+                  if (isDefaultBrowser()) toast("Rota artık varsayılan tarayıcı ✓") else openDefaultAppsSettings()
+              }
+
+              private fun askDefaultBrowser() {
+                  if (isDefaultBrowser()) { toast("Rota zaten varsayılan tarayıcı ✓"); return }
+                  if (Build.VERSION.SDK_INT >= 29) {
+                      try {
+                          val rm = getSystemService(android.app.role.RoleManager::class.java)
+                          if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
+                              roleLauncher.launch(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER))
+                              return
+                          }
+                      } catch (_: Exception) { }
+                  }
+                  openDefaultAppsSettings()
               }
 
               private fun chooseTheme(onDone: () -> Unit) {
@@ -1709,16 +1901,18 @@ jobs:
                   const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
                       "if(location.hostname.indexOf('youtube.com')<0)return;" +
-                      "var fast=false;" +
+                      "var fast=false,adn=0;" +
                       "setInterval(function(){try{" +
                       "var pl=document.querySelector('.html5-video-player');" +
                       "if(!pl)return;" +
                       "var vd=pl.querySelector('video');" +
-                      "if(pl.classList.contains('ad-showing')){" +
+                      "var ad=pl.classList.contains('ad-showing');adn=ad?adn+1:0;" +
+                      "if(ad&&adn>=2){" +
                       "var va=pl.querySelector('.video-ads');if(va)va.style.visibility='hidden';if(vd){if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';}vd.style.visibility='hidden';vd.muted=true;vd.playbackRate=16;var n=vd.buffered.length;if(n){var e=vd.buffered.end(n-1);if(e-vd.currentTime>0.3){vd.currentTime=e-0.1;}}}" +
                       "var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button');" +
                       "if(b)b.click();" +
-                      "}else if(fast){fast=false;var va2=pl.querySelector('.video-ads');if(va2)va2.style.visibility='';if(vd){vd.style.visibility='';vd.playbackRate=1;if(vd.dataset.pm!=='1')vd.muted=false;}}" +
+                      "}else if(!ad&&fast){fast=false;var va2=pl.querySelector('.video-ads');if(va2)va2.style.visibility='';" +
+                      "if(vd){vd.style.visibility='';vd.playbackRate=1;if(vd.dataset.pm!=='1'){var tv=vd.volume;vd.volume=0;vd.muted=false;var k=0;var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*k/6);if(k>=6)clearInterval(iv);},40);}}}" +
                       "}catch(e){}},120);" +
                       "})();"
 
@@ -1731,8 +1925,26 @@ jobs:
 
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
                   const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){m.pause();m.dataset.pusulaWasPlaying='';}});})();"
-                  const val MEDIA_PREVIOUS_JS = "(function(){var b=document.querySelector('.ytp-prev-button');if(b)b.click();})();"
-                  const val MEDIA_NEXT_JS = "(function(){var b=document.querySelector('.ytp-next-button');if(b)b.click();})();"
+                  const val MEDIA_PREVIOUS_JS = "(function(){try{var h=window.__msh;if(h&&h.previoustrack){h.previoustrack();return;}}catch(e){}var b=document.querySelector('.ytp-prev-button,.previous-button,[aria-label=\\'Previous\\'],[aria-label=\\'Önceki\\']');if(b){b.click();return;}var v=document.querySelector('video,audio');if(v)v.currentTime=0;})();"
+                  const val MEDIA_NEXT_JS = "(function(){try{var h=window.__msh;if(h&&h.nexttrack){h.nexttrack();return;}}catch(e){}var b=document.querySelector('.ytp-next-button,.next-button,[aria-label=\\'Next\\'],[aria-label=\\'Sonraki\\']');if(b)b.click();})();"
+
+                  // Sayfanın medya oturumu düğmelerini (sonraki/önceki) yakalar; bildirimden çağrılır.
+                  const val MEDIA_HOOK_JS = "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
+
+                  const val MEDIA_STATE_JS = "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(!v||!(v.currentSrc||v.src))return '';var m=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:(m&&m.title)||document.title||'',a:(m&&m.artist)||''});}catch(e){return '';}})();"
+
+                  const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;" +
+                      "var s=document.createElement('style');s.id='__pip';" +
+                      "s.textContent='html,body{overflow:hidden!important}.__pipa{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important}" +
+                      ".__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important}';" +
+                      "document.documentElement.appendChild(s);v.classList.add('__pipv');" +
+                      "var e=v.parentElement;while(e&&e!==document.documentElement){e.classList.add('__pipa');e=e.parentElement;}" +
+                      "window.dispatchEvent(new Event('resize'));}catch(e){}})();"
+                  const val PIP_OFF_JS = "(function(){try{var s=document.getElementById('__pip');if(s)s.remove();" +
+                      "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
+                      "document.querySelectorAll('.__pipa').forEach(function(x){x.classList.remove('__pipa');});" +
+                      "window.dispatchEvent(new Event('resize'));}catch(e){}})();"
               }
           }
           EOF
@@ -1778,51 +1990,144 @@ jobs:
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
           package com.pusula.browser
 
+          import android.app.Notification
           import android.app.NotificationChannel
           import android.app.NotificationManager
           import android.app.PendingIntent
           import android.app.Service
+          import android.content.Context
           import android.content.Intent
           import android.content.pm.ServiceInfo
+          import android.graphics.drawable.Icon
+          import android.media.MediaMetadata
+          import android.media.session.MediaSession
+          import android.media.session.PlaybackState
           import android.os.Build
           import android.os.IBinder
-          import androidx.core.app.NotificationCompat
           import androidx.core.app.ServiceCompat
+          import androidx.core.content.ContextCompat
 
+          /** Bildirim ve kilit ekranı medya oynatıcısı. Düğmeler uygulamaya yayın olarak iletilir. */
           class PlaybackService : Service() {
-              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  when (intent?.action) {
-                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> {
-                          sendBroadcast(Intent(intent.action).setPackage(packageName))
-                      }
-                  }
+              private var session: MediaSession? = null
+              private var playing = false
+              private var title = ""
+              private var artist = ""
+              private var foregroundStarted = false
+
+              override fun onCreate() {
+                  super.onCreate()
+                  running = true
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
-                      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Oynatıcı", NotificationManager.IMPORTANCE_LOW))
+                      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
                   }
-                  val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-                  val n = NotificationCompat.Builder(this, CHANNEL)
-                      .setSmallIcon(R.drawable.ic_notif)
-                      .setContentTitle("Rota · Medya")
-                      .setContentText("Arka Planda Çalışıyor")
-                      .setContentIntent(open)
-                      .setOngoing(true)
-                      .build()
-                  try {
-                      if (Build.VERSION.SDK_INT >= 29) {
-                          ServiceCompat.startForeground(this, 1002, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-                      } else { startForeground(1002, n) }
-                  } catch (_: Exception) { stopSelf() }
+                  val s = MediaSession(this, "Rota")
+                  s.setCallback(object : MediaSession.Callback() {
+                      override fun onPlay() { send(ACTION_PLAY) }
+                      override fun onPause() { send(ACTION_PAUSE) }
+                      override fun onSkipToNext() { send(ACTION_NEXT) }
+                      override fun onSkipToPrevious() { send(ACTION_PREVIOUS) }
+                  })
+                  s.isActive = true
+                  session = s
+              }
+
+              private fun send(action: String) { sendBroadcast(Intent(action).setPackage(packageName)) }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      ACTION_UPDATE -> {
+                          playing = intent.getBooleanExtra("playing", false)
+                          title = intent.getStringExtra("title") ?: ""
+                          artist = intent.getStringExtra("artist") ?: ""
+                      }
+                      ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
+                  }
+                  refresh()
                   return START_NOT_STICKY
               }
+
+              private fun pi(code: Int, action: String): PendingIntent =
+                  PendingIntent.getBroadcast(this, code, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+              private fun act(res: Int, label: String, p: PendingIntent): Notification.Action =
+                  Notification.Action.Builder(Icon.createWithResource(this, res), label, p).build()
+
+              private fun refresh() {
+                  val s = session ?: return
+                  val shownTitle = if (title.isBlank()) "Rota" else title
+                  s.setMetadata(MediaMetadata.Builder()
+                      .putString(MediaMetadata.METADATA_KEY_TITLE, shownTitle)
+                      .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
+                      .build())
+                  val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
+                      PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                  s.setPlaybackState(PlaybackState.Builder()
+                      .setActions(actions)
+                      .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
+                      .build())
+
+                  val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                  val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
+                  b.setSmallIcon(R.drawable.ic_notif)
+                  b.setContentTitle(shownTitle)
+                  b.setContentText(if (artist.isBlank()) "Rota" else artist)
+                  b.setContentIntent(open)
+                  b.setOngoing(playing)
+                  b.setVisibility(Notification.VISIBILITY_PUBLIC)
+                  b.addAction(act(android.R.drawable.ic_media_previous, "Önceki", pi(1, ACTION_PREVIOUS)))
+                  if (playing) b.addAction(act(android.R.drawable.ic_media_pause, "Duraklat", pi(2, ACTION_PAUSE)))
+                  else b.addAction(act(android.R.drawable.ic_media_play, "Oynat", pi(3, ACTION_PLAY)))
+                  b.addAction(act(android.R.drawable.ic_media_next, "Sonraki", pi(4, ACTION_NEXT)))
+                  b.setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2))
+                  val n = b.build()
+                  try {
+                      if (!foregroundStarted) {
+                          if (Build.VERSION.SDK_INT >= 29) {
+                              ServiceCompat.startForeground(this, NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                          } else { startForeground(NOTIF_ID, n) }
+                          foregroundStarted = true
+                      } else {
+                          (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n)
+                      }
+                      if (!playing) {
+                          stopForeground(Service.STOP_FOREGROUND_DETACH)
+                          foregroundStarted = false
+                      }
+                  } catch (_: Exception) { stopSelf() }
+              }
+
+              override fun onDestroy() {
+                  running = false
+                  try { session?.release() } catch (_: Exception) { }
+                  session = null
+                  super.onDestroy()
+              }
+
               override fun onBind(intent: Intent?): IBinder? = null
+
               companion object {
                   const val CHANNEL = "playback"
+                  const val NOTIF_ID = 1002
+                  const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
                   const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
                   const val ACTION_TOGGLE = "com.pusula.browser.MEDIA_TOGGLE"
                   const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
                   const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
                   const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
+
+                  @Volatile var running = false
+
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                      val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
+                          .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist)
+                      try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
+                  }
+
+                  fun stop(ctx: Context) {
+                      try { ctx.stopService(Intent(ctx, PlaybackService::class.java)) } catch (_: Exception) { }
+                  }
               }
           }
           EOF
@@ -1868,6 +2173,8 @@ jobs:
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
                 set(v) { sp.edit().putString("pins", v).apply() }
+              var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false)
+                set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
 
