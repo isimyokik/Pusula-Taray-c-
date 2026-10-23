@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.1"
+                  versionName = "2.2"
               }
 
               buildTypes {
@@ -737,7 +737,6 @@ jobs:
                   window.setBackgroundDrawable(ColorDrawable(cBg))
               }
 
-              /** Temayı uygulamadan çıkmadan, sekmeleri koruyarak uygular. */
               private fun applyTheme() {
                   if (customView != null) hideCustom()
                   val web = shown
@@ -1046,7 +1045,6 @@ jobs:
                   } catch (_: Exception) { }
               }
 
-              /** Ayar değişince betikleri günceller ve açık sayfayı yeniler. */
               private fun settingsChanged() {
                   for (t in tabs) syncScripts(t)
                   val c = tabs.getOrNull(cur) ?: return
@@ -1924,22 +1922,53 @@ jobs:
                           "}catch(e){}})();"
 
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button,#play-pause-button');if(b)b.click();}})();"
-                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){var vol=m.volume;var step=vol/4;var i=0;var iv=setInterval(function(){i++;m.volume=Math.max(0,vol-(step*i));if(i>=4||m.volume===0){clearInterval(iv);m.pause();m.volume=vol;m.dataset.pusulaWasPlaying='';}},20);}});})();"
-                  const val MEDIA_PREVIOUS_JS =
-                      "(function(){try{var h=window.__msh&&window.__msh.previoustrack;if(h){h({action:'previoustrack'});return;}" +
-                      "var b=document.querySelector('.ytp-prev-button,ytmusic-player-bar .previous-button,.previous-button,#left-controls .previous-button,[aria-label*=Previous],[aria-label*=Önceki]');" +
-                      "if(b){b.click();return;}var v=document.querySelector('video,audio');if(v)v.currentTime=0;}catch(e){}})();"
-                  const val MEDIA_NEXT_JS =
-                      "(function(){try{var h=window.__msh&&window.__msh.nexttrack;if(h){h({action:'nexttrack'});return;}" +
-                      "var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,#left-controls .next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
-                      "if(b){b.click();return;}var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration;}catch(e){}})();"
-                  const val MEDIA_HOOK_JS =
-                      "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
+                  
+                  // Yumuşak ses azaltma (Fade Out)
+                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){var vol=m.volume;var step=vol/5;var i=0;var iv=setInterval(function(){i++;m.volume=Math.max(0,vol-(step*i));if(i>=5||m.volume===0){clearInterval(iv);m.pause();m.volume=vol;m.dataset.pusulaWasPlaying='';}},30);}});})();"
 
+                  // YouTube ve YouTube Music ileri/geri butonlarını doğrudan tetikleyen gelişmiş script
+                  const val MEDIA_PREVIOUS_JS =
+                      "(function(){try{" +
+                      "var h=window.__msh&&window.__msh.previoustrack;if(h){h({action:'previoustrack'});return;}" +
+                      "var b=document.querySelector('.ytp-prev-button,ytmusic-player-bar .previous-button,.previous-button,#left-controls .previous-button,[aria-label*=Previous],[aria-label*=Önceki]');" +
+                      "if(b){b.click();return;}" +
+                      "var v=document.querySelector('video,audio');if(v)v.currentTime=0;" +
+                      "}catch(e){}})();"
+
+                  const val MEDIA_NEXT_JS =
+                      "(function(){try{" +
+                      "var h=window.__msh&&window.__msh.nexttrack;if(h){h({action:'nexttrack'});return;}" +
+                      "var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,#left-controls .next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
+                      "if(b){b.click();return;}" +
+                      "var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration;" +
+                      "}catch(e){}})();"
+
+                  const val MEDIA_HOOK_JS =
+                      "(function(){try{" +
+                      "var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;" +
+                      "var o=ms.setActionHandler.bind(ms);" +
+                      "window.__msh={};" +
+                      "ms.setActionHandler=function(a,f){" +
+                      "window.__msh[a]=f;" +
+                      "return o(a,f);" +
+                      "};" +
+                      "}catch(e){}})();"
+
+                  // Yumuşak ses açma (Fade In) ve medya takip scripti
                   const val MEDIA_STATE_JS =
                       "(function(){try{" +
                       "var l=Array.from(document.querySelectorAll('video,audio'));" +
                       "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
+                      "if(v && !v.__pusulaInited){" +
+                      "  v.__pusulaInited=true;" +
+                      "  v.addEventListener('play', function(){" +
+                      "    var tv = v.volume; v.volume = 0;" +
+                      "    var k = 0; var iv = setInterval(function(){" +
+                      "      k++; v.volume = Math.min(tv, tv * (k / 8));" +
+                      "      if(k >= 8) clearInterval(iv);" +
+                      "    }, 40);" +
+                      "  });" +
+                      "}" +
                       "if(!v||!(v.currentSrc||v.src))return '';" +
                       "var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;" +
                       "function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}" +
@@ -1951,6 +1980,7 @@ jobs:
                       "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
                       "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
                       "}catch(e){return '';}})();"
+
                   const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;" +
                       "var s=document.createElement('style');s.id='__pip';" +
@@ -1969,7 +1999,6 @@ jobs:
           cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
           package com.pusula.browser
 
-          /** Uygulama renk temaları. */
           class Palette(
               val id: String,
               val name: String,
@@ -2025,7 +2054,6 @@ jobs:
           import androidx.core.app.ServiceCompat
           import androidx.core.content.ContextCompat
 
-          /** Bildirim ve kilit ekranı medya oynatıcısı. Düğmeler uygulamaya yayın olarak iletilir. */
           class PlaybackService : Service() {
               private var session: MediaSession? = null
               private var playing = false
@@ -2255,7 +2283,6 @@ jobs:
           import org.json.JSONArray
           import org.json.JSONObject
 
-          /** Yeni sekme sayfasının okuduğu bilgiler. Yalnızca kendi sayfamız yüklüyken cevap verir. */
           class PusulaBridge(private val prefs: Prefs) {
               @Volatile var trusted = false
 
