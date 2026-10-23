@@ -558,7 +558,7 @@ jobs:
                   }
                   val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
-                  if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
+                  if (changed && !isInPictureInPictureMode && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
               }
 
               private fun pipAction(code: Int, icon: Int, label: String, action: String): android.app.RemoteAction {
@@ -596,7 +596,8 @@ jobs:
                       if (customView == null) {
                           try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
                       }
-                      if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist)
+                      // Küçük pencere açıkken bildirim kalkar; pencerenin kendi düğmeleri kontrol görevi görür.
+                      PlaybackService.stop(this)
                       // Tek seferlik kontrol: pencere küçülürken video duraksadıysa bir kez devam ettir.
                       handler.postDelayed({
                           if (isInPictureInPictureMode && lastPlaying) {
@@ -605,6 +606,8 @@ jobs:
                       }, 600)
                   } else {
                       for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
+                      // Küçük pencere kapanınca müzik/video çalıyorsa bildirim geri gelir.
+                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
                   }
               }
 
@@ -2188,11 +2191,11 @@ jobs:
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
                       "var v=mediaList().find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');" +
                       "if(v){" +
-                      "if(!v.paused){" +
+                      "if(!v.paused){window.__userPause=true;" +
                       "var from=v.volume;v.dataset._fv=String(from);" +
                       "fadeTo(v,from,0,350,function(){v.pause();});" +
                       "}else{" +
-                      "var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
+                      "window.__userPause=false;var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
                       "var p=v.play();if(p&&p.catch)p.catch(function(){});" +
                       "fadeTo(v,0,to,450,function(){try{delete v.dataset._fv;}catch(z){}});" +
                       "}" +
@@ -2205,7 +2208,7 @@ jobs:
                       "(function(){try{" +
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
                       "document.querySelectorAll('video,audio').forEach(function(m){" +
-                      "if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();m.dataset.pusulaWasPlaying='';});}" +
+                      "window.__userPause=true;if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();m.dataset.pusulaWasPlaying='';});}" +
                       "});" +
                       "}catch(e){}})();"
 
@@ -2265,30 +2268,24 @@ jobs:
                       "});" +
                       "}catch(e){}})();"
 
-                  // Not: burada artık video.play() çağrılmaz; küçük pencerede oynat/duraklat döngüsüne yol açıyordu.
+                  // Küçük pencerede sayfa düzenine dokunulmaz (video zaten sayfanın üstünde durur).
+                  // Bunun yerine "koruma" kurulur: video kullanıcı istemeden duraklarsa (en fazla 3 kez / 3 sn) tekrar başlatılır.
+                  // Kullanıcı kendisi duraklatırsa (window.__userPause) karışılmaz.
                   const val PIP_ON_JS =
                       "(function(){try{" +
-                      "if(document.getElementById('__pip'))return;" +
-                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
-                      "if(!v)return;" +
-                      "var s=document.createElement('style');s.id='__pip';" +
-                      "s.textContent='" +
-                      "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:100%!important}" +
-                      "body>*{visibility:hidden!important}" +
-                      "video.__pipv,.html5-video-player,ytmusic-player-page,ytmusic-player{visibility:visible!important}" +
-                      ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
-                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:none!important}" +
-                      "';" +
-                      "document.documentElement.appendChild(s);" +
-                      "v.classList.add('__pipv');" +
-                      "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e.style.setProperty('transform','none','important');e.style.setProperty('overflow','visible','important');e=e.parentElement;}" +
+                      "window.scrollTo(0,0);" +
+                      "if(window.__pg)return;window.__pg=true;window.__userPause=false;var n=0,t0=0;" +
+                      "window.__pgf=function(e){var m=e.target;if(!m||(m.tagName!='VIDEO'&&m.tagName!='AUDIO'))return;" +
+                      "if(window.__userPause||m.ended)return;" +
+                      "var now=Date.now();if(now-t0>3000){t0=now;n=0;}if(n++>=3)return;" +
+                      "setTimeout(function(){if(m.paused&&!window.__userPause){var p=m.play();if(p&&p.catch)p.catch(function(){});}},80);};" +
+                      "document.addEventListener('pause',window.__pgf,true);" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
                       "(function(){try{" +
-                      "var s=document.getElementById('__pip');if(s)s.remove();" +
-                      "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
-                      "document.querySelectorAll('*').forEach(function(x){try{if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');}catch(z){}});" +
+                      "if(window.__pgf){document.removeEventListener('pause',window.__pgf,true);window.__pgf=null;}" +
+                      "window.__pg=false;window.__userPause=false;" +
                       "}catch(e){}})();"
 
                   const val LANDSCAPE_VIDEO_JS =
