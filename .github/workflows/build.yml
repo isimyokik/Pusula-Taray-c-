@@ -560,11 +560,30 @@ jobs:
                   if (changed && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
               }
 
+              private fun pipAction(code: Int, icon: Int, label: String, action: String): android.app.RemoteAction {
+                  val pi = PendingIntent.getBroadcast(
+                      this, code,
+                      Intent(action).setPackage(packageName),
+                      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                  )
+                  return android.app.RemoteAction(android.graphics.drawable.Icon.createWithResource(this, icon), label, label, pi)
+              }
+
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
                   try {
-                      val p = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build()
-                      enterPictureInPictureMode(p)
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
+                      val b = android.app.PictureInPictureParams.Builder()
+                          .setAspectRatio(android.util.Rational(16, 9))
+                      if (Build.VERSION.SDK_INT >= 26) {
+                          val acts = ArrayList<android.app.RemoteAction>()
+                          acts.add(pipAction(11, android.R.drawable.ic_media_previous, "Önceki", PlaybackService.ACTION_PREVIOUS))
+                          acts.add(pipAction(12, android.R.drawable.ic_media_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
+                          acts.add(pipAction(13, android.R.drawable.ic_media_next, "Sonraki", PlaybackService.ACTION_NEXT))
+                          b.setActions(acts)
+                      }
+                      enterPictureInPictureMode(b.build())
                   } catch (_: Exception) { toast("Küçük pencere açılamadı") }
               }
 
@@ -573,10 +592,15 @@ jobs:
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
                   if (pip) {
                       closeFind()
-                      shown?.onResume()
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
                       if (customView == null) {
                           try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
                       }
+                      if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
+                      handler.postDelayed({
+                          try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
+                      }, 400)
                   } else {
                       for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
                   }
@@ -584,7 +608,17 @@ jobs:
 
               override fun onUserLeaveHint() {
                   super.onUserLeaveHint()
-                  if (customView != null && Build.VERSION.SDK_INT >= 26) enterPip()
+                  if (Build.VERSION.SDK_INT >= 26 && (customView != null || hasMedia)) enterPip()
+              }
+
+              override fun onConfigurationChanged(newConfig: Configuration) {
+                  super.onConfigurationChanged(newConfig)
+                  if (isInPictureInPictureMode) return
+                  val land = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+                  try {
+                      if (land) currentWeb()?.evaluateJavascript(LANDSCAPE_VIDEO_JS, null)
+                      else currentWeb()?.evaluateJavascript(PORTRAIT_VIDEO_JS, null)
+                  } catch (_: Exception) { }
               }
 
               private val mediaControlReceiver = object : BroadcastReceiver() {
@@ -701,6 +735,12 @@ jobs:
                   super.onPause()
                   saveTabs()
                   CookieManager.getInstance().flush()
+                  if (isInPictureInPictureMode) {
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
+                      if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
+                      return
+                  }
                   if (prefs.bgPlay) {
                       appInBackground = true
                       handler.removeCallbacks(backgroundMediaPump)
@@ -2009,18 +2049,60 @@ jobs:
                       "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
                       "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
                       "}catch(e){return '';}})();"
-                  const val PIP_ON_JS = "(function(){try{if(document.getElementById('__pip'))return;" +
-                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(!v)return;" +
+                  const val KEEP_MEDIA_PLAYING_JS =
+                      "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}});}catch(e){}})();"
+
+                  const val PIP_ON_JS =
+                      "(function(){try{" +
+                      "if(document.getElementById('__pip'))return;" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
+                      "if(!v)return;" +
+                      "try{if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}catch(x){}" +
                       "var s=document.createElement('style');s.id='__pip';" +
-                      "s.textContent='html,body{overflow:hidden!important}.__pipa{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important}" +
-                      ".__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important}';" +
-                      "document.documentElement.appendChild(s);v.classList.add('__pipv');" +
-                      "var e=v.parentElement;while(e&&e!==document.documentElement){e.classList.add('__pipa');e=e.parentElement;}" +
-                      "window.dispatchEvent(new Event('resize'));}catch(e){}})();"
-                  const val PIP_OFF_JS = "(function(){try{var s=document.getElementById('__pip');if(s)s.remove();" +
+                      "s.textContent='" +
+                      "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:100%!important}" +
+                      "body>*{visibility:hidden!important}" +
+                      "video.__pipv,.html5-video-player,ytmusic-player-page,ytmusic-player{visibility:visible!important}" +
+                      ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
+                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:none!important}" +
+                      "';" +
+                      "document.documentElement.appendChild(s);" +
+                      "v.classList.add('__pipv');" +
+                      "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e.style.setProperty('transform','none','important');e.style.setProperty('overflow','visible','important');e=e.parentElement;}" +
+                      "window.dispatchEvent(new Event('resize'));" +
+                      "}catch(e){}})();"
+
+                  const val PIP_OFF_JS =
+                      "(function(){try{" +
+                      "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
-                      "document.querySelectorAll('.__pipa').forEach(function(x){x.classList.remove('__pipa');});" +
-                      "window.dispatchEvent(new Event('resize'));}catch(e){}})();"
+                      "window.dispatchEvent(new Event('resize'));" +
+                      "}catch(e){}})();"
+
+                  const val LANDSCAPE_VIDEO_JS =
+                      "(function(){try{" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
+                      "if(!v||v.paused)return;" +
+                      "var fs=document.querySelector('.ytp-fullscreen-button,.ytp-size-button');" +
+                      "if(fs&&!document.fullscreenElement){try{fs.click();}catch(x){}}" +
+                      "if(!document.fullscreenElement&&v.requestFullscreen){try{v.requestFullscreen();}catch(x){}}" +
+                      "if(!document.getElementById('__land')){" +
+                      "var s=document.createElement('style');s.id='__land';" +
+                      "s.textContent='.html5-video-player.ytp-fullscreen,video.html5-main-video:fullscreen{width:100vw!important;height:100vh!important}" +
+                      "body.__landv video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;object-fit:contain!important;z-index:2147483647!important;background:#000!important}';" +
+                      "document.documentElement.appendChild(s);" +
+                      "}" +
+                      "document.body.classList.add('__landv');" +
+                      "}catch(e){}})();"
+
+                  const val PORTRAIT_VIDEO_JS =
+                      "(function(){try{" +
+                      "document.body.classList.remove('__landv');" +
+                      "var s=document.getElementById('__land');if(s)s.remove();" +
+                      "if(document.fullscreenElement){try{document.exitFullscreen();}catch(x){}}" +
+                      "}catch(e){}})();"
+
+
               }
           }
           EOF
