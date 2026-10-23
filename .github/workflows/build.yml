@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.5"
+                  versionName = "2.6"
               }
 
               buildTypes {
@@ -1972,7 +1972,7 @@ jobs:
                       "      else{" +
                       "        var c=document.querySelector('ytmusic-player-bar');if(c&&c.nextVideo){c.nextVideo();}" +
                       "        else{" +
-                      "          var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,#left-controls .next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
+                      "          var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.previous-button,#left-controls .next-button,.next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
                       "          if(b)b.click(); else if(isFinite(v.duration))v.currentTime=v.duration;" +
                       "        }" +
                       "      }" +
