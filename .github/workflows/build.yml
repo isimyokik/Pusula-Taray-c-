@@ -18,12 +18,12 @@ jobs:
       - name: Proje dosyalarını oluştur
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties gradle gradlew gradlew.bat
-          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values
 
           cat > build.gradle.kts <<'EOF'
           plugins {
-              id("com.android.application") version "8.9.0" apply false
-              id("org.jetbrains.kotlin.android") version "2.0.20" apply false
+              id("com.android.application") version "8.9.1" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
           }
           EOF
 
@@ -628,17 +628,12 @@ jobs:
           </resources>
           EOF
 
-          gradle wrapper --gradle-version 8.9
+          # Uyumlu çifti doğrudan ayarla: AGP 8.9.1 ↔ Gradle 8.11.1
+          gradle wrapper --gradle-version 8.11.1
           chmod +x gradlew
 
-      - name: Gradle önbelleği
-        uses: actions/cache@v3
-        with:
-          path: ~/.gradle/caches
-          key: ${{ runner.os }}‑gradle‑${{ hashFiles('**/*.gradle.kts') }}
-
-      - name: Derle
-        run: ./gradlew assembleRelease
+      - name: Gradle önbelleğini temizle ve derle
+        run: ./gradlew clean assembleRelease
 
       - name: APK yükle
         uses: actions/upload-artifact@v4
