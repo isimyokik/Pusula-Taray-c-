@@ -764,6 +764,13 @@ jobs:
                   handler.removeCallbacks(backgroundMediaPump)
                   handler.removeCallbacks(mediaStatePoll)
                   PlaybackService.stop(this)
+                  if (prefs.clearOnExit) {
+                      try {
+                          clearBrowsingData()
+                          prefs.clearHistory()
+                          prefs.saveTabs(emptyList(), 0)
+                      } catch (_: Exception) { }
+                  }
                   for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
                   super.onDestroy()
               }
@@ -1010,17 +1017,23 @@ jobs:
 
               private fun startBrowsing() {
                   if (tabs.isEmpty()) {
-                      val saved = prefs.savedTabs()
-                      if (saved.isEmpty()) {
-                          openTab(null)
-                      } else {
-                          val want = prefs.savedCurrent()
-                          for (u in saved.take(12)) {
-                              val t = createTab()
-                              if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) }
-                              else { t.pendingUrl = NEWTAB_URL }
+                      when (prefs.startMode) {
+                          "home" -> openTab(Engines.get(prefs.engine).home)
+                          "blank" -> openTab(null)
+                          else -> {
+                              val saved = prefs.savedTabs()
+                              if (saved.isEmpty()) {
+                                  openTab(null)
+                              } else {
+                                  val want = prefs.savedCurrent()
+                                  for (u in saved.take(12)) {
+                                      val t = createTab()
+                                      if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) }
+                                      else { t.pendingUrl = NEWTAB_URL }
+                                  }
+                                  switchTo(if (want in tabs.indices) want else 0)
+                              }
                           }
-                          switchTo(if (want in tabs.indices) want else 0)
                       }
                   }
                   val s = startUrl; startUrl = null
@@ -1324,7 +1337,11 @@ jobs:
                   }
                   override fun onHideCustomView() { hideCustom() }
                   override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
-                      AlertDialog.Builder(this@MainActivity).setMessage(message).setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }.setOnCancelListener { result?.confirm() }.show()
+                      themedMessage(message ?: "", onDismiss = { result?.confirm() })
+                      return true
+                  }
+                  override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                      themedConfirm(message ?: "", onYes = { result?.confirm() }, onNo = { result?.cancel() })
                       return true
                   }
               }
@@ -1759,6 +1776,124 @@ jobs:
                   return settingsRow(icon, title, sub, sw) { sw.toggle() }
               }
 
+
+              private fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(20), dp(18), dp(20), dp(14))
+                  val bg = GradientDrawable()
+                  bg.setColor(cSurface)
+                  bg.cornerRadius = dp(22).toFloat()
+                  col.background = bg
+                  val msg = TextView(this)
+                  msg.text = message.trim().ifEmpty { "Tamam" }
+                  msg.textSize = 15f
+                  msg.setTextColor(cText)
+                  msg.setPadding(0, 0, 0, dp(14))
+                  col.addView(msg, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                  val ok = textBtn("Tamam") { d.dismiss(); onDismiss() }
+                  ok.setTextColor(cAccent)
+                  ok.setTypeface(null, Typeface.BOLD)
+                  col.addView(ok, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+                  d.setOnCancelListener { onDismiss() }
+                  sheetWindow(d, col, false)
+                  d.show()
+              }
+
+              private fun themedConfirm(message: String, onYes: () -> Unit, onNo: () -> Unit) {
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(20), dp(18), dp(20), dp(14))
+                  val bg = GradientDrawable()
+                  bg.setColor(cSurface)
+                  bg.cornerRadius = dp(22).toFloat()
+                  col.background = bg
+                  val msg = TextView(this)
+                  msg.text = message.trim().ifEmpty { "Emin misin?" }
+                  msg.textSize = 15f
+                  msg.setTextColor(cText)
+                  msg.setPadding(0, 0, 0, dp(14))
+                  col.addView(msg)
+                  val row = LinearLayout(this)
+                  row.orientation = LinearLayout.HORIZONTAL
+                  val no = textBtn("Vazgeç") { d.dismiss(); onNo() }
+                  no.setTextColor(cSub)
+                  val yes = textBtn("Tamam") { d.dismiss(); onYes() }
+                  yes.setTextColor(cAccent)
+                  yes.setTypeface(null, Typeface.BOLD)
+                  row.addView(no, LinearLayout.LayoutParams(0, dp(44), 1f))
+                  row.addView(yes, LinearLayout.LayoutParams(0, dp(44), 1f))
+                  col.addView(row)
+                  d.setOnCancelListener { onNo() }
+                  sheetWindow(d, col, false)
+                  d.show()
+              }
+
+              private fun startModeLabel(): String = when (prefs.startMode) {
+                  "home" -> "Ana sayfa"
+                  "blank" -> "Yeni sekme"
+                  else -> "Kaldığım yerden"
+              }
+
+              private fun chooseStartMode(onDone: () -> Unit) {
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(14), dp(16), dp(14), dp(18))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val tt = TextView(this)
+                  tt.text = "Açılış"
+                  tt.textSize = 18f
+                  tt.setTypeface(null, Typeface.BOLD)
+                  tt.setTextColor(cText)
+                  tt.setPadding(dp(6), 0, 0, dp(10))
+                  col.addView(tt)
+                  data class Opt(val id: String, val title: String, val sub: String)
+                  val opts = listOf(
+                      Opt("resume", "Kaldığım yerden", "Son sekmelerle devam et"),
+                      Opt("home", "Ana sayfa", Engines.get(prefs.engine).name + " açılır"),
+                      Opt("blank", "Yeni sekme", "Boş sekmeden başla")
+                  )
+                  for (o in opts) {
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.VERTICAL
+                      row.setPadding(dp(14), dp(12), dp(14), dp(12))
+                      val rb = GradientDrawable()
+                      rb.setColor(if (prefs.startMode == o.id) cField else cSurface)
+                      rb.cornerRadius = dp(16).toFloat()
+                      if (prefs.startMode == o.id) rb.setStroke(dp(2), cAccent) else rb.setStroke(dp(1), cField)
+                      row.background = rb
+                      val t1 = TextView(this)
+                      t1.text = o.title
+                      t1.textSize = 15.5f
+                      t1.setTextColor(cText)
+                      t1.setTypeface(null, Typeface.BOLD)
+                      val t2 = TextView(this)
+                      t2.text = o.sub
+                      t2.textSize = 12.5f
+                      t2.setTextColor(cSub)
+                      row.addView(t1)
+                      row.addView(t2)
+                      row.setOnClickListener {
+                          prefs.startMode = o.id
+                          d.dismiss()
+                          onDone()
+                      }
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      lp.bottomMargin = dp(8)
+                      col.addView(row, lp)
+                  }
+                  sheetWindow(d, col, false)
+                  d.show()
+              }
+
+
               private fun showSettings() {
                   val d = Dialog(this)
                   val rootV = LinearLayout(this)
@@ -1792,6 +1927,9 @@ jobs:
                       list.addView(l)
                   }
                   label("Gezinme")
+                  add(settingsRow("🚀", "Açılış", startModeLabel(), chevron()) {
+                      chooseStartMode { d.dismiss(); showSettings() }
+                  })
                   add(switchRow("🛡️", "Reklam engelleyici", "YouTube reklamlarını atlar", prefs.adBlock) { v ->
                       prefs.adBlock = v; settingsChanged()
                   })
@@ -1806,8 +1944,15 @@ jobs:
                   add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
                   add(settingsRow("🔎", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
                   label("Gizlilik")
-                  add(settingsRow("🕘", "Geçmişi temizle", null, null) { prefs.clearHistory(); toast("Geçmiş temizlendi") })
-                  add(settingsRow("🧹", "Önbelleği ve çerezleri temizle", null, null) { clearBrowsingData(); toast("Temizlendi") })
+                  add(switchRow("🧹", "Çıkışta temizle", "Kapanınca çerez ve veriler silinir", prefs.clearOnExit) { v ->
+                      prefs.clearOnExit = v
+                  })
+                  add(settingsRow("🕘", "Geçmişi temizle", null, null) {
+                      themedConfirm("Geçmiş silinsin mi?", onYes = { prefs.clearHistory(); toast("Silindi") }, onNo = {})
+                  })
+                  add(settingsRow("🧽", "Önbellek ve çerezler", null, null) {
+                      themedConfirm("Önbellek ve çerezler silinsin mi?", onYes = { clearBrowsingData(); toast("Temizlendi") }, onNo = {})
+                  })
 
                   val scroll = ScrollView(this)
                   scroll.addView(list)
@@ -1910,11 +2055,38 @@ jobs:
               }
 
               private fun chooseEngine(onDone: () -> Unit) {
-                  val names = Engines.all.map { it.name }.toTypedArray()
-                  val sel = Engines.all.indexOfFirst { it.id == prefs.engine }.coerceAtLeast(0)
-                  AlertDialog.Builder(this).setTitle("Arama Motoru").setSingleChoiceItems(names, sel) { dlg, which ->
-                      prefs.engine = Engines.all[which].id; dlg.dismiss(); onDone()
-                  }.show()
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(14), dp(16), dp(14), dp(18))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val tt = TextView(this)
+                  tt.text = "Arama motoru"
+                  tt.textSize = 18f
+                  tt.setTypeface(null, Typeface.BOLD)
+                  tt.setTextColor(cText)
+                  tt.setPadding(dp(6), 0, 0, dp(10))
+                  col.addView(tt)
+                  for (e in Engines.all) {
+                      val row = textBtn(e.name) {
+                          prefs.engine = e.id
+                          d.dismiss()
+                          onDone()
+                      }
+                      row.setTextColor(if (e.id == prefs.engine) cAccent else cText)
+                      row.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                      row.setPadding(dp(14), 0, dp(14), 0)
+                      row.background = shape(cField, 14)
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
+                      lp.bottomMargin = dp(8)
+                      col.addView(row, lp)
+                  }
+                  sheetWindow(d, col, false)
+                  d.show()
               }
 
               private fun clearBrowsingData() {
@@ -2335,6 +2507,11 @@ jobs:
                 set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
+              /** home | resume | blank */
+              var startMode: String get() = sp.getString("startMode", "resume") ?: "resume"
+                set(v) { sp.edit().putString("startMode", v).apply() }
+              var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
+                set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
 
               private fun readList(key: String): MutableList<Entry> {
                   val out = ArrayList<Entry>()
