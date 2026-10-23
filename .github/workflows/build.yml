@@ -1936,22 +1936,59 @@ jobs:
                           "});" +
                           "}catch(e){}})();"
 
-                  const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button');if(b)b.click();}})();"
-                  const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){m.pause();m.dataset.pusulaWasPlaying='';}});})();"
+                  const val MEDIA_TOGGLE_JS =
+                      "(function(){try{" +
+                      "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
+                      "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
+                      "var v=mediaList().find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');" +
+                      "if(v){" +
+                      "if(!v.paused){" +
+                      "var from=v.volume;v.dataset._fv=String(from);" +
+                      "fadeTo(v,from,0,350,function(){v.pause();});" +
+                      "}else{" +
+                      "var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
+                      "var p=v.play();if(p&&p.catch)p.catch(function(){});" +
+                      "fadeTo(v,0,to,450,function(){try{delete v.dataset._fv;}catch(z){}});" +
+                      "}" +
+                      "return;}" +
+                      "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
+                      "if(b)b.click();" +
+                      "}catch(e){}})();"
+
+                  const val MEDIA_PAUSE_JS =
+                      "(function(){try{" +
+                      "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
+                      "document.querySelectorAll('video,audio').forEach(function(m){" +
+                      "if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();m.dataset.pusulaWasPlaying='';});}" +
+                      "});" +
+                      "}catch(e){}})();"
+
                   const val MEDIA_PREVIOUS_JS =
                       "(function(){try{" +
-                      "function softMute(){document.querySelectorAll('video,audio').forEach(function(m){try{if(!m.dataset._sm){m.dataset._sm='1';m.dataset._sv=String(m.volume||1);m.volume=0;}}catch(x){}});setTimeout(function(){document.querySelectorAll('video,audio').forEach(function(m){try{if(m.dataset._sm==='1'){var tv=parseFloat(m.dataset._sv||'1')||1;m.volume=0;var k=0;var iv=setInterval(function(){k++;m.volume=Math.min(tv,tv*(k/10));if(k>=10){clearInterval(iv);m.volume=tv;delete m.dataset._sm;delete m.dataset._sv;}},25);}}catch(x){}});},400);}" +
-                      "var h=window.__msh&&window.__msh.previoustrack;if(h){try{softMute();h({action:'previoustrack'});return;}catch(x){}}" +
-                      "var sels=['ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','.previous-button','.ytp-prev-button','#left-controls .previous-button','[aria-label=\\\"Previous\\\"]','[aria-label=\\\"Önceki\\\"]','[aria-label*=\\\"Previous track\\\"]','[aria-label*=\\\"Önceki parça\\\"]'];" +
-                      "for(var i=0;i<sels.length;i++){var el=document.querySelector(sels[i]);if(!el)continue;var btn=el.querySelector&&el.querySelector('button')||el;try{softMute();btn.click();return;}catch(x){}}" +
+                      "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
+                      "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
+                      "function fadeOutAll(ms,done){var list=mediaList(),n=list.length,left=n;if(!n){if(done)done();return;}list.forEach(function(m){try{var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,ms,function(){left--;if(left<=0&&done)done();});}catch(x){left--;if(left<=0&&done)done();}});}" +
+                      "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
+                      "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
+                      "function doPrev(){var h=window.__msh&&window.__msh.previoustrack;if(h){try{h({action:'previoustrack'});fadeInAll(500);return;}catch(x){}}" +
+                      "var sels=['.ytp-prev-button','.ytp-chrome-bottom .ytp-prev-button','ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','#left-controls .previous-button','.previous-button','[aria-label=\\\"Previous\\\"]','[aria-label=\\\"Önceki\\\"]','[aria-label*=\\\"Previous track\\\"]','[aria-label*=\\\"Önceki parça\\\"]','[aria-label*=\\\"previous\\\"]'];" +
+                      "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v){v.currentTime=0;}fadeInAll(500);}" +
+                      "fadeOutAll(400,doPrev);" +
                       "}catch(e){}})();"
 
                   const val MEDIA_NEXT_JS =
                       "(function(){try{" +
-                      "function softMute(){document.querySelectorAll('video,audio').forEach(function(m){try{if(!m.dataset._sm){m.dataset._sm='1';m.dataset._sv=String(m.volume||1);m.volume=0;}}catch(x){}});setTimeout(function(){document.querySelectorAll('video,audio').forEach(function(m){try{if(m.dataset._sm==='1'){var tv=parseFloat(m.dataset._sv||'1')||1;m.volume=0;var k=0;var iv=setInterval(function(){k++;m.volume=Math.min(tv,tv*(k/10));if(k>=10){clearInterval(iv);m.volume=tv;delete m.dataset._sm;delete m.dataset._sv;}},25);}}catch(x){}});},400);}" +
-                      "var h=window.__msh&&window.__msh.nexttrack;if(h){try{softMute();h({action:'nexttrack'});return;}catch(x){}}" +
-                      "var sels=['ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','.next-button','.ytp-next-button','#left-controls .next-button','[aria-label=\\\"Next\\\"]','[aria-label=\\\"Sonraki\\\"]','[aria-label*=\\\"Next track\\\"]','[aria-label*=\\\"Sonraki parça\\\"]'];" +
-                      "for(var i=0;i<sels.length;i++){var el=document.querySelector(sels[i]);if(!el)continue;var btn=el.querySelector&&el.querySelector('button')||el;try{softMute();btn.click();return;}catch(x){}}" +
+                      "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
+                      "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
+                      "function fadeOutAll(ms,done){var list=mediaList(),n=list.length,left=n;if(!n){if(done)done();return;}list.forEach(function(m){try{var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,ms,function(){left--;if(left<=0&&done)done();});}catch(x){left--;if(left<=0&&done)done();}});}" +
+                      "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
+                      "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
+                      "function doNext(){var h=window.__msh&&window.__msh.nexttrack;if(h){try{h({action:'nexttrack'});fadeInAll(500);return;}catch(x){}}" +
+                      "var sels=['.ytp-next-button','.ytp-chrome-bottom .ytp-next-button','ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','#left-controls .next-button','.next-button','[aria-label=\\\"Next\\\"]','[aria-label=\\\"Sonraki\\\"]','[aria-label*=\\\"Next track\\\"]','[aria-label*=\\\"Sonraki parça\\\"]','[aria-label*=\\\"next\\\"]'];" +
+                      "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v&&isFinite(v.duration)){v.currentTime=v.duration;}fadeInAll(500);}" +
+                      "fadeOutAll(400,doNext);" +
                       "}catch(e){}})();"
 
                   const val MEDIA_HOOK_JS =
