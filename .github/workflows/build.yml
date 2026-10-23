@@ -1,4 +1,4 @@
-name: Pusula APK
+Name: Pusula APK
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -1936,10 +1936,7 @@ jobs:
                       "var b=document.querySelector('.ytp-next-button,ytmusic-player-bar .next-button,.next-button,[aria-label*=Next],[aria-label*=Sonraki]');" +
                       "if(b){b.click();return;}var v=document.querySelector('video,audio');if(v&&isFinite(v.duration))v.currentTime=v.duration;}catch(e){}})();"
                   const val MEDIA_HOOK_JS =
-                      "(function(){try{var ms=navigator.mediaSession;if(!ms||ms.__rh)return;ms.__rh=1;" +
-                      "var o=ms.setActionHandler.bind(ms);window.__msh={};" +
-                      "ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
-                  const val MEDIA_HOOK_JS = "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
+                      "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
 
                   const val MEDIA_STATE_JS =
                       "(function(){try{" +
@@ -2172,7 +2169,7 @@ jobs:
               fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
           }
 
-          val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$")
+          val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:\\/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:\\/?#].*)?$|^localhost([:\\/?#].*)?$")
 
           fun resolveInput(raw: String, engine: Engines.E): String {
               val t = raw.trim()
@@ -2376,4 +2373,3 @@ jobs:
           name: Pusula-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-
