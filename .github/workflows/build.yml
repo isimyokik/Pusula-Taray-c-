@@ -17,6 +17,7 @@ jobs:
 
       - name: Projeyi olustur (PiP fixli)
         run: |
+          mkdir -p app/src/main/java/com/pusula/browser
           cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'ENDMAIN'
           package com.pusula.browser
           import android.annotation.SuppressLint
