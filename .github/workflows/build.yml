@@ -206,18 +206,18 @@ jobs:
             <div id="home">
               <p class="hello" id="hello"></p>
               <h1>Rota</h1>
-              <form id="f"><div class="sbox"><span>馃攷</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">鈫�</button></form>
-              <h2>H谋zl谋 eri艧im</h2>
+              <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">→</button></form>
+              <h2>Hızlı erişim</h2>
               <div class="grid" id="pins"></div>
               <div id="bmWrap" hidden><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
               <div id="hsWrap" hidden><h2>Son ziyaretler</h2><div class="list" id="hs"></div></div>
             </div>
             <div class="priv" id="priv" hidden>
-              <div class="big">馃暥锔�</div>
+              <div class="big">🕶️</div>
               <h1>Gizli sekme</h1>
-              <p>Bu sekmede gezdi臒in sayfalar ge莽mi艧e kaydedilmez ve sekmeyi kapat谋nca silinir.</p>
-              <p>陌stersen a艧a臒谋daki kutudan arama yapabilirsin.</p>
-              <form id="pf" style="margin-top:18px"><div class="sbox"><span>馃攷</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria-label="Git">鈫�</button></form>
+              <p>Bu sekmede gezdiğin sayfalar geçmişe kaydedilmez ve sekmeyi kapatınca silinir.</p>
+              <p>İstersen aşağıdaki kutudan arama yapabilirsin.</p>
+              <form id="pf" style="margin-top:18px"><div class="sbox"><span>🔎</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria-label="Git">→</button></form>
             </div>
           </main>
           <script>
@@ -236,9 +236,9 @@ jobs:
               document.getElementById("home").hidden = true; document.getElementById("priv").hidden = false;
             }
             var h = new Date().getHours();
-            var greet = h < 5 ? "陌yi geceler" : h < 12 ? "G眉nayd谋n" : h < 18 ? "陌yi g眉nler" : "陌yi ak艧amlar";
+            var greet = h < 5 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar";
             var day = ""; try { day = new Date().toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"}); } catch (e) {}
-            document.getElementById("hello").textContent = greet + (day ? " 路 " + day : "");
+            document.getElementById("hello").textContent = greet + (day ? " · " + day : "");
             document.getElementById("q").placeholder = cfg.engine + " ile ara veya adres yaz";
 
             function go(text){
@@ -253,13 +253,13 @@ jobs:
 
             var G = ["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
             var pins = (cfg.pins && cfg.pins.length >= 0 && Array.isArray(cfg.pins)) ? cfg.pins : [
-              {t:"YouTube",u:"https://m.youtube.com/",e:"鈻�",g:0},
-              {t:"Google",u:"https://www.google.com/",e:"馃攷",g:1},
-              {t:"M眉zik",u:"https://music.youtube.com/",e:"馃幍",g:2},
-              {t:"Haberler",u:"https://news.google.com/?hl=tr",e:"馃摪",g:3},
-              {t:"Harita",u:"https://maps.google.com/",e:"馃椇锔�",g:4},
-              {t:"Wikipedia",u:"https://tr.wikipedia.org/",e:"馃摎",g:5},
-              {t:"脟eviri",u:"https://translate.google.com/",e:"馃寪",g:6}
+              {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
+              {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
+              {t:"Müzik",u:"https://music.youtube.com/",e:"🎵",g:2},
+              {t:"Haberler",u:"https://news.google.com/?hl=tr",e:"📰",g:3},
+              {t:"Harita",u:"https://maps.google.com/",e:"🗺️",g:4},
+              {t:"Wikipedia",u:"https://tr.wikipedia.org/",e:"📚",g:5},
+              {t:"Çeviri",u:"https://translate.google.com/",e:"🌐",g:6}
             ];
             function save(){ try { if (window.Pusula && window.Pusula.savePins) window.Pusula.savePins(JSON.stringify(pins)); } catch (e) {} }
             function tile(label, url, icon, bg){
@@ -305,11 +305,11 @@ jobs:
 
             function openEditor(idx){
               var p = idx >= 0 ? pins[idx] : {t:"",u:"",e:""};
-              var o = sheet('<h3>' + (idx >= 0 ? "K谋sayolu d眉zenle" : "Yeni k谋sayol") + '</h3>' +
-                '<label>Ad</label><input id="fe_t" value="' + esc(p.t) + '" placeholder="脰rn. Wikipedia">' +
-                '<label>Adres</label><input id="fe_u" value="' + esc(p.u) + '" placeholder="脰rn. tr.wikipedia.org" autocapitalize="off">' +
-                '<label>Simge (iste臒e ba臒l谋 emoji)</label><input id="fe_e" value="' + esc(p.e) + '" maxlength="4" placeholder="馃摎">' +
-                '<div class="btns"><button id="fe_c">陌ptal</button><button class="pri" id="fe_s">Kaydet</button></div>');
+              var o = sheet('<h3>' + (idx >= 0 ? "Kısayolu düzenle" : "Yeni kısayol") + '</h3>' +
+                '<label>Ad</label><input id="fe_t" value="' + esc(p.t) + '" placeholder="Örn. Wikipedia">' +
+                '<label>Adres</label><input id="fe_u" value="' + esc(p.u) + '" placeholder="Örn. tr.wikipedia.org" autocapitalize="off">' +
+                '<label>Simge (isteğe bağlı emoji)</label><input id="fe_e" value="' + esc(p.e) + '" maxlength="4" placeholder="📚">' +
+                '<div class="btns"><button id="fe_c">İptal</button><button class="pri" id="fe_s">Kaydet</button></div>');
               o.querySelector("#fe_c").onclick = closeSheet;
               o.querySelector("#fe_s").onclick = function(){
                 var t = o.querySelector("#fe_t").value.trim();
@@ -324,7 +324,7 @@ jobs:
             }
 
             function openActions(idx){
-              var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin-top:4px"><button id="ac_e">D眉zenle</button><button class="dng" id="ac_d">Sil</button></div>' +
+              var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin-top:4px"><button id="ac_e">Düzenle</button><button class="dng" id="ac_d">Sil</button></div>' +
                 '<div class="btns" style="margin-top:10px"><button id="ac_c">Kapat</button></div>');
               o.querySelector("#ac_c").onclick = closeSheet;
               o.querySelector("#ac_e").onclick = function(){ closeSheet(); openEditor(idx); };
@@ -499,7 +499,7 @@ jobs:
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
 
-              /** Arka plana at谋l谋nca WebView'a "h芒l芒 g枚r眉n眉yorum" dedirtir; YouTube sesi kesilmez. */
+              /** Arka plana atılınca WebView'a "hâlâ görünüyorum" dedirtir; YouTube sesi kesilmez. */
               private class BgWebView(c: Context) : WebView(c) {
                   override fun onWindowVisibilityChanged(visibility: Int) {
                       if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
@@ -520,6 +520,8 @@ jobs:
               private var lastTitle = ""
               private var lastArtist = ""
               private var userPaused = false
+              /** true = tarayıcı native video PiP (requestPictureInPicture) kullanılıyor */
+              private var nativeVideoPip = false
               private lateinit var dockBar: LinearLayout
               private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
               private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -527,8 +529,7 @@ jobs:
               private val mediaStatePoll = object : Runnable {
                   override fun run() {
                       pollMedia()
-                      // PiP'te daha seyrek yokla 鈥� JS bask谋s谋 tak谋lma yarat谋yordu
-                      val delay = if (isInPictureInPictureMode) 4000L else 1500L
+                      val delay = if (isInPictureInPictureMode || nativeVideoPip) 4000L else 2000L
                       handler.postDelayed(this, delay)
                   }
               }
@@ -563,9 +564,8 @@ jobs:
                   val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
                   if (changed && (playing || PlaybackService.running)) {
-                      // PiP'te play state titre艧mesin diye userPaused'a sayg谋 duy
-                      val reportPlaying = if (isInPictureInPictureMode) (!userPaused && playing) else playing
-                      PlaybackService.update(this, reportPlaying, title, artist)
+                      val report = if (userPaused) false else playing
+                      PlaybackService.update(this, report, title, artist)
                   }
               }
 
@@ -580,30 +580,48 @@ jobs:
 
               private val pipMediaPump = object : Runnable {
                   override fun run() {
-                      if (!isInPictureInPictureMode) return
-                      // Hi莽 JS basma, hi莽 play() 莽a臒谋rma 鈥� sadece WebView'谋 uyan谋k tut.
-                      // S眉rekli play()/evaluateJavascript YouTube'u tak谋la tak谋la ilerletiyordu.
+                      // Native video PiP'te hiçbir şey yapma. Activity PiP'te sadece WebView uyanık kalsın.
+                      if (nativeVideoPip || !isInPictureInPictureMode) return
                       try { shown?.onResume() } catch (_: Exception) { }
                       handler.postDelayed(this, 5000L)
                   }
               }
 
               private fun enterPip() {
-                  if (Build.VERSION.SDK_INT < 26) { toast("Bu Android s眉r眉m眉 k眉莽眉k pencereyi desteklemiyor"); return }
+                  if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
+                  userPaused = false
+                  // 1) Önce native video PiP dene (Chrome gibi). CSS/Activity PiP takılmaya yol açıyordu.
                   try {
-                      userPaused = false
+                      currentWeb()?.evaluateJavascript(NATIVE_VIDEO_PIP_JS) { result ->
+                          val ok = result != null && result.contains("true")
+                          if (ok) {
+                              nativeVideoPip = true
+                              if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
+                          } else {
+                              enterActivityPip()
+                          }
+                      }
+                  } catch (_: Exception) {
+                      enterActivityPip()
+                  }
+              }
+
+              private fun enterActivityPip() {
+                  nativeVideoPip = false
+                  try {
                       try { shown?.onResume() } catch (_: Exception) { }
                       val b = android.app.PictureInPictureParams.Builder()
                           .setAspectRatio(android.util.Rational(16, 9))
                       if (Build.VERSION.SDK_INT >= 26) {
                           val acts = ArrayList<android.app.RemoteAction>()
-                          acts.add(pipAction(11, R.drawable.ic_pip_prev, "脰nceki", PlaybackService.ACTION_PREVIOUS))
+                          acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
                           acts.add(pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
                           acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
                           b.setActions(acts)
                       }
+                      // CSS ile sayfayı parçalamıyoruz — takılmanın ana kaynağı buydu.
                       enterPictureInPictureMode(b.build())
-                  } catch (_: Exception) { toast("K眉莽眉k pencere a莽谋lamad谋") }
+                  } catch (_: Exception) { toast("Küçük pencere açılamadı") }
               }
 
               private fun onPipChanged(pip: Boolean) {
@@ -615,19 +633,12 @@ jobs:
                       appInBackground = false
                       userPaused = false
                       try { shown?.onResume() } catch (_: Exception) { }
-                      // Sadece bir kez CSS + bir kez soft keep; sonra dokunma
-                      if (customView == null) {
-                          try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
-                      }
-                      try { currentWeb()?.evaluateJavascript(SOFT_KEEP_MEDIA_JS, null) } catch (_: Exception) { }
-                      try { currentWeb()?.evaluateJavascript(PIP_PAUSE_HEAVY_JS, null) } catch (_: Exception) { }
+                      // Bilinçli olarak PIP_ON_JS yok — CSS hack takılma yapıyordu
                       if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
                       handler.post(pipMediaPump)
                   } else {
-                      for (t in tabs) {
-                          try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
-                          try { t.web.evaluateJavascript(PIP_RESUME_HEAVY_JS, null) } catch (_: Exception) { }
-                      }
+                      nativeVideoPip = false
+                      try { currentWeb()?.evaluateJavascript(EXIT_NATIVE_PIP_JS, null) } catch (_: Exception) { }
                   }
               }
 
@@ -672,7 +683,7 @@ jobs:
 
               private val backgroundMediaPump = object : Runnable {
                   override fun run() {
-                      if (!appInBackground || !prefs.bgPlay || isInPictureInPictureMode) return
+                      if (!appInBackground || !prefs.bgPlay || isInPictureInPictureMode || nativeVideoPip) return
                       val t = tabs.getOrNull(cur)
                       try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
                       handler.postDelayed(this, 4000L)
@@ -766,11 +777,11 @@ jobs:
                   super.onPause()
                   saveTabs()
                   CookieManager.getInstance().flush()
-                  if (isInPictureInPictureMode) {
+                  if (isInPictureInPictureMode || nativeVideoPip) {
                       try { shown?.onResume() } catch (_: Exception) { }
                       if (hasMedia) PlaybackService.update(this, !userPaused, lastTitle, lastArtist)
                       handler.removeCallbacks(pipMediaPump)
-                      handler.post(pipMediaPump)
+                      if (!nativeVideoPip) handler.post(pipMediaPump)
                       return
                   }
                   if (prefs.bgPlay) {
@@ -786,10 +797,10 @@ jobs:
 
               override fun onStop() {
                   super.onStop()
-                  if (isInPictureInPictureMode) {
+                  if (isInPictureInPictureMode || nativeVideoPip) {
                       try { shown?.onResume() } catch (_: Exception) { }
                       handler.removeCallbacks(pipMediaPump)
-                      handler.post(pipMediaPump)
+                      if (!nativeVideoPip) handler.post(pipMediaPump)
                   }
               }
 
@@ -826,7 +837,7 @@ jobs:
                   window.setBackgroundDrawable(ColorDrawable(cBg))
               }
 
-              /** Temay谋 uygulamadan 莽谋kmadan, sekmeleri koruyarak uygular. */
+              /** Temayı uygulamadan çıkmadan, sekmeleri koruyarak uygular. */
               private fun applyTheme() {
                   if (customView != null) hideCustom()
                   val web = shown
@@ -897,7 +908,7 @@ jobs:
                   topBar.setBackgroundColor(cBg)
 
                   privateBadge = TextView(this)
-                  privateBadge.text = "馃暥 G陌ZL陌"
+                  privateBadge.text = "🕶 GİZLİ"
                   privateBadge.textSize = 11f
                   privateBadge.setTypeface(null, Typeface.BOLD)
                   privateBadge.setTextColor(Color.WHITE)
@@ -916,7 +927,7 @@ jobs:
                   pill.elevation = dp(3).toFloat()
 
                   val lead = TextView(this)
-                  lead.text = "馃攷"
+                  lead.text = "🔎"
                   lead.textSize = 15f
                   lead.gravity = Gravity.CENTER
                   pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
@@ -982,9 +993,9 @@ jobs:
                   findCount = TextView(this)
                   findCount.setTextColor(cSub); findCount.textSize = 13f; findCount.setPadding(dp(8), 0, dp(8), 0)
                   findBar.addView(findCount, LinearLayout.LayoutParams(wrap, wrap))
-                  findBar.addView(textBtn("鈻�") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
-                  findBar.addView(textBtn("鈻�") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40)))
-                  findBar.addView(textBtn("鉁�") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  findBar.addView(textBtn("▲") { currentWeb()?.findNext(false) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  findBar.addView(textBtn("▼") { currentWeb()?.findNext(true) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  findBar.addView(textBtn("✕") { closeFind() }, LinearLayout.LayoutParams(dp(40), dp(40)))
                   root.addView(findBar, LinearLayout.LayoutParams(match, wrap))
                   if (prefs.barBottom) {
                       root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
@@ -1007,14 +1018,14 @@ jobs:
                   bottom.setPadding(dp(6), dp(4), dp(6), dp(4))
 
                   backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }
-                  fwdBtn = iconBtn(R.drawable.ic_forward, "陌leri") { goForward() }
+                  fwdBtn = iconBtn(R.drawable.ic_forward, "İleri") { goForward() }
                   val homeBtn = iconBtn(R.drawable.ic_home, "Ana Sayfa") { goHome() }
                   homeBtn.setColorFilter(Color.WHITE)
                   val hg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
                   hg.shape = GradientDrawable.OVAL
                   homeBtn.background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), hg, null)
                   val addBtn = iconBtn(R.drawable.ic_add, "Yeni Sekme") { openTab(null) }
-                  val menuBtn = iconBtn(R.drawable.ic_menu, "Men眉") { v -> showMenu(v) }
+                  val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
 
                   val tabsWrap = FrameLayout(this)
                   tabsWrap.background = ripple(null)
@@ -1141,7 +1152,7 @@ jobs:
                   } catch (_: Exception) { }
               }
 
-              /** Ayar de臒i艧ince betikleri g眉nceller ve a莽谋k sayfay谋 yeniler. */
+              /** Ayar değişince betikleri günceller ve açık sayfayı yeniler. */
               private fun settingsChanged() {
                   for (t in tabs) syncScripts(t)
                   val c = tabs.getOrNull(cur) ?: return
@@ -1149,7 +1160,7 @@ jobs:
               }
 
               private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false): BTab? {
-                  if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme a莽谋labilir"); return null }
+                  if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme açılabilir"); return null }
                   val t = createTab(incognito)
                   switchTo(tabs.size - 1)
                   if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL))
@@ -1409,7 +1420,7 @@ jobs:
                       val i = if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url))
                       i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null
                       startActivity(i)
-                  } catch (_: Exception) { toast("Ba臒lant谋 a莽谋lamad谋") }
+                  } catch (_: Exception) { toast("Bağlantı açılamadı") }
                   return true
               }
 
@@ -1420,7 +1431,7 @@ jobs:
                   return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
                       "<style>body{font-family:sans-serif;margin:0;padding:32px 24px;background:$bg;color:$fg}h1{font-size:22px}p{opacity:.75}" +
                       "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
-                      "</style></head><body><h1>Y眉klenemedi</h1><p>$url</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
+                      "</style></head><body><h1>Yüklenemedi</h1><p>$url</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
               }
 
               private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) {
@@ -1437,8 +1448,8 @@ jobs:
                       if (Build.VERSION.SDK_INT >= 29) req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
                       else req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
                       (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
-                      toast("陌ndiriliyor: $name")
-                  } catch (_: Exception) { toast("陌ndirilemedi") }
+                      toast("İndiriliyor: $name")
+                  } catch (_: Exception) { toast("İndirilemedi") }
               }
 
               private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
@@ -1462,19 +1473,19 @@ jobs:
                   val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
                   val d = Dialog(this)
                   val items = listOf(
-                      SheetItem("鉃�", "Yeni sekme", false) { openTab(null) },
-                      SheetItem("馃暥锔�", "Gizli sekme", false) { openTab(null, true, true) },
-                      SheetItem(if (marked) "猸�" else "鈽�", if (marked) "陌mi kald谋r" else "Yer imi ekle", marked) {
-                          prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri g眉ncellendi")
+                      SheetItem("➕", "Yeni sekme", false) { openTab(null) },
+                      SheetItem("🕶️", "Gizli sekme", false) { openTab(null, true, true) },
+                      SheetItem(if (marked) "⭐" else "☆", if (marked) "İmi kaldır" else "Yer imi ekle", marked) {
+                          prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
                       },
-                      SheetItem("馃敄", "Yer imleri", false) { showEntries("Yer 陌mleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) },
-                      SheetItem("馃晿", "Ge莽mi艧", false) { showEntries("Ge莽mi艧", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) },
-                      SheetItem("馃攳", "Sayfada bul", false) { openFind() },
-                      SheetItem("馃枼锔�", "Masa眉st眉 sitesi", t.desktop) { toggleDesktop() },
-                      SheetItem("馃獰", "K眉莽眉k pencere", false) { enterPip() },
-                      SheetItem("馃摛", "Payla艧", false) { shareCurrent() },
-                      SheetItem("馃帹", "Tema", false) { chooseTheme { } },
-                      SheetItem("鈿欙笍", "Ayarlar", false) { showSettings() }
+                      SheetItem("🔖", "Yer imleri", false) { showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) },
+                      SheetItem("🕘", "Geçmiş", false) { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) },
+                      SheetItem("🔍", "Sayfada bul", false) { openFind() },
+                      SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() },
+                      SheetItem("🪟", "Küçük pencere", false) { enterPip() },
+                      SheetItem("📤", "Paylaş", false) { shareCurrent() },
+                      SheetItem("🎨", "Tema", false) { chooseTheme { } },
+                      SheetItem("⚙️", "Ayarlar", false) { showSettings() }
                   )
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
@@ -1547,7 +1558,7 @@ jobs:
                       val shownList = items.filter { q.isEmpty() || it.title.lowercase().contains(q) || it.url.lowercase().contains(q) }
                       if (shownList.isEmpty()) {
                           val e = TextView(this)
-                          e.text = if (items.isEmpty()) "馃梻锔廫n\nBurada hen眉z bir 艧ey yok" else "馃攳\n\nSonu莽 bulunamad谋"
+                          e.text = if (items.isEmpty()) "🗂️\n\nBurada henüz bir şey yok" else "🔍\n\nSonuç bulunamadı"
                           e.textSize = 15f; e.setTextColor(cSub); e.gravity = Gravity.CENTER
                           e.setPadding(0, dp(60), 0, 0)
                           listCol.addView(e, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -1581,7 +1592,7 @@ jobs:
                           t2.ellipsize = android.text.TextUtils.TruncateAt.END
                           col.addView(t2)
                           row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                          val x = textBtn("鉁�") { onDelete(en); items.remove(en); render() }
+                          val x = textBtn("✕") { onDelete(en); items.remove(en); render() }
                           x.setTextColor(cSub)
                           row.addView(x, LinearLayout.LayoutParams(dp(44), dp(44)))
                           val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -1601,7 +1612,7 @@ jobs:
                   rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
                   val search = EditText(this)
-                  search.hint = "馃攷  Ara"
+                  search.hint = "🔎  Ara"
                   search.setHintTextColor(cSub); search.setTextColor(cText); search.textSize = 15f
                   search.isSingleLine = true
                   search.background = shape(cSurface, 22)
@@ -1646,7 +1657,7 @@ jobs:
               private fun shareCurrent() {
                   val t = tabs.getOrNull(cur) ?: return
                   if (!t.url.startsWith("http")) return
-                  startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), "Payla艧"))
+                  startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), "Paylaş"))
               }
 
               private fun capturePreview(tab: BTab) {
@@ -1701,8 +1712,8 @@ jobs:
                   val actions = LinearLayout(this)
                   actions.orientation = LinearLayout.HORIZONTAL
                   actions.setPadding(0, dp(10), 0, 0)
-                  val b1 = pillBtn("锛�  Yeni sekme", intArrayOf(cAccent, cAccent2)) { d.dismiss(); openTab(null) }
-                  val b2 = pillBtn("馃暥  Gizli sekme", intArrayOf(0xFF6D2BD9.toInt(), 0xFFC026D3.toInt())) { d.dismiss(); openTab(null, true, true) }
+                  val b1 = pillBtn("＋  Yeni sekme", intArrayOf(cAccent, cAccent2)) { d.dismiss(); openTab(null) }
+                  val b2 = pillBtn("🕶  Gizli sekme", intArrayOf(0xFF6D2BD9.toInt(), 0xFFC026D3.toInt())) { d.dismiss(); openTab(null, true, true) }
                   val l1 = LinearLayout.LayoutParams(0, dp(48), 1f); l1.rightMargin = dp(6)
                   val l2 = LinearLayout.LayoutParams(0, dp(48), 1f); l2.leftMargin = dp(6)
                   actions.addView(b1, l1); actions.addView(b2, l2)
@@ -1715,7 +1726,7 @@ jobs:
 
               private fun fillTabs(grid: LinearLayout, title: TextView, d: Dialog) {
                   grid.removeAllViews()
-                  title.text = "Sekmeler 路 " + tabs.size
+                  title.text = "Sekmeler · " + tabs.size
                   for (rowStart in 0 until tabs.size step 2) {
                       val row = LinearLayout(this)
                       row.orientation = LinearLayout.HORIZONTAL
@@ -1746,14 +1757,14 @@ jobs:
                   head.gravity = Gravity.CENTER_VERTICAL
                   val label = TextView(this)
                   val name = if (t.title.isBlank() || t.title == "Yeni Sekme") shownUrl(t.pendingUrl ?: t.url).ifEmpty { "Yeni sekme" } else t.title
-                  label.text = (if (t.incognito) "馃暥 " else "") + name
+                  label.text = (if (t.incognito) "🕶 " else "") + name
                   label.textSize = 12.5f; label.maxLines = 1
                   label.ellipsize = android.text.TextUtils.TruncateAt.END
                   label.setTextColor(if (t.incognito) 0xFFF3ECFF.toInt() else cText)
                   if (i == cur) label.setTypeface(null, Typeface.BOLD)
                   label.setPadding(dp(4), 0, 0, 0)
                   head.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                  head.addView(textBtn("鉁�") { closeTab(i); fillTabs(grid, title, d) }, LinearLayout.LayoutParams(dp(34), dp(34)))
+                  head.addView(textBtn("✕") { closeTab(i); fillTabs(grid, title, d) }, LinearLayout.LayoutParams(dp(34), dp(34)))
                   card.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
                   val img = ImageView(this)
@@ -1804,7 +1815,7 @@ jobs:
 
               private fun chevron(): TextView {
                   val c = TextView(this)
-                  c.text = "鈥�"; c.textSize = 24f; c.setTextColor(cSub)
+                  c.text = "›"; c.textSize = 24f; c.setTextColor(cSub)
                   return c
               }
 
@@ -1860,7 +1871,7 @@ jobs:
                   col.addView(msg)
                   val row = LinearLayout(this)
                   row.orientation = LinearLayout.HORIZONTAL
-                  val no = textBtn("Vazge莽") { d.dismiss(); onNo() }
+                  val no = textBtn("Vazgeç") { d.dismiss(); onNo() }
                   no.setTextColor(cSub)
                   val yes = textBtn("Tamam") { d.dismiss(); onYes() }
                   yes.setTextColor(cAccent)
@@ -1876,7 +1887,7 @@ jobs:
               private fun startModeLabel(): String = when (prefs.startMode) {
                   "home" -> "Ana sayfa"
                   "blank" -> "Yeni sekme"
-                  else -> "Kald谋臒谋m yerden"
+                  else -> "Kaldığım yerden"
               }
 
               private fun chooseStartMode(onDone: () -> Unit) {
@@ -1890,7 +1901,7 @@ jobs:
                   bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
                   col.background = bgd
                   val tt = TextView(this)
-                  tt.text = "A莽谋l谋艧"
+                  tt.text = "Açılış"
                   tt.textSize = 18f
                   tt.setTypeface(null, Typeface.BOLD)
                   tt.setTextColor(cText)
@@ -1898,9 +1909,9 @@ jobs:
                   col.addView(tt)
                   data class Opt(val id: String, val title: String, val sub: String)
                   val opts = listOf(
-                      Opt("resume", "Kald谋臒谋m yerden", "Son sekmelerle devam et"),
-                      Opt("home", "Ana sayfa", Engines.get(prefs.engine).name + " a莽谋l谋r"),
-                      Opt("blank", "Yeni sekme", "Bo艧 sekmeden ba艧la")
+                      Opt("resume", "Kaldığım yerden", "Son sekmelerle devam et"),
+                      Opt("home", "Ana sayfa", Engines.get(prefs.engine).name + " açılır"),
+                      Opt("blank", "Yeni sekme", "Boş sekmeden başla")
                   )
                   for (o in opts) {
                       val row = LinearLayout(this)
@@ -1969,31 +1980,31 @@ jobs:
                       list.addView(l)
                   }
                   label("Gezinme")
-                  add(settingsRow("馃殌", "A莽谋l谋艧", startModeLabel(), chevron()) {
+                  add(settingsRow("🚀", "Açılış", startModeLabel(), chevron()) {
                       chooseStartMode { d.dismiss(); showSettings() }
                   })
-                  add(switchRow("馃洝锔�", "Reklam engelleyici", "YouTube reklamlar谋n谋 atlar", prefs.adBlock) { v ->
+                  add(switchRow("🛡️", "Reklam engelleyici", "YouTube reklamlarını atlar", prefs.adBlock) { v ->
                       prefs.adBlock = v; settingsChanged()
                   })
-                  add(switchRow("馃帶", "Arka planda 莽alma", "Uygulamadan 莽谋k谋nca m眉zik s眉rer", prefs.bgPlay) { v ->
+                  add(switchRow("🎧", "Arka planda çalma", "Uygulamadan çıkınca müzik sürer", prefs.bgPlay) { v ->
                       prefs.bgPlay = v; settingsChanged()
                   })
-                  add(switchRow("猬囷笍", "Adres 莽ubu臒u altta", "A莽谋ksa adres 莽ubu臒u ekran谋n alt谋nda olur", prefs.barBottom) { v ->
+                  add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
                       prefs.barBottom = v; applyTheme()
                   })
-                  add(settingsRow("馃寪", "Varsay谋lan taray谋c谋 yap", if (isDefaultBrowser()) "艦u an varsay谋lan 鉁�" else "Linkler Rota ile a莽谋ls谋n", chevron()) { d.dismiss(); askDefaultBrowser() })
-                  label("G枚r眉n眉m ve arama")
-                  add(settingsRow("馃帹", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
-                  add(settingsRow("馃攷", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
+                  add(settingsRow("🌐", "Varsayılan tarayıcı yap", if (isDefaultBrowser()) "Şu an varsayılan ✓" else "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
+                  label("Görünüm ve arama")
+                  add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
+                  add(settingsRow("🔎", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
                   label("Gizlilik")
-                  add(switchRow("馃Ч", "脟谋k谋艧ta temizle", "Kapan谋nca 莽erez ve veriler silinir", prefs.clearOnExit) { v ->
+                  add(switchRow("🧹", "Çıkışta temizle", "Kapanınca çerez ve veriler silinir", prefs.clearOnExit) { v ->
                       prefs.clearOnExit = v
                   })
-                  add(settingsRow("馃晿", "Ge莽mi艧i temizle", null, null) {
-                      themedConfirm("Ge莽mi艧 silinsin mi?", onYes = { prefs.clearHistory(); toast("Silindi") }, onNo = {})
+                  add(settingsRow("🕘", "Geçmişi temizle", null, null) {
+                      themedConfirm("Geçmiş silinsin mi?", onYes = { prefs.clearHistory(); toast("Silindi") }, onNo = {})
                   })
-                  add(settingsRow("馃Ы", "脰nbellek ve 莽erezler", null, null) {
-                      themedConfirm("脰nbellek ve 莽erezler silinsin mi?", onYes = { clearBrowsingData(); toast("Temizlendi") }, onNo = {})
+                  add(settingsRow("🧽", "Önbellek ve çerezler", null, null) {
+                      themedConfirm("Önbellek ve çerezler silinsin mi?", onYes = { clearBrowsingData(); toast("Temizlendi") }, onNo = {})
                   })
 
                   val scroll = ScrollView(this)
@@ -2019,18 +2030,18 @@ jobs:
               private fun openDefaultAppsSettings() {
                   try {
                       startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
-                      toast("\"Taray谋c谋 uygulamas谋\"n谋 se莽, sonra Rota'y谋 i艧aretle")
+                      toast("\"Tarayıcı uygulaması\"nı seç, sonra Rota'yı işaretle")
                   } catch (_: Exception) {
-                      try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar a莽谋lamad谋") }
+                      try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar açılamadı") }
                   }
               }
 
               private fun afterRole() {
-                  if (isDefaultBrowser()) toast("Rota art谋k varsay谋lan taray谋c谋 鉁�") else openDefaultAppsSettings()
+                  if (isDefaultBrowser()) toast("Rota artık varsayılan tarayıcı ✓") else openDefaultAppsSettings()
               }
 
               private fun askDefaultBrowser() {
-                  if (isDefaultBrowser()) { toast("Rota zaten varsay谋lan taray谋c谋 鉁�"); return }
+                  if (isDefaultBrowser()) { toast("Rota zaten varsayılan tarayıcı ✓"); return }
                   if (Build.VERSION.SDK_INT >= 29) {
                       try {
                           val rm = getSystemService(android.app.role.RoleManager::class.java)
@@ -2054,7 +2065,7 @@ jobs:
                   bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
                   col.background = bgd
                   val tt = TextView(this)
-                  tt.text = "Tema se莽"; tt.textSize = 18f; tt.setTypeface(null, Typeface.BOLD); tt.setTextColor(cText)
+                  tt.text = "Tema seç"; tt.textSize = 18f; tt.setTypeface(null, Typeface.BOLD); tt.setTextColor(cText)
                   tt.setPadding(dp(6), 0, 0, dp(10))
                   col.addView(tt)
                   for (p in Themes.all) {
@@ -2077,7 +2088,7 @@ jobs:
                       row.addView(nm, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                       if (p.id == prefs.theme) {
                           val ck = TextView(this)
-                          ck.text = "鉁�"; ck.textSize = 18f; ck.setTextColor(p.accent); ck.setTypeface(null, Typeface.BOLD)
+                          ck.text = "✓"; ck.textSize = 18f; ck.setTextColor(p.accent); ck.setTypeface(null, Typeface.BOLD)
                           row.addView(ck)
                       }
                       row.setOnClickListener {
@@ -2152,8 +2163,8 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // Reklam g枚r眉nt眉s眉n眉 gizler (siyah bekleme ekran谋 kal谋r), veriyi de臒i艧tirmez, yaln谋zca inmi艧 (tamponlanm谋艧) k谋sm谋 atlar, inmemi艧 yere sarmaz:
-                  // reklam s谋ras谋nda sesi kapat谋p 16 kat h谋zland谋r谋r ve "Atla" d眉臒mesine basar.
+                  // Reklam görüntüsünü gizler (siyah bekleme ekranı kalır), veriyi değiştirmez, yalnızca inmiş (tamponlanmış) kısmı atlar, inmemiş yere sarmaz:
+                  // reklam sırasında sesi kapatıp 16 kat hızlandırır ve "Atla" düğmesine basar.
                   const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
                       "if(location.hostname.indexOf('youtube.com')<0)return;" +
@@ -2253,7 +2264,7 @@ jobs:
                       "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
                       "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
                       "function doPrev(){var h=window.__msh&&window.__msh.previoustrack;if(h){try{h({action:'previoustrack'});fadeInAll(500);return;}catch(x){}}" +
-                      "var sels=['.ytp-prev-button','.ytp-chrome-bottom .ytp-prev-button','ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','#left-controls .previous-button','.previous-button','[aria-label=\\\"Previous\\\"]','[aria-label=\\\"脰nceki\\\"]','[aria-label*=\\\"Previous track\\\"]','[aria-label*=\\\"脰nceki par莽a\\\"]','[aria-label*=\\\"previous\\\"]'];" +
+                      "var sels=['.ytp-prev-button','.ytp-chrome-bottom .ytp-prev-button','ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','#left-controls .previous-button','.previous-button','[aria-label=\\\"Previous\\\"]','[aria-label=\\\"Önceki\\\"]','[aria-label*=\\\"Previous track\\\"]','[aria-label*=\\\"Önceki parça\\\"]','[aria-label*=\\\"previous\\\"]'];" +
                       "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v){v.currentTime=0;}fadeInAll(500);}" +
                       "fadeOutAll(400,doPrev);" +
@@ -2267,7 +2278,7 @@ jobs:
                       "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
                       "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
                       "function doNext(){var h=window.__msh&&window.__msh.nexttrack;if(h){try{h({action:'nexttrack'});fadeInAll(500);return;}catch(x){}}" +
-                      "var sels=['.ytp-next-button','.ytp-chrome-bottom .ytp-next-button','ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','#left-controls .next-button','.next-button','[aria-label=\\\"Next\\\"]','[aria-label=\\\"Sonraki\\\"]','[aria-label*=\\\"Next track\\\"]','[aria-label*=\\\"Sonraki par莽a\\\"]','[aria-label*=\\\"next\\\"]'];" +
+                      "var sels=['.ytp-next-button','.ytp-chrome-bottom .ytp-next-button','ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','#left-controls .next-button','.next-button','[aria-label=\\\"Next\\\"]','[aria-label=\\\"Sonraki\\\"]','[aria-label*=\\\"Next track\\\"]','[aria-label*=\\\"Sonraki parça\\\"]','[aria-label*=\\\"next\\\"]'];" +
                       "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v&&isFinite(v.duration)){v.currentTime=v.duration;}fadeInAll(500);}" +
                       "fadeOutAll(400,doNext);" +
@@ -2301,36 +2312,42 @@ jobs:
                       "});" +
                       "}catch(e){}})();"
 
-                  /** Sadece paused + tampon haz谋rsa play; aksi halde dokunma. */
-                  const val SOFT_KEEP_MEDIA_JS =
+                  /** Chrome tarzı native video PiP — Activity+CSS PiP yerine. true/false döner. */
+                  const val NATIVE_VIDEO_PIP_JS =
                       "(function(){try{" +
-                      "document.querySelectorAll('video,audio').forEach(function(m){" +
-                      "try{if(m.ended||!m.paused||m.readyState<2)return;var p=m.play();if(p&&p.catch)p.catch(function(){});}catch(x){}" +
-                      "});}catch(e){}})();"
+                      "var v=document.querySelector('video.html5-main-video')" +
+                      "||document.querySelector('.html5-video-player video')" +
+                      "||document.querySelector('video');" +
+                      "if(!v)return false;" +
+                      "if(!document.pictureInPictureEnabled)return false;" +
+                      "if(document.pictureInPictureElement)return true;" +
+                      "v.requestPictureInPicture();" +
+                      "return true;" +
+                      "}catch(e){return false;}})();"
 
-                  /** PiP s谋ras谋nda a臒谋r setInterval'leri dondur (reklam engelleyici vb.). */
-                  const val PIP_PAUSE_HEAVY_JS =
-                      "(function(){try{window.__pusulaPip=1;}catch(e){}})();"
-                  const val PIP_RESUME_HEAVY_JS =
-                      "(function(){try{window.__pusulaPip=0;}catch(e){}})();"
+                  const val EXIT_NATIVE_PIP_JS =
+                      "(function(){try{" +
+                      "if(document.pictureInPictureElement)document.exitPictureInPicture();" +
+                      "}catch(e){}})();"
 
                   const val PIP_ON_JS =
                       "(function(){try{" +
                       "if(document.getElementById('__pip'))return;" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
                       "if(!v)return;" +
-                      "try{if(v.paused&&v.readyState>=2){var p=v.play();if(p&&p.catch)p.catch(function(){});}}catch(x){}" +
+                      "try{if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}catch(x){}" +
                       "var s=document.createElement('style');s.id='__pip';" +
                       "s.textContent='" +
-                      "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important}" +
+                      "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:100%!important}" +
                       "body>*{visibility:hidden!important}" +
-                      ".html5-video-player,ytmusic-player-page,ytmusic-player,video.__pipv{visibility:visible!important}" +
-                      ".html5-video-player{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;z-index:2147483646!important;background:#000!important}" +
-                      "video.__pipv{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;object-fit:contain!important;z-index:2147483647!important;background:#000!important}" +
+                      "video.__pipv,.html5-video-player,ytmusic-player-page,ytmusic-player{visibility:visible!important}" +
+                      ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
+                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:none!important}" +
                       "';" +
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
-                      "var e=v.parentElement;while(e&&e!==document.body&&e!==document.documentElement){e.style.visibility='visible';e=e.parentElement;}" +
+                      "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e.style.setProperty('transform','none','important');e.style.setProperty('overflow','visible','important');e=e.parentElement;}" +
+                      "window.dispatchEvent(new Event('resize'));" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
@@ -2370,7 +2387,7 @@ jobs:
           cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
           package com.pusula.browser
 
-          /** Uygulama renk temalar谋. */
+          /** Uygulama renk temaları. */
           class Palette(
               val id: String,
               val name: String,
@@ -2395,9 +2412,9 @@ jobs:
                       c(0xFF120B1F), c(0xFF1A1230), c(0xFF2A1F4A), c(0xFFF1EAFF), c(0xFFA99BCF), c(0xFFD8C8FF), c(0xFF9B6BFF), c(0xFFFF5CA8)),
                   Palette("orman", "Orman", true,
                       c(0xFF08140F), c(0xFF0E1F17), c(0xFF173126), c(0xFFE6F7EE), c(0xFF86B8A0), c(0xFFBFE8D3), c(0xFF2ED47A), c(0xFF1BC5C5)),
-                  Palette("gunbatimi", "G眉n Bat谋m谋", true,
+                  Palette("gunbatimi", "Gün Batımı", true,
                       c(0xFF1A0F0F), c(0xFF241414), c(0xFF3A2020), c(0xFFFFEDE6), c(0xFFC9988A), c(0xFFFFD2C2), c(0xFFFF7A45), c(0xFFFF3D77)),
-                  Palette("acik", "A莽谋k", false,
+                  Palette("acik", "Açık", false,
                       c(0xFFF2F4F9), c(0xFFFFFFFF), c(0xFFE8ECF5), c(0xFF151A26), c(0xFF667089), c(0xFF3A4560), c(0xFF3D6BFF), c(0xFF7A5CFF)),
                   Palette("okyanus", "Okyanus", false,
                       c(0xFFEAF6FA), c(0xFFFFFFFF), c(0xFFDDEFF5), c(0xFF0F2530), c(0xFF5A7886), c(0xFF2A4E5E), c(0xFF0EA5C6), c(0xFF2F6BFF))
@@ -2426,7 +2443,7 @@ jobs:
           import androidx.core.app.ServiceCompat
           import androidx.core.content.ContextCompat
 
-          /** Bildirim ve kilit ekran谋 medya oynat谋c谋s谋. D眉臒meler uygulamaya yay谋n olarak iletilir. */
+          /** Bildirim ve kilit ekranı medya oynatıcısı. Düğmeler uygulamaya yayın olarak iletilir. */
           class PlaybackService : Service() {
               private var session: MediaSession? = null
               private var playing = false
@@ -2439,7 +2456,7 @@ jobs:
                   running = true
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
-                      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynat谋c谋", NotificationManager.IMPORTANCE_LOW))
+                      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
                   }
                   val s = MediaSession(this, "Rota")
                   s.setCallback(object : MediaSession.Callback() {
@@ -2495,7 +2512,7 @@ jobs:
                   b.setContentIntent(open)
                   b.setOngoing(playing)
                   b.setVisibility(Notification.VISIBILITY_PUBLIC)
-                  b.addAction(act(android.R.drawable.ic_media_previous, "脰nceki", pi(1, ACTION_PREVIOUS)))
+                  b.addAction(act(android.R.drawable.ic_media_previous, "Önceki", pi(1, ACTION_PREVIOUS)))
                   if (playing) b.addAction(act(android.R.drawable.ic_media_pause, "Duraklat", pi(2, ACTION_PAUSE)))
                   else b.addAction(act(android.R.drawable.ic_media_play, "Oynat", pi(3, ACTION_PLAY)))
                   b.addAction(act(android.R.drawable.ic_media_next, "Sonraki", pi(4, ACTION_NEXT)))
@@ -2661,7 +2678,7 @@ jobs:
           import org.json.JSONArray
           import org.json.JSONObject
 
-          /** Yeni sekme sayfas谋n谋n okudu臒u bilgiler. Yaln谋zca kendi sayfam谋z y眉kl眉yken cevap verir. */
+          /** Yeni sekme sayfasının okuduğu bilgiler. Yalnızca kendi sayfamız yüklüyken cevap verir. */
           class PusulaBridge(private val prefs: Prefs) {
               @Volatile var trusted = false
 
