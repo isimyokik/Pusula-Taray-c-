@@ -58,7 +58,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.1"
+                  versionName = "2.2"
               }
 
               buildTypes {
@@ -483,6 +483,9 @@ jobs:
           import org.json.JSONArray
           import org.json.JSONObject
           import java.io.ByteArrayInputStream
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import kotlin.concurrent.thread
 
           class MainActivity : AppCompatActivity() {
 
@@ -503,7 +506,6 @@ jobs:
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
 
-              /** Arka plana atılınca WebView'a "hâlâ görünüyorum" dedirtir; YouTube sesi kesilmez. */
               private class BgWebView(c: Context) : WebView(c) {
                   override fun onWindowVisibilityChanged(visibility: Int) {
                       if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
@@ -597,7 +599,6 @@ jobs:
 
               private fun isMusicPage(): Boolean = (tabs.getOrNull(cur)?.url ?: "").contains("music.youtube.com")
 
-              /** Videoyu gerçek tam ekrana alır. Tarayıcı dokunuş olmadan tam ekrana izin vermez; o yüzden oynatıcıya gerçek bir dokunuş yollarız. */
               private fun requestVideoFullscreen(after: (() -> Unit)?) {
                   val w = currentWeb()
                   if (w == null || customView != null) { after?.invoke(); return }
@@ -896,7 +897,6 @@ jobs:
                   window.setBackgroundDrawable(ColorDrawable(cBg))
               }
 
-              /** Temayı uygulamadan çıkmadan, sekmeleri koruyarak uygular. */
               private fun applyTheme() {
                   if (customView != null) hideCustom()
                   val web = shown
@@ -1213,7 +1213,6 @@ jobs:
                   } catch (_: Exception) { }
               }
 
-              /** Ayar değişince betikleri günceller ve açık sayfayı yeniler. */
               private fun settingsChanged() {
                   for (t in tabs) syncScripts(t)
                   val c = tabs.getOrNull(cur) ?: return
@@ -1514,6 +1513,62 @@ jobs:
                   } catch (_: Exception) { toast("İndirilemedi") }
               }
 
+              private fun downloadYoutubeVideo(ytUrl: String, isAudioOnly: Boolean) {
+                  toast("İndirme bağlantısı hazırlanıyor...")
+                  thread {
+                      try {
+                          val api = "https://api.cobalt.tools/api/json"
+                          val conn = URL(api).openConnection() as HttpURLConnection
+                          conn.requestMethod = "POST"
+                          conn.setRequestProperty("Content-Type", "application/json")
+                          conn.setRequestProperty("Accept", "application/json")
+                          conn.doOutput = true
+
+                          val payload = JSONObject()
+                          payload.put("url", ytUrl)
+                          if (isAudioOnly) {
+                              payload.put("downloadMode", "audio")
+                              payload.put("audioFormat", "mp3")
+                          }
+
+                          conn.outputStream.use { os ->
+                              os.write(payload.toString().toByteArray(Charsets.UTF_8))
+                          }
+
+                          if (conn.responseCode == 200) {
+                              val respText = conn.inputStream.bufferedReader().use { it.readText() }
+                              val json = JSONObject(respText)
+                              val downloadUrl = json.optString("url")
+
+                              if (downloadUrl.isNotBlank()) {
+                                  handler.post {
+                                      val ext = if (isAudioOnly) ".mp3" else ".mp4"
+                                      val safeTitle = (lastTitle.ifBlank { "YouTube_Video" }).replace(Regex("[^a-zA-Z0-9._-]"), "_") + ext
+                                      val req = DownloadManager.Request(Uri.parse(downloadUrl))
+                                      req.setTitle(safeTitle)
+                                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                      if (Build.VERSION.SDK_INT >= 29) {
+                                          req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safeTitle)
+                                      } else {
+                                          req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, safeTitle)
+                                      }
+                                      val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                      val dlId = dm.enqueue(req)
+                                      prefs.addDownload(dlId, safeTitle, downloadUrl)
+                                      toast("Uygulama içinde indiriliyor: $safeTitle")
+                                  }
+                              } else {
+                                  handler.post { toast("Bağlantı alınamadı.") }
+                              }
+                          } else {
+                              handler.post { toast("İndirme servisi yanıt vermedi.") }
+                          }
+                      } catch (e: Exception) {
+                          handler.post { toast("İndirme hatası oluştu.") }
+                      }
+                  }
+              }
+
               private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
               private fun hideKeyboard() {
                   val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -1533,23 +1588,28 @@ jobs:
               private fun showMenu(@Suppress("UNUSED_PARAMETER") anchor: View) {
                   val t = tabs.getOrNull(cur) ?: return
                   val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
-                  val d = Dialog(this)
-                  val items = listOf(
-                      SheetItem("➕", "Yeni sekme", false) { openTab(null) },
-                      SheetItem("🕶️", "Gizli sekme", false) { openTab(null, true, true) },
-                      SheetItem(if (marked) "⭐" else "☆", if (marked) "İmi kaldır" else "Yer imi ekle", marked) {
+                  val isYoutube = t.url.contains("youtube.com") || t.url.contains("youtu.be")
+                  val items = ArrayList<SheetItem>().apply {
+                      add(SheetItem("➕", "Yeni sekme", false) { openTab(null) })
+                      add(SheetItem("🕶️", "Gizli sekme", false) { openTab(null, true, true) })
+                      if (isYoutube) {
+                          add(SheetItem("🎬", "Videoyu İndir", true) { downloadYoutubeVideo(t.url, false) })
+                          add(SheetItem("🎵", "Sesi İndir (MP3)", true) { downloadYoutubeVideo(t.url, true) })
+                      }
+                      add(SheetItem(if (marked) "⭐" else "☆", if (marked) "İmi kaldır" else "Yer imi ekle", marked) {
                           prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
-                      },
-                      SheetItem("🔖", "Yer imleri", false) { showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) },
-                      SheetItem("🕘", "Geçmiş", false) { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) },
-                      SheetItem("📥", "İndirilenler", false) { showDownloads() },
-                      SheetItem("🔍", "Sayfada bul", false) { openFind() },
-                      SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() },
-                      SheetItem("🪟", "Küçük pencere", false) { enterPip() },
-                      SheetItem("📤", "Paylaş", false) { shareCurrent() },
-                      SheetItem("🎨", "Tema", false) { chooseTheme { } },
-                      SheetItem("⚙️", "Ayarlar", false) { showSettings() }
-                  )
+                      })
+                      add(SheetItem("🔖", "Yer imleri", false) { showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) })
+                      add(SheetItem("🕘", "Geçmiş", false) { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) })
+                      add(SheetItem("📥", "İndirilenler", false) { showDownloads() })
+                      add(SheetItem("🔍", "Sayfada bul", false) { openFind() })
+                      add(SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() })
+                      add(SheetItem("🪟", "Küçük pencere", false) { enterPip() })
+                      add(SheetItem("📤", "Paylaş", false) { shareCurrent() })
+                      add(SheetItem("🎨", "Tema", false) { chooseTheme { } })
+                      add(SheetItem("⚙️", "Ayarlar", false) { showSettings() })
+                  }
+                  val d = Dialog(this)
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
                   col.setPadding(dp(14), dp(10), dp(14), dp(22))
@@ -1694,10 +1754,18 @@ jobs:
                   d.show()
               }
 
-              /** Sayfada basılı tutulan videoyu/sesi/resmi bulup indirme seçeneği sunar. */
               private fun mediaLongPress(tab: BTab) {
                   val d = resources.displayMetrics.density
                   val x = (tab.lx / d).toInt(); val y = (tab.ly / d).toInt()
+                  
+                  val pageUrl = tab.url.lowercase()
+                  val isYoutube = pageUrl.contains("youtube.com") || pageUrl.contains("youtu.be")
+                  
+                  if (isYoutube) {
+                      showYoutubeMediaSheet(tab)
+                      return
+                  }
+
                   try {
                       tab.web.evaluateJavascript(MEDIA_AT_JS_START + x + "," + y + ")") { raw ->
                           try {
@@ -1712,13 +1780,50 @@ jobs:
                   } catch (_: Exception) { }
               }
 
+              private fun showYoutubeMediaSheet(tab: BTab) {
+                  if (inPip || customView != null) return
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(18), dp(14), dp(18), dp(22))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val ti = TextView(this)
+                  ti.text = "▶  " + (lastTitle.ifBlank { "YouTube İçeriği" })
+                  ti.textSize = 15f; ti.setTypeface(null, Typeface.BOLD); ti.setTextColor(cText); ti.maxLines = 2
+                  ti.ellipsize = android.text.TextUtils.TruncateAt.END
+                  ti.setPadding(dp(4), 0, dp(4), dp(14))
+                  col.addView(ti)
+                  
+                  val b1 = pillBtn("🎬  Videoyu İndir (MP4)", intArrayOf(cAccent, cAccent2)) {
+                      d.dismiss(); downloadYoutubeVideo(tab.url, false)
+                  }
+                  col.addView(b1, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
+                  
+                  val lp2 = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
+                  lp2.topMargin = dp(8)
+                  val b2 = pillBtn("🎵  Sesi İndir (MP3)", intArrayOf(0xFF6D2BD9.toInt(), 0xFFC026D3.toInt())) {
+                      d.dismiss(); downloadYoutubeVideo(tab.url, true)
+                  }
+                  col.addView(b2, lp2)
+
+                  val b3 = textBtn("Kapat") { d.dismiss() }
+                  b3.setTextColor(cSub)
+                  col.addView(b3, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)))
+                  sheetWindow(d, col, false)
+                  d.show()
+              }
+
               private fun showMediaSheet(tab: BTab, kind: String, url: String) {
                   if (inPip || customView != null) return
                   val low = url.lowercase()
                   val pageUrl = tab.url.lowercase()
                   val blocked = pageUrl.contains("youtube.com") || pageUrl.contains("youtu.be") ||
                       low.contains("googlevideo.com") || low.contains("youtube.com")
-                  if (blocked) { toast("YouTube içerikleri indirilemez"); return }
+                  if (blocked) { showYoutubeMediaSheet(tab); return }
                   if (url.isBlank()) { toast("İndirilecek bir dosya bulunamadı"); return }
                   if (low.startsWith("blob:") || low.contains(".m3u8") || low.contains(".mpd")) {
                       toast("Bu video parçalı akış olarak geldiği için indirilemiyor"); return
@@ -2084,7 +2189,6 @@ jobs:
                   return settingsRow(icon, title, sub, sw) { sw.toggle() }
               }
 
-
               private fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -2200,7 +2304,6 @@ jobs:
                   sheetWindow(d, col, false)
                   d.show()
               }
-
 
               private fun showSettings() {
                   val d = Dialog(this)
@@ -2419,8 +2522,6 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // Reklam görüntüsünü gizler (siyah bekleme ekranı kalır), veriyi değiştirmez, yalnızca inmiş (tamponlanmış) kısmı atlar, inmemiş yere sarmaz:
-                  // reklam sırasında sesi kapatıp 16 kat hızlandırır ve "Atla" düğmesine basar.
                   const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
                       "if(location.hostname.indexOf('youtube.com')<0)return;" +
@@ -2648,7 +2749,6 @@ jobs:
           cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
           package com.pusula.browser
 
-          /** Uygulama renk temaları. */
           class Palette(
               val id: String,
               val name: String,
@@ -2704,7 +2804,6 @@ jobs:
           import androidx.core.app.ServiceCompat
           import androidx.core.content.ContextCompat
 
-          /** Bildirim ve kilit ekranı medya oynatıcısı. Düğmeler uygulamaya yayın olarak iletilir. */
           class PlaybackService : Service() {
               private var session: MediaSession? = null
               private var playing = false
@@ -2876,7 +2975,6 @@ jobs:
                 set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
                 set(v) { sp.edit().putBoolean("adBlock", v).apply() }
-              /** home | resume | blank */
               var startMode: String get() = sp.getString("startMode", "resume") ?: "resume"
                 set(v) { sp.edit().putString("startMode", v).apply() }
               var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
@@ -2971,7 +3069,6 @@ jobs:
           import org.json.JSONArray
           import org.json.JSONObject
 
-          /** Yeni sekme sayfasının okuduğu bilgiler. Yalnızca kendi sayfamız yüklüyken cevap verir. */
           class PusulaBridge(private val prefs: Prefs) {
               @Volatile var trusted = false
 
@@ -3107,5 +3204,3 @@ jobs:
           name: Pusula-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-
-
