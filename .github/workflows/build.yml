@@ -1,4 +1,4 @@
-name: Pusula APK (Tüm eksik dosyalar tamamlandı)
+name: Pusula APK (Artifact düzeltilmiş)
 on:
   push:
   workflow_dispatch:
@@ -9,18 +9,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Java‑17 kur
+      - name: Java‑17 ayarla
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Proje yapısını sıfırdan oluştur
+      - name: Proje yapısını oluştur
         run: |
           rm -rf app build gradle* build.gradle* settings.gradle*
           mkdir -p app/src/main/{assets,java/com/pusula/browser,res/{drawable,layout,values}}
 
-          # Kök proje
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.9.1" apply false
@@ -47,7 +46,6 @@ jobs:
           kotlin.code.style=official
           EOF
 
-          # Uygulama build dosyası
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -61,7 +59,7 @@ jobs:
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.4‑final‑build"
+                  versionName = "2.4‑artifact‑fix"
               }
               buildTypes { release { isMinifyEnabled = false } }
               compileOptions {
@@ -79,16 +77,13 @@ jobs:
           }
           EOF
 
-          # Başlatma simgesi (ic_launcher.xml)
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="oval">
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
               <solid android:color="#2962FF"/>
           </shape>
           EOF
 
-          # Stil dosyası
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -98,7 +93,6 @@ jobs:
           </resources>
           EOF
 
-          # Uygulama adı metni
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -106,19 +100,15 @@ jobs:
           </resources>
           EOF
 
-          # Ana aktivite görünümü
           cat > app/src/main/res/layout/activity_main.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"/>
+              android:layout_width="match_parent" android:layout_height="match_parent"/>
           EOF
 
-          # AndroidManifest
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.pusula.browser">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.pusula.browser">
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
@@ -129,39 +119,21 @@ jobs:
                   android:label="@string/app_name"
                   android:theme="@style/Theme.Pusula"
                   android:usesCleartextTraffic="true">
-                  <service
-                      android:name=".PlaybackService"
-                      android:exported="false"
-                      android:foregroundServiceType="mediaPlayback"/>
-                  <activity
-                      android:name=".MainActivity"
+                  <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback"/>
+                  <activity android:name=".MainActivity"
                       android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
-                      android:exported="true"
-                      android:launchMode="singleTask"
+                      android:exported="true" android:launchMode="singleTask"
                       android:supportsPictureInPicture="true"
                       android:windowSoftInputMode="adjustResize|stateHidden">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.APP_BROWSER"/>
-                          <category android:name="android.intent.category.DEFAULT"/>
-                      </intent-filter>
-                      <intent-filter>
-                          <action android:name="android.intent.action.VIEW"/>
-                          <category android:name="android.intent.category.DEFAULT"/>
-                          <category android:name="android.intent.category.BROWSABLE"/>
-                          <data android:scheme="http"/>
-                          <data android:scheme="https"/>
-                      </intent-filter>
+                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.APP_BROWSER"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
+                      <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/>
+                      <data android:scheme="http"/><data android:scheme="https"/></intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
 
-          # Yeni‑sekme HTML (orijinal kodun)
           cat > app/src/main/assets/newtab.html <<'EOF'
           <!doctype html>
           <html lang="tr">
@@ -277,7 +249,6 @@ jobs:
           </html>
           EOF
 
-          # Kotlin sınıfları
           cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
           package com.pusula.browser
           import android.os.Bundle
@@ -300,15 +271,17 @@ jobs:
           }
           EOF
 
-          # Gradle wrapper oluştur
           gradle wrapper --gradle-version 8.11.1
           chmod +x gradlew
 
-      - name: Derlemeyi çalıştır
+      - name: Derle
         run: ./gradlew clean assembleRelease
 
-      - name: APK'yı yükle
+      - name: APK dosyasını bul ve göster
+        run: find . -name "*.apk"
+
+      - name: Artifact'a yükle
         uses: actions/upload-artifact@v4
         with:
-          name: pusula‑release‑apk
-          path: app/build/outputs/apk/release/app‑release.apk
+          name: pusula‑apk
+          path: app/build/outputs/apk/release/*.apk
