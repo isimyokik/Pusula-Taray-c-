@@ -31,6 +31,7 @@ jobs:
                   gradlePluginPortal()
               }
           }
+
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
@@ -38,6 +39,7 @@ jobs:
                   mavenCentral()
               }
           }
+
           rootProject.name = "Pusula"
           include(":app")
           EOF
@@ -46,21 +48,25 @@ jobs:
               id("com.android.application")
               id("org.jetbrains.kotlin.android")
           }
+
           android {
               namespace = "com.pusula.browser"
               compileSdk = 35
+
               defaultConfig {
                   applicationId = "com.pusula.browser"
                   minSdk = 24
                   targetSdk = 35
                   versionCode = 1
-                  versionName = "2.1‑fix‑ad‑pip"
+                  versionName = "2.1"
               }
+
               buildTypes {
                   release {
                       isMinifyEnabled = false
                   }
               }
+
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
@@ -69,6 +75,7 @@ jobs:
                   jvmTarget = "17"
               }
           }
+
           dependencies {
               implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.appcompat:appcompat:1.7.0")
@@ -79,20 +86,24 @@ jobs:
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
               <application
                   android:allowBackup="false"
                   android:icon="@drawable/ic_launcher"
                   android:label="@string/app_name"
                   android:theme="@style/Theme.Pusula"
                   android:usesCleartextTraffic="true">
+
                   <service
                       android:name=".PlaybackService"
                       android:exported="false"
                       android:foregroundServiceType="mediaPlayback" />
+
                   <activity
                       android:name=".MainActivity"
                       android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
@@ -195,7 +206,7 @@ jobs:
             <div id="home">
               <p class="hello" id="hello"></p>
               <h1>Rota</h1>
-              <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria‑label="Git">→</button></form>
+              <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">→</button></form>
               <h2>Hızlı erişim</h2>
               <div class="grid" id="pins"></div>
               <div id="bmWrap" hidden><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
@@ -206,7 +217,7 @@ jobs:
               <h1>Gizli sekme</h1>
               <p>Bu sekmede gezdiğin sayfalar geçmişe kaydedilmez ve sekmeyi kapatınca silinir.</p>
               <p>İstersen aşağıdaki kutudan arama yapabilirsin.</p>
-              <form id="pf" style="margin‑top:18px"><div class="sbox"><span>🔎</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria‑label="Git">→</button></form>
+              <form id="pf" style="margin-top:18px"><div class="sbox"><span>🔎</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria-label="Git">→</button></form>
             </div>
           </main>
           <script>
@@ -226,7 +237,7 @@ jobs:
             }
             var h = new Date().getHours();
             var greet = h < 5 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar";
-            var day = ""; try { day = new Date().toLocaleDateString("tr‑TR",{weekday:"long",day:"numeric",month:"long"}); } catch (e) {}
+            var day = ""; try { day = new Date().toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"}); } catch (e) {}
             document.getElementById("hello").textContent = greet + (day ? " · " + day : "");
             document.getElementById("q").placeholder = cfg.engine + " ile ara veya adres yaz";
 
@@ -234,13 +245,13 @@ jobs:
               text = (text || "").trim();
               if (!text) return;
               if (/^https?:\/\//i.test(text)) { location.href = text; return; }
-              if (!/\s/.test(text) && /^([a‑z0‑9‑]+\.)+[a‑z]{2,}([:\/?#].*)?$/i.test(text)) { location.href = "https://" + text; return; }
+              if (!/\s/.test(text) && /^([a-z0-9-]+\.)+[a-z]{2,}([:\/?#].*)?$/i.test(text)) { location.href = "https://" + text; return; }
               location.href = cfg.search.replace("%s", encodeURIComponent(text));
             }
             document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
             document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
 
-            var G = ["linear‑gradient(135deg,#ff4b4b,#c4001d)","linear‑gradient(135deg,#4c8dff,#2457d6)","linear‑gradient(135deg,#ff7a45,#ff2d6f)","linear‑gradient(135deg,#34c3ff,#2477ff)","linear‑gradient(135deg,#34d37a,#0f9d58)","linear‑gradient(135deg,#8a5cff,#4a35d9)","linear‑gradient(135deg,#ffc84a,#ff8a1f)","linear‑gradient(135deg,#00b894,#00796b)","linear‑gradient(135deg,#fd79a8,#d63384)"];
+            var G = ["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
             var pins = (cfg.pins && cfg.pins.length >= 0 && Array.isArray(cfg.pins)) ? cfg.pins : [
               {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
               {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
@@ -277,7 +288,7 @@ jobs:
             function closeSheet(){ var o = document.getElementById("ov"); if (o) o.remove(); }
             function sheet(html){
               closeSheet();
-              var o = document.createElement("div"); o.className = "sheet‑bg"; o.id = "ov";
+              var o = document.createElement("div"); o.className = "sheet-bg"; o.id = "ov";
               o.innerHTML = '<div class="sheet">' + html + '</div>';
               var t0 = Date.now();
               o.addEventListener("click", function(e){ if (e.target === o && Date.now() - t0 > 600) closeSheet(); });
@@ -290,7 +301,7 @@ jobs:
               if (!/^https?:\/\//i.test(u)) u = "https://" + u;
               return u;
             }
-            function esc(x){ return String(x == null ? "" : x).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+            function esc(x){ return String(x == null ? "" : x).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
 
             function openEditor(idx){
               var p = idx >= 0 ? pins[idx] : {t:"",u:"",e:""};
@@ -313,8 +324,8 @@ jobs:
             }
 
             function openActions(idx){
-              var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin‑top:4px"><button id="ac_e">Düzenle</button><button class="dng" id="ac_d">Sil</button></div>' +
-                '<div class="btns" style="margin‑top:10px"><button id="ac_c">Kapat</button></div>');
+              var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin-top:4px"><button id="ac_e">Düzenle</button><button class="dng" id="ac_d">Sil</button></div>' +
+                '<div class="btns" style="margin-top:10px"><button id="ac_c">Kapat</button></div>');
               o.querySelector("#ac_c").onclick = closeSheet;
               o.querySelector("#ac_e").onclick = function(){ closeSheet(); openEditor(idx); };
               o.querySelector("#ac_d").onclick = function(){ pins.splice(idx, 1); save(); closeSheet(); render(); };
@@ -365,7 +376,7 @@ jobs:
             }
             render();
 
-            var grads = ["linear‑gradient(135deg,#00b894,#00796b)","linear‑gradient(135deg,#a55eea,#6c3fc8)","linear‑gradient(135deg,#fd79a8,#d63384)","linear‑gradient(135deg,#5f7cff,#3949ab)","linear‑gradient(135deg,#ff9f43,#e17055)"];
+            var grads = ["linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#a55eea,#6c3fc8)","linear-gradient(135deg,#fd79a8,#d63384)","linear-gradient(135deg,#5f7cff,#3949ab)","linear-gradient(135deg,#ff9f43,#e17055)"];
             function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./,""); } catch (e) { return u; } }
             var bms = cfg.bookmarks || [];
             if (bms.length) {
@@ -488,6 +499,7 @@ jobs:
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
 
+              /** Arka plana atılınca WebView'a "hâlâ görünüyorum" dedirtir; YouTube sesi kesilmez. */
               private class BgWebView(c: Context) : WebView(c) {
                   override fun onWindowVisibilityChanged(visibility: Int) {
                       if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
@@ -743,7 +755,7 @@ jobs:
                   if (isInPictureInPictureMode) {
                       try { shown?.onResume() } catch (_: Exception) { }
                       try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
+                      if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
                       handler.removeCallbacks(pipMediaPump)
                       handler.post(pipMediaPump)
                       return
@@ -802,6 +814,7 @@ jobs:
                   window.setBackgroundDrawable(ColorDrawable(cBg))
               }
 
+              /** Temayı uygulamadan çıkmadan, sekmeleri koruyarak uygular. */
               private fun applyTheme() {
                   if (customView != null) hideCustom()
                   val web = shown
@@ -868,4 +881,21 @@ jobs:
                   topBar = LinearLayout(this)
                   topBar.orientation = LinearLayout.HORIZONTAL
                   topBar.gravity = Gravity.CENTER_VERTICAL
-                  topBar.setPadding(dp
+                  topBar.setPadding(dp(10), dp(8), dp(10), dp(8))
+                  topBar.setBackgroundColor(cBg)
+
+                  privateBadge = TextView(this)
+                  privateBadge.text = "🕶 GİZLİ"
+                  privateBadge.textSize = 11f
+                  privateBadge.setTypeface(null, Typeface.BOLD)
+                  privateBadge.setTextColor(Color.WHITE)
+                  privateBadge.gravity = Gravity.CENTER
+                  privateBadge.setPadding(dp(10), 0, dp(10), 0)
+                  privateBadge.background = shape(0xFF8B3DFF.toInt(), 16)
+                  privateBadge.visibility = View.GONE
+                  val blp = LinearLayout.LayoutParams(wrap, dp(32))
+                  blp.rightMargin = dp(8)
+                  topBar.addView(privateBadge, blp)
+
+                  val pill = LinearLayout(this)
+                  pill.orientation = LinearLayout.HORIZONT
