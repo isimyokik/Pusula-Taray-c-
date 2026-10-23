@@ -1,4 +1,4 @@
-name: Pusula Temiz Derleme App‑Tricks Uyumlu
+name: Pusula Gradle‑8.9 Düzeltildi App‑Tricks Uyumlu
 on:
   push:
   workflow_dispatch:
@@ -47,7 +47,8 @@ jobs:
           rootProject.name = "Pusula"
           include(":app")
           EOF
-          gradle wrapper --gradle-version 8.7
+          # HATA DÜZELTİLDİ: Gradle 8.9 kullanılıyor
+          gradle wrapper --gradle-version 8.9
           chmod +x gradlew
           # app modülü yapılandırması
           cat > app/build.gradle.kts <<'EOF'
@@ -62,8 +63,8 @@ jobs:
                   applicationId = "com.pusula.browser"
                   minSdk = 24
                   targetSdk = 35
-                  versionCode = 5
-                  versionName = "2.4‑clean‑build"
+                  versionCode = 6
+                  versionName = "2.5‑gradle‑8.9‑fix"
               }
               buildTypes {
                   debug {
