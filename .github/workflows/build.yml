@@ -1,4 +1,4 @@
-name: Pusula Gradle‑8.9 Düzeltildi App‑Tricks Uyumlu
+name: Pusula Kütüphane‑Sürüm Düzeltildi App‑Tricks Uyumlu
 on:
   push:
   workflow_dispatch:
@@ -47,10 +47,9 @@ jobs:
           rootProject.name = "Pusula"
           include(":app")
           EOF
-          # HATA DÜZELTİLDİ: Gradle 8.9 kullanılıyor
           gradle wrapper --gradle-version 8.9
           chmod +x gradlew
-          # app modülü yapılandırması
+          # app modülü yapılandırması (geçerli kütüphane sürümleri)
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -63,8 +62,8 @@ jobs:
                   applicationId = "com.pusula.browser"
                   minSdk = 24
                   targetSdk = 35
-                  versionCode = 6
-                  versionName = "2.5‑gradle‑8.9‑fix"
+                  versionCode = 7
+                  versionName = "2.6‑lib‑fix"
               }
               buildTypes {
                   debug {
@@ -87,7 +86,8 @@ jobs:
               implementation("androidx.appcompat:appcompat:1.7.0")
               implementation("androidx.webkit:webkit:1.12.1")
               implementation("androidx.media:media:1.7.0")
-              implementation("androidx.lifecycle:lifecycle‑service‑ktx:2.8.4")
+              // LifecycleService yerine temel lifecycle‑runtime‑ktx kullanıldı
+              implementation("androidx.lifecycle:lifecycle‑runtime‑ktx:2.10.0")
           }
           EOF
           # Kotlin sınıfları
@@ -150,6 +150,7 @@ jobs:
               fun savePins(json: String) {}
           }
           EOF
+          # DÜZELTİLDİ: LifecycleService yerine Service sınıfı kullanıldı
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
           package com.pusula.browser
           import android.app.NotificationChannel
@@ -157,9 +158,10 @@ jobs:
           import android.app.PendingIntent
           import android.content.Intent
           import android.os.Build
+          import android.app.Service
+          import android.os.IBinder
           import androidx.core.app.NotificationCompat
-          import androidx.lifecycle.LifecycleService
-          class PlaybackService : LifecycleService() {
+          class PlaybackService : Service() {
               companion object {
                   const val CH_ID = "pusula_media"
                   const val ACTION_PLAY = "com.pusula.action.PLAY"
@@ -219,6 +221,7 @@ jobs:
                   running = false
                   super.onDestroy()
               }
+              override fun onBind(intent: Intent?): IBinder? = null
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
