@@ -13,8 +13,12 @@ jobs:
           java-version: '17'
 
       - name: Android SDK Kurulumu
+        uses: android-actions/setup-android@v3
+
+      - name: Gerekli SDK Paketlerini Yukle
         run: |
-          echo "y" | sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Projeyi olustur
         run: |
