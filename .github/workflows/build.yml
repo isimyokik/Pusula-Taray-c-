@@ -332,7 +332,6 @@ jobs:
               private const val LANDSCAPE_VIDEO_JS = ""
               private const val PORTRAIT_VIDEO_JS = ""
 
-              // SADECE İSTENEN EKLENTİ: YouTube reklam‑altyazı engelleyici JS sabiti
               private const val YOUTUBE_ADFIX_JS = """
               (function(){let obs;function run(){
                 const skipBtn=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern');
@@ -352,7 +351,6 @@ jobs:
               if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startObs);else startObs();})();
               """
 
-              // SADECE İSTENEN EKLENTİ: PiP döngü koruma değişkeni
               private var isInPipNow = false
 
               private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
@@ -425,7 +423,6 @@ jobs:
                   }
                   val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
-                  // SADECE İSTENEN EKLENTİ: PiP‑de tekrar güncellemeyi engelle
                   if (changed && !isInPipNow) {
                       if (playing || PlaybackService.running) PlaybackService.update(this, playing, title, artist)
                   }
@@ -572,7 +569,6 @@ jobs:
               inner class MyWebClient : WebViewClient() {
                   override fun onPageFinished(view: WebView?, url: String?) {
                       super.onPageFinished(view, url)
-                      // SADECE İSTENEN EKLENTİ: YouTube sayfalarına reklam‑altyazı JS’sini enjekte et
                       url?.let { u ->
                           if (u.contains("youtube.com") || u.contains("youtu.be")) {
                               view?.evaluateJavascript(YOUTUBE_ADFIX_JS, null)
@@ -583,7 +579,6 @@ jobs:
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-                  // … orijinal başlatma kodunuz burada devam eder (kısmen kesik, temel yapı korundu)
               }
 
               override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
@@ -596,11 +591,10 @@ jobs:
               }
 
               private fun openTab(url: String?, incognito: Boolean): BTab? {
-                  return null // yer tutucu, orijinal sınıf yapısı bozulmasın diye bırakıldı
+                  return null
               }
           }
 
-          // Eksik yardımcı sınıflar – orijinal derleme bağımlılıkları için yer tutucu
           class Prefs { companion object { val bgPlay = true } }
           class PusulaBridge
           class PlaybackService : android.app.Service() {
@@ -633,6 +627,10 @@ jobs:
               <string name="app_name">Pusula</string>
           </resources>
           EOF
+
+          # Gradle wrapper dosyalarını oluştur
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
 
       - name: Gradle önbelleği
         uses: actions/cache@v3
