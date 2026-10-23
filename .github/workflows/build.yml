@@ -519,6 +519,10 @@ jobs:
               private var lastPlaying = false
               private var lastTitle = ""
               private var lastArtist = ""
+              private var sentPos = 0L
+              private var sentAt = 0L
+              private var sentPlaying = false
+              private var lastDur = -1L
               private lateinit var dockBar: LinearLayout
               private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
               private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -540,6 +544,8 @@ jobs:
                   var playing = false
                   var title = ""
                   var artist = ""
+                  var dur = -1L
+                  var pos = 0L
                   try {
                       if (raw != null && raw != "null" && raw != "\"\"") {
                           val inner = JSONArray("[" + raw + "]").getString(0)
@@ -549,6 +555,8 @@ jobs:
                               playing = o.optBoolean("p")
                               title = o.optString("t")
                               artist = o.optString("a")
+                              dur = o.optLong("d", -1L)
+                              pos = o.optLong("c", 0L)
                           }
                       }
                   } catch (_: Exception) { return }
@@ -556,9 +564,15 @@ jobs:
                       if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
                       return
                   }
-                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist
-                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist
-                  if (changed && !isInPictureInPictureMode && (playing || PlaybackService.running)) PlaybackService.update(this, playing, title, artist)
+                  val now = android.os.SystemClock.elapsedRealtime()
+                  val expected = if (sentPlaying) sentPos + (now - sentAt) else sentPos
+                  val jumped = hasMedia && Math.abs(pos - expected) > 2500L
+                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist || dur != lastDur || jumped
+                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastDur = dur
+                  if (changed && (playing || PlaybackService.running)) {
+                      sentPos = pos; sentAt = now; sentPlaying = playing
+                      PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur)
+                  }
               }
 
               private fun pipAction(code: Int, icon: Int, label: String, action: String): android.app.RemoteAction {
@@ -596,18 +610,12 @@ jobs:
                       if (customView == null) {
                           try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
                       }
-                      // Küçük pencere açıkken bildirim kalkar; pencerenin kendi düğmeleri kontrol görevi görür.
-                      PlaybackService.stop(this)
-                      // Tek seferlik kontrol: pencere küçülürken video duraksadıysa bir kez devam ettir.
-                      handler.postDelayed({
-                          if (isInPictureInPictureMode && lastPlaying) {
-                              try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) { }
-                          }
-                      }, 600)
+                      // Küçük pencere açıkken bildirim sessize alınır (üstte simge çıkmaz), kilit ekranında kalır.
+                      if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true)
                   } else {
                       for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
                       // Küçük pencere kapanınca müzik/video çalıyorsa bildirim geri gelir.
-                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
+                      if (hasMedia && (lastPlaying || PlaybackService.running)) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false)
                   }
               }
 
@@ -624,6 +632,15 @@ jobs:
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
+                      if (act == PlaybackService.ACTION_SEEK) {
+                          val sec = intent.getLongExtra("pos", 0L) / 1000.0
+                          try {
+                              tabs.getOrNull(cur)?.web?.evaluateJavascript(
+                                  "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
+                                  "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(v)v.currentTime=" + sec + ";}catch(e){}})();", null)
+                          } catch (_: Exception) { }
+                          return
+                      }
                       val js = when (act) {
                           PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
@@ -712,6 +729,7 @@ jobs:
                       addAction(PlaybackService.ACTION_PAUSE)
                       addAction(PlaybackService.ACTION_PREVIOUS)
                       addAction(PlaybackService.ACTION_NEXT)
+                      addAction(PlaybackService.ACTION_SEEK)
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
                   startBrowsing()
@@ -2256,7 +2274,7 @@ jobs:
                       "if(site(t)){var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){if(ms[i].getAttribute('property')==='og:title'){t=ms[i].getAttribute('content')||'';break;}}}" +
                       "if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');" +
                       "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
-                      "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a});" +
+                      "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a,d:(isFinite(v.duration)?Math.round(v.duration*1000):-1),c:Math.round((v.currentTime||0)*1000)});" +
                       "}catch(e){return '';}})();"
                   const val KEEP_MEDIA_PLAYING_JS =
                       "(function(){try{" +
@@ -2278,11 +2296,6 @@ jobs:
                       "if(!v)return;" +
                       "window.__userPause=false;window.__pipBlock=true;" +
                       "if(!window.__op){window.__op=HTMLMediaElement.prototype.pause;HTMLMediaElement.prototype.pause=function(){if(window.__pipBlock&&!window.__userPause)return;return window.__op.apply(this,arguments);};}" +
-                      "if(!window.__pg){window.__pg=true;var n=0,t0=0;" +
-                      "window.__pgf=function(e){var m=e.target;if(!m||(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO'))return;if(window.__userPause||m.ended)return;" +
-                      "var now=Date.now();if(now-t0>3000){t0=now;n=0;}if(n++>=3)return;" +
-                      "setTimeout(function(){if(m.paused&&!window.__userPause){var p=m.play();if(p&&p.catch)p.catch(function(){});}},80);};" +
-                      "document.addEventListener('pause',window.__pgf,true);}" +
                       "var s=document.createElement('style');s.id='__pip';" +
                       "s.textContent='" +
                       "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:100%!important}" +
@@ -2300,7 +2313,6 @@ jobs:
                       "(function(){try{" +
                       "window.__pipBlock=false;window.__userPause=false;" +
                       "if(window.__op){HTMLMediaElement.prototype.pause=window.__op;window.__op=null;}" +
-                      "if(window.__pgf){document.removeEventListener('pause',window.__pgf,true);window.__pgf=null;}window.__pg=false;" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
                       "document.querySelectorAll('*').forEach(function(x){try{if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');}catch(z){}});" +
@@ -2399,6 +2411,9 @@ jobs:
               private var title = ""
               private var artist = ""
               private var foregroundStarted = false
+              private var quiet = false
+              private var position = PlaybackState.PLAYBACK_POSITION_UNKNOWN
+              private var duration = -1L
 
               override fun onCreate() {
                   super.onCreate()
@@ -2406,6 +2421,9 @@ jobs:
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
                       nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
+                      val qc = NotificationChannel(CHANNEL_QUIET, "Medya oynatıcı (küçük pencere)", NotificationManager.IMPORTANCE_MIN)
+                      qc.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                      nm.createNotificationChannel(qc)
                   }
                   val s = MediaSession(this, "Rota")
                   s.setCallback(object : MediaSession.Callback() {
@@ -2413,6 +2431,11 @@ jobs:
                       override fun onPause() { send(ACTION_PAUSE) }
                       override fun onSkipToNext() { send(ACTION_NEXT) }
                       override fun onSkipToPrevious() { send(ACTION_PREVIOUS) }
+                      override fun onSeekTo(pos: Long) {
+                          sendBroadcast(Intent(ACTION_SEEK).setPackage(packageName).putExtra("pos", pos))
+                          position = pos
+                          refresh()
+                      }
                   })
                   s.isActive = true
                   session = s
@@ -2426,6 +2449,11 @@ jobs:
                           playing = intent.getBooleanExtra("playing", false)
                           title = intent.getStringExtra("title") ?: ""
                           artist = intent.getStringExtra("artist") ?: ""
+                          quiet = intent.getBooleanExtra("pip", false)
+                          val np = intent.getLongExtra("pos", -1L)
+                          if (np >= 0) position = np
+                          val nd = intent.getLongExtra("dur", -2L)
+                          if (nd != -2L) duration = nd
                       }
                       ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
                   }
@@ -2442,19 +2470,21 @@ jobs:
               private fun refresh() {
                   val s = session ?: return
                   val shownTitle = if (title.isBlank()) "Rota" else title
-                  s.setMetadata(MediaMetadata.Builder()
+                  val mb = MediaMetadata.Builder()
                       .putString(MediaMetadata.METADATA_KEY_TITLE, shownTitle)
                       .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
-                      .build())
+                  if (duration > 0) mb.putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
+                  s.setMetadata(mb.build())
                   val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
-                      PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                      PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or
+                      (if (duration > 0) PlaybackState.ACTION_SEEK_TO else 0L)
                   s.setPlaybackState(PlaybackState.Builder()
                       .setActions(actions)
-                      .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
+                      .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, position, 1f)
                       .build())
 
                   val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-                  val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
+                  val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (quiet) CHANNEL_QUIET else CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
                   b.setSmallIcon(R.drawable.ic_notif)
                   b.setContentTitle(shownTitle)
                   b.setContentText(if (artist.isBlank()) "Rota" else artist)
@@ -2494,6 +2524,7 @@ jobs:
 
               companion object {
                   const val CHANNEL = "playback"
+                  const val CHANNEL_QUIET = "playback_quiet"
                   const val NOTIF_ID = 1002
                   const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
                   const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
@@ -2501,12 +2532,13 @@ jobs:
                   const val ACTION_PAUSE = "com.pusula.browser.MEDIA_PAUSE"
                   const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
                   const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
+                  const val ACTION_SEEK = "com.pusula.browser.MEDIA_SEEK"
 
                   @Volatile var running = false
 
-                  fun update(ctx: Context, playing: Boolean, title: String, artist: String) {
+                  fun update(ctx: Context, playing: Boolean, title: String, artist: String, pip: Boolean = false, pos: Long = -1L, dur: Long = -2L) {
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
-                          .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist)
+                          .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist).putExtra("pip", pip).putExtra("pos", pos).putExtra("dur", dur)
                       try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
                   }
 
@@ -2720,17 +2752,17 @@ jobs:
 
           cat > app/src/main/res/drawable/ic_pip_prev.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
-              <path android:fillColor="#FFFFFFFF" android:pathData="M12,12h6v24h-6zM36,12 L18,24 36,36z"/>
+              <path android:fillColor="#FFFFFFFF" android:pathData="M8,8h8v32h-8zM40,8 L16,24 40,40z"/>
           </vector>
           EOF
           cat > app/src/main/res/drawable/ic_pip_next.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
-              <path android:fillColor="#FFFFFFFF" android:pathData="M30,12h6v24h-6zM12,12 L30,24 12,36z"/>
+              <path android:fillColor="#FFFFFFFF" android:pathData="M32,8h8v32h-8zM8,8 L32,24 8,40z"/>
           </vector>
           EOF
           cat > app/src/main/res/drawable/ic_pip_play.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
-              <path android:fillColor="#FFFFFFFF" android:pathData="M14,10 L14,38 L40,24z"/>
+              <path android:fillColor="#FFFFFFFF" android:pathData="M11,6 L11,42 L46,24z"/>
           </vector>
           EOF
           cat > app/src/main/res/drawable/ic_pip_pause.xml <<'EOF'
