@@ -185,17 +185,17 @@ jobs:
                   var title: String = "Yeni Sekme"; var url: String = ""; var pendingUrl: String? = null; var desktop: Boolean = false; var mobileUa: String = ""; var progress: Int = 100; var preview: Bitmap? = null; var adScript: ScriptHandler? = null; var keepScript: ScriptHandler? = null; var hookScript: ScriptHandler? = null
               }
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
-                        private class BgWebView(c: Context) : WebView(c) {
-              var blockPause = false
+                                  private class BgWebView(c: Context) : WebView(c) {
               override fun onWindowVisibilityChanged(visibility: Int) {
                   if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
               }
-                        override fun onPause() {
+          }
+                                            override fun onPause() {
               super.onPause()
               saveTabs()
               CookieManager.getInstance().flush()
               if (isInPictureInPictureMode) {
-                  try { (shown as? BgWebView)?.let { it.blockPause = true; it.onResume() } } catch (_: Exception) {}
+                  try { shown?.onResume() } catch (_: Exception) {}
                   try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) {}
                   if (hasMedia) PlaybackService.update(this, true, lastTitle, lastArtist)
                   handler.removeCallbacks(pipMediaPump)
@@ -216,12 +216,14 @@ jobs:
           override fun onStop() {
               super.onStop()
               if (isInPictureInPictureMode) {
-                  try { (shown as? BgWebView)?.let { it.blockPause = true; it.onResume() } } catch (_: Exception) {}
+                  try { shown?.onResume() } catch (_: Exception) {}
                   try { currentWeb()?.evaluateJavascript(KEEP_MEDIA_PLAYING_JS, null) } catch (_: Exception) {}
                   handler.removeCallbacks(pipMediaPump)
                   handler.post(pipMediaPump)
               }
           }
+
+          
 
           
               override fun onResume() { super.onResume(); appInBackground = false; handler.removeCallbacks(backgroundMediaPump); shown?.onResume() }
@@ -480,6 +482,49 @@ jobs:
                           val o = arr.getJSONObject(i)
                           out.add(Entry(o.optString("t"), o.optString("u")))
                       }
+                  } catch (_: Exception) {}
+                  return out
+              }
+              private fun writeList(key: String, list: List<Entry>) {
+                  val arr = JSONArray()
+                  for (e in list) arr.put(JSONObject().put("t", e.title).put("u", e.url))
+                  sp.edit().putString(key, arr.toString()).apply()
+              }
+              fun bookmarks(): List<Entry> = readList("bookmarks")
+              fun isBookmarked(url: String): Boolean = bookmarks().any { it.url == url }
+              fun toggleBookmark(title: String, url: String): Boolean {
+                  val list = readList("bookmarks")
+                  val had = list.removeAll { it.url == url }
+                  if (!had) list.add(0, Entry(title, url))
+                  writeList("bookmarks", list)
+                  return !had
+              }
+              fun removeBookmark(url: String) { val l = readList("bookmarks"); l.removeAll { it.url == url }; writeList("bookmarks", l) }
+              fun history(): List<Entry> = readList("history")
+              fun addHistory(title: String, url: String) {
+                  val l = readList("history")
+                  if (l.isNotEmpty() && l[0].url == url) return
+                  l.add(0, Entry(title, url))
+                  while (l.size > 300) l.removeAt(l.size - 1)
+                  writeList("history", l)
+              }
+              fun removeHistory(url: String) { val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l) }
+              fun clearHistory() { sp.edit().putString("history", "[]").apply() }
+              fun saveTabs(urls: List<String>, current: Int) {
+                  val arr = JSONArray()
+                  for (u in urls) arr.put(u)
+                  sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
+              }
+              fun savedTabs(): List<String> {
+                  val out = ArrayList<String>()
+                  try {
+                      val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
+                      for (i in 0 until arr.length()) out.add(arr.getString(i))
+                  } catch (_: Exception) {}
+                  return out
+              }
+              fun savedCurrent(): Int = sp.getInt("tabCur", 0)
+          }
                   } catch (_: Exception) {}
                   return out
               }
