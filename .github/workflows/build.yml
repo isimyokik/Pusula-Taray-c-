@@ -1924,10 +1924,7 @@ jobs:
                           "}catch(e){}})();"
 
                   const val MEDIA_TOGGLE_JS = "(function(){var v=Array.from(document.querySelectorAll('video,audio')).find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}else{var b=document.querySelector('.ytp-play-button,#play-pause-button');if(b)b.click();}})();"
-                  
-                  // Biten medyanın sesini hızlıca sıfırlayarak (fade-out) ani voltaj kesintisi ve parazit (pıt) sesini önler:
                   const val MEDIA_PAUSE_JS = "(function(){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused){var vol=m.volume;var step=vol/4;var i=0;var iv=setInterval(function(){i++;m.volume=Math.max(0,vol-(step*i));if(i>=4||m.volume===0){clearInterval(iv);m.pause();m.volume=vol;m.dataset.pusulaWasPlaying='';}},20);}});})();"
-                  
                   const val MEDIA_PREVIOUS_JS =
                       "(function(){try{var h=window.__msh&&window.__msh.previoustrack;if(h){h({action:'previoustrack'});return;}" +
                       "var b=document.querySelector('.ytp-prev-button,ytmusic-player-bar .previous-button,.previous-button,#left-controls .previous-button,[aria-label*=Previous],[aria-label*=Önceki]');" +
