@@ -499,7 +499,6 @@ jobs:
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
 
-              /** Arka plana atılınca WebView'a "hâlâ görünüyorum" dedirtir; YouTube sesi kesilmez. */
               private class BgWebView(c: Context) : WebView(c) {
                   override fun onWindowVisibilityChanged(visibility: Int) {
                       if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
@@ -802,7 +801,6 @@ jobs:
                   window.setBackgroundDrawable(ColorDrawable(cBg))
               }
 
-              /** Temayı uygulamadan çıkmadan, sekmeleri koruyarak uygular. */
               private fun applyTheme() {
                   if (customView != null) hideCustom()
                   val web = shown
@@ -1117,7 +1115,6 @@ jobs:
                   } catch (_: Exception) { }
               }
 
-              /** Ayar değişince betikleri günceller ve açık sayfayı yeniler. */
               private fun settingsChanged() {
                   for (t in tabs) syncScripts(t)
                   val c = tabs.getOrNull(cur) ?: return
@@ -2226,7 +2223,7 @@ jobs:
                       "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
                       "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
                       "function doPrev(){var h=window.__msh&&window.__msh.previoustrack;if(h){try{h({action:'previoustrack'});fadeInAll(500);return;}catch(x){}}" +
-                      "var sels=['.ytp-prev-button','.ytp-chrome-bottom .ytp-prev-button','ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','#left-controls .previous-button','.previous-button','[aria-label=\\\"Previous\\\"]','[aria-label=\\\"Önceki\\\"]','[aria-label*=\\\"Previous track\\\"]','[aria-label*=\\\"Önceki parça\\\"]','[aria-label*=\\\"previous\\\"]'];" +
+                      "var sels=['.ytp-prev-button','.ytp-chrome-bottom .ytp-prev-button','ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','#left-controls .previous-button','.previous-button','[aria-label=\"Previous\"]','[aria-label=\"Önceki\"]','[aria-label*=\"Previous track\"]','[aria-label*=\"Önceki parça\"]','[aria-label*=\"previous\"]'];" +
                       "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v){v.currentTime=0;}fadeInAll(500);}" +
                       "fadeOutAll(400,doPrev);" +
@@ -2240,7 +2237,7 @@ jobs:
                       "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
                       "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
                       "function doNext(){var h=window.__msh&&window.__msh.nexttrack;if(h){try{h({action:'nexttrack'});fadeInAll(500);return;}catch(x){}}" +
-                      "var sels=['.ytp-next-button','.ytp-chrome-bottom .ytp-next-button','ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','#left-controls .next-button','.next-button','[aria-label=\\\"Next\\\"]','[aria-label=\\\"Sonraki\\\"]','[aria-label*=\\\"Next track\\\"]','[aria-label*=\\\"Sonraki parça\\\"]','[aria-label*=\\\"next\\\"]'];" +
+                      "var sels=['.ytp-next-button','.ytp-chrome-bottom .ytp-next-button','ytmusic-player-bar .next-button','ytmusic-player-controls .next-button','ytmusic-player-bar yt-icon-button.next-button','ytmusic-player-controls yt-icon-button.next-button','#left-controls .next-button','.next-button','[aria-label=\"Next\"]','[aria-label=\"Sonraki\"]','[aria-label*=\"Next track\"]','[aria-label*=\"Sonraki parça\"]','[aria-label*=\"next\"]'];" +
                       "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v&&isFinite(v.duration)){v.currentTime=v.duration;}fadeInAll(500);}" +
                       "fadeOutAll(400,doNext);" +
