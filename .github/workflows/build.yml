@@ -3131,7 +3131,10 @@ jobs:
                   frame.keepScreenOn = true
 
                   val vv = android.widget.VideoView(this)
-                  frame.addView(vv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+                  val vlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+                  vlp.topMargin = dp(76)
+                  vlp.bottomMargin = dp(96)
+                  frame.addView(vv, vlp)
 
                   if (audio) {
                       val box = LinearLayout(this)
@@ -3148,8 +3151,8 @@ jobs:
                   val top = LinearLayout(this)
                   top.orientation = LinearLayout.HORIZONTAL
                   top.gravity = Gravity.CENTER_VERTICAL
-                  top.setBackgroundColor(0x99000000.toInt())
-                  top.setPadding(dp(14), dp(28), dp(6), dp(8))
+                  top.setBackgroundColor(0x66000000.toInt())
+                  top.setPadding(dp(14), dp(4), dp(6), dp(4))
                   val ttv = TextView(this)
                   ttv.text = title
                   ttv.textSize = 15f
@@ -3161,7 +3164,24 @@ jobs:
                   x.setTextColor(Color.WHITE)
                   x.textSize = 20f
                   top.addView(x, LinearLayout.LayoutParams(dp(48), dp(44)))
-                  frame.addView(top, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+                  val tlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP)
+                  tlp.topMargin = dp(40)
+                  frame.addView(top, tlp)
+
+                  // Çubuklar yatayda ekranı kısaltmasın diye boşluklar yöne göre ayarlanır
+                  frame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
+                      val land = (r - l) > (b - t)
+                      val wantTop = if (land) dp(44) else dp(76)
+                      val wantBottom = if (land) dp(48) else dp(96)
+                      val wantTopBar = if (land) 0 else dp(40)
+                      if (vlp.topMargin != wantTop || vlp.bottomMargin != wantBottom || tlp.topMargin != wantTopBar) {
+                          vlp.topMargin = wantTop
+                          vlp.bottomMargin = wantBottom
+                          tlp.topMargin = wantTopBar
+                          vv.layoutParams = vlp
+                          top.layoutParams = tlp
+                      }
+                  }
 
                   val mc = android.widget.MediaController(this)
                   mc.setAnchorView(vv)
