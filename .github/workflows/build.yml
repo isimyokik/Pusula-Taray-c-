@@ -1121,12 +1121,36 @@ jobs:
                                   openTab(null)
                               } else {
                                   val want = prefs.savedCurrent()
-                                  for (u in saved.take(12)) {
+                                  for (snap in saved.take(12)) {
                                       val t = createTab()
-                                      if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) }
-                                      else { t.pendingUrl = NEWTAB_URL }
+                                      val u = snap.url
+                                      val restored = snap.state.isNotBlank() && restoreTabHistory(t, snap.state)
+                                      if (restored) {
+                                          // Geçmiş geri geldi; tekrar loadUrl etme
+                                          t.pendingUrl = null
+                                          try {
+                                              val wu = t.web.url
+                                              if (!wu.isNullOrBlank()) {
+                                                  t.url = wu
+                                                  t.title = t.web.title?.takeIf { it.isNotBlank() } ?: shownUrl(wu)
+                                              } else if (u.startsWith("http")) {
+                                                  t.url = u
+                                                  t.title = shownUrl(u)
+                                              }
+                                          } catch (_: Exception) {
+                                              if (u.startsWith("http")) { t.url = u; t.title = shownUrl(u) }
+                                          }
+                                      } else if (u.startsWith("http")) {
+                                          t.pendingUrl = u
+                                          t.url = u
+                                          t.title = shownUrl(u)
+                                      } else {
+                                          t.pendingUrl = NEWTAB_URL
+                                      }
                                   }
                                   switchTo(if (want in tabs.indices) want else 0)
+                                  // Geri düğmesi durumu
+                                  handler.post { refreshNav(); syncUi() }
                               }
                           }
                       }
@@ -1304,13 +1328,54 @@ jobs:
 
               private fun saveTabs() {
                   if (tabs.isEmpty()) return
-                  val urls = ArrayList<String>()
+                  val snaps = ArrayList<Prefs.TabSnap>()
                   for (t in tabs) {
                       if (t.incognito) continue
                       val u = t.pendingUrl ?: t.url
-                      urls.add(if (u.startsWith("http")) u else NEWTAB_URL)
+                      val url = if (u.startsWith("http")) u else NEWTAB_URL
+                      val state = try {
+                          val b = android.os.Bundle()
+                          val n = t.web.saveState(b)
+                          if (n == 0) "" else bundleToBase64(b)
+                      } catch (_: Exception) { "" }
+                      snaps.add(Prefs.TabSnap(url, state))
                   }
-                  prefs.saveTabs(urls, 0)
+                  val curIdx = cur.coerceIn(0, maxOf(0, snaps.size - 1))
+                  prefs.saveTabs(snaps, curIdx)
+              }
+
+              private fun bundleToBase64(b: android.os.Bundle): String {
+                  val p = android.os.Parcel.obtain()
+                  try {
+                      p.writeBundle(b)
+                      val bytes = p.marshall()
+                      return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                  } finally {
+                      p.recycle()
+                  }
+              }
+
+              private fun base64ToBundle(b64: String): android.os.Bundle? {
+                  if (b64.isBlank()) return null
+                  return try {
+                      val bytes = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+                      val p = android.os.Parcel.obtain()
+                      try {
+                          p.unmarshall(bytes, 0, bytes.size)
+                          p.setDataPosition(0)
+                          p.readBundle(java.lang.ClassLoader.getSystemClassLoader())
+                      } finally {
+                          p.recycle()
+                      }
+                  } catch (_: Exception) { null }
+              }
+
+              private fun restoreTabHistory(t: BTab, stateB64: String): Boolean {
+                  val b = base64ToBundle(stateB64) ?: return false
+                  return try {
+                      val n = t.web.restoreState(b)
+                      n != 0
+                  } catch (_: Exception) { false }
               }
 
               private fun shownUrl(u: String): String =
@@ -4783,16 +4848,32 @@ jobs:
 
               fun clearDownloads() { sp.edit().putString("downloads", "[]").apply() }
 
-              fun saveTabs(urls: List<String>, current: Int) {
+              /** url + isteğe bağlı WebView geçmişi (base64 Bundle). */
+              class TabSnap(val url: String, val state: String = "")
+
+              fun saveTabs(snaps: List<TabSnap>, current: Int) {
                   val arr = JSONArray()
-                  for (u in urls) arr.put(u)
+                  for (s in snaps) {
+                      arr.put(JSONObject().put("u", s.url).put("s", s.state))
+                  }
                   sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
               }
-              fun savedTabs(): List<String> {
-                  val out = ArrayList<String>()
+              fun savedTabs(): List<TabSnap> {
+                  val out = ArrayList<TabSnap>()
                   try {
-                      val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
-                      for (i in 0 until arr.length()) out.add(arr.getString(i))
+                      val raw = sp.getString("tabs", "[]") ?: "[]"
+                      val arr = JSONArray(raw)
+                      for (i in 0 until arr.length()) {
+                          val el = arr.opt(i)
+                          when (el) {
+                              is String -> out.add(TabSnap(el, ""))
+                              is JSONObject -> out.add(TabSnap(el.optString("u"), el.optString("s")))
+                              else -> {
+                                  val o = arr.optJSONObject(i)
+                                  if (o != null) out.add(TabSnap(o.optString("u"), o.optString("s")))
+                              }
+                          }
+                      }
                   } catch (_: Exception) {}
                   return out
               }
