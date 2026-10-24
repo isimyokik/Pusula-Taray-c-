@@ -495,6 +495,9 @@ jobs:
                   var adScript: ScriptHandler? = null
                   var keepScript: ScriptHandler? = null
                   var hookScript: ScriptHandler? = null
+                  var errorUrl: String? = null
+                  var errorLoading: Boolean = false
+                  var fromPopup: Boolean = false
               }
 
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
@@ -585,6 +588,12 @@ jobs:
                   }
               }
 
+              private fun seekRelJs(d: Int): String =
+                  "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
+                  "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
+                  "if(v){var t=v.currentTime+(" + d + ");var mx=isFinite(v.duration)?v.duration:1e9;v.currentTime=Math.max(0,Math.min(mx,t));}" +
+                  "if(window.__pipFlash)window.__pipFlash();}catch(e){}})();"
+
               private fun pipAction(code: Int, icon: Int, label: String, action: String): android.app.RemoteAction {
                   val pi = PendingIntent.getBroadcast(
                       this, code,
@@ -601,9 +610,15 @@ jobs:
                       val b = android.app.PictureInPictureParams.Builder()
                           .setAspectRatio(android.util.Rational(16, 9))
                       val acts = ArrayList<android.app.RemoteAction>()
-                      acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
-                      acts.add(pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
-                      acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
+                      val prevA = pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS)
+                      val playA = pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE)
+                      val nextA = pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT)
+                      val backA = pipAction(14, R.drawable.ic_pip_back10, "10 sn geri", PlaybackService.ACTION_BACK10)
+                      val fwdA = pipAction(15, R.drawable.ic_pip_fwd10, "10 sn ileri", PlaybackService.ACTION_FWD10)
+                      val maxActs = try { maxNumPictureInPictureActions } catch (_: Exception) { 3 }
+                      if (maxActs >= 5) { acts.add(prevA); acts.add(backA); acts.add(playA); acts.add(fwdA); acts.add(nextA) }
+                      else if (prefs.pipSeek) { acts.add(backA); acts.add(playA); acts.add(fwdA) }
+                      else { acts.add(prevA); acts.add(playA); acts.add(nextA) }
                       b.setActions(acts)
                       enterPictureInPictureMode(b.build())
                   } catch (_: Exception) { toast("Küçük pencere açılamadı") }
@@ -642,6 +657,11 @@ jobs:
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
+                      if (act == PlaybackService.ACTION_BACK10 || act == PlaybackService.ACTION_FWD10) {
+                          val d = if (act == PlaybackService.ACTION_BACK10) -10 else 10
+                          try { tabs.getOrNull(cur)?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
+                          return
+                      }
                       if (act == PlaybackService.ACTION_SEEK) {
                           val sec = intent.getLongExtra("pos", 0L) / 1000.0
                           try {
@@ -662,6 +682,9 @@ jobs:
                                     else listOfNotNull(tabs.getOrNull(cur))
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
+                      }
+                      if (isInPictureInPictureMode) {
+                          try { tabs.getOrNull(cur)?.web?.evaluateJavascript("if(window.__pipFlash)window.__pipFlash();", null) } catch (_: Exception) { }
                       }
                   }
               }
@@ -740,6 +763,8 @@ jobs:
                       addAction(PlaybackService.ACTION_PREVIOUS)
                       addAction(PlaybackService.ACTION_NEXT)
                       addAction(PlaybackService.ACTION_SEEK)
+                      addAction(PlaybackService.ACTION_BACK10)
+                      addAction(PlaybackService.ACTION_FWD10)
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
                   startBrowsing()
@@ -1256,7 +1281,9 @@ jobs:
               private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
               private fun reloadCurrent() {
                   val t = tabs.getOrNull(cur) ?: return
-                  if (t.progress in 1..99) t.web.stopLoading() else t.web.reload()
+                  if (t.progress in 1..99) { t.web.stopLoading(); return }
+                  val eu = t.errorUrl
+                  if (eu != null) { t.errorUrl = null; t.web.loadUrl(eu) } else t.web.reload()
               }
 
               private fun handleBack() {
@@ -1289,7 +1316,7 @@ jobs:
               private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
                   override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                       val uri = request?.url ?: return null
-                      if (prefs.adBlock && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) {
+                      if (prefs.adBlock && request?.isForMainFrame != true && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) {
                           return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                       }
                       return loader.shouldInterceptRequest(uri)
@@ -1298,10 +1325,18 @@ jobs:
                   override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                       val u = request?.url ?: return false
                       val scheme = u.scheme ?: return false
+                      val gesture = request?.hasGesture() == true
                       return when (scheme) {
-                          "http", "https", "about", "blob", "data" -> false
+                          "http", "https" -> {
+                              if (prefs.adBlock && tab.fromPopup && shouldBlockAd(u)) {
+                                  toast("Reklam penceresi engellendi")
+                                  closePopupIfEmpty(tab)
+                                  true
+                              } else false
+                          }
+                          "about", "blob", "data" -> false
                           "file", "content", "javascript" -> true
-                          else -> openExternal(u.toString())
+                          else -> askExternal(u.toString(), tab, gesture)
                       }
                   }
 
@@ -1310,6 +1345,7 @@ jobs:
                       tab.bridge.trusted = u.startsWith(ASSET_PREFIX)
                       tab.url = u
                       tab.progress = 5
+                      if (tab.errorLoading) tab.errorLoading = false else tab.errorUrl = null
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
 
@@ -1334,7 +1370,31 @@ jobs:
                       val desc = error.description?.toString() ?: ""
                       if (desc.contains("ERR_ABORTED")) return
                       val failing = request.url.toString()
-                      view.loadDataWithBaseURL(failing, errorHtml(failing, desc), "text/html", "utf-8", failing)
+                      showError(view, tab, failing, desc)
+                  }
+
+                  override fun onReceivedSslError(view: WebView?, h: android.webkit.SslErrorHandler?, error: android.net.http.SslError?) {
+                      h?.cancel()
+                      if (view == null || error == null) return
+                      val failing = error.url ?: return
+                      if (failing.substringBefore('#').trimEnd('/') == tab.url.substringBefore('#').trimEnd('/')) {
+                          showError(view, tab, failing, "Güvenli bağlantı kurulamadı (sertifika hatası)")
+                      }
+                  }
+
+                  override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+                      if (tabs.none { it.web === view }) return false
+                      val u = tab.url
+                      handler.post {
+                          val idx = tabs.indexOf(tab)
+                          if (idx >= 0) {
+                              val only = tabs.size == 1
+                              closeTab(idx)
+                              if (u.startsWith("http")) { if (only) loadInCurrent(u) else openTab(u) }
+                              toast("Sayfa yeniden başlatıldı")
+                          }
+                      }
+                      return true
                   }
               }
 
@@ -1346,7 +1406,13 @@ jobs:
                   override fun onReceivedTitle(view: WebView?, title: String?) { if (!title.isNullOrBlank()) tab.title = title }
                   override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
                       if (!isUserGesture || resultMsg == null) return false
+                      if (prefs.adBlock) {
+                          val ht = view?.hitTestResult?.type ?: 0
+                          val real = ht == WebView.HitTestResult.SRC_ANCHOR_TYPE || ht == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+                          if (!real) { toast("Açılır pencere engellendi"); return false }
+                      }
                       val nt = openTab(null, false) ?: return false
+                      nt.fromPopup = true
                       val transport = resultMsg.obj as WebView.WebViewTransport
                       transport.webView = nt.web
                       resultMsg.sendToTarget()
@@ -1396,13 +1462,37 @@ jobs:
                   }
               }
 
-              private fun openExternal(url: String): Boolean {
-                  try {
-                      val i = if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                      i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null
-                      startActivity(i)
-                  } catch (_: Exception) { toast("Bağlantı açılamadı") }
+              /** Dokunuşsuz (reklam) yönlendirmeler uygulama açamaz; dokunuşla gelenler önce sorulur. */
+              private fun askExternal(url: String, tab: BTab, gesture: Boolean): Boolean {
+                  if (prefs.adBlock && !gesture) {
+                      toast("Otomatik uygulama geçişi engellendi")
+                      closePopupIfEmpty(tab)
+                      return true
+                  }
+                  val i: Intent = try {
+                      if (url.startsWith("intent:")) Intent.parseUri(url, Intent.URI_INTENT_SCHEME) else Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                  } catch (_: Exception) { toast("Bağlantı açılamadı"); closePopupIfEmpty(tab); return true }
+                  i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null
+                  val label = try { packageManager.resolveActivity(i, 0)?.loadLabel(packageManager)?.toString() } catch (_: Exception) { null }
+                  val what = label ?: (i.scheme ?: "başka bir uygulama")
+                  themedConfirm("Başka bir uygulamaya geçilecek: " + what + "\nDevam edilsin mi?",
+                      onYes = { try { startActivity(i) } catch (_: Exception) { toast("Bağlantı açılamadı") }; closePopupIfEmpty(tab) },
+                      onNo = { closePopupIfEmpty(tab) })
                   return true
+              }
+
+              /** Boş kalan açılır pencere sekmesini kapatır. */
+              private fun closePopupIfEmpty(tab: BTab) {
+                  handler.post {
+                      val idx = tabs.indexOf(tab)
+                      if (idx >= 0 && tabs.size > 1 && tab.fromPopup && tab.url.isEmpty()) closeTab(idx)
+                  }
+              }
+
+              private fun showError(view: WebView, tab: BTab, failing: String, desc: String) {
+                  tab.errorUrl = failing
+                  tab.errorLoading = true
+                  view.loadDataWithBaseURL(failing, errorHtml(failing, desc), "text/html", "utf-8", failing)
               }
 
               private fun errorHtml(url: String, desc: String): String {
@@ -1412,7 +1502,7 @@ jobs:
                   return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
                       "<style>body{font-family:sans-serif;margin:0;padding:32px 24px;background:$bg;color:$fg}h1{font-size:22px}p{opacity:.75}" +
                       "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
-                      "</style></head><body><h1>Yüklenemedi</h1><p>$url</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
+                      "</style></head><body><h1>Yüklenemedi</h1><p>${Html.escapeHtml(url)}</p><p>${Html.escapeHtml(desc)}</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
               }
 
               private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) {
@@ -1977,6 +2067,7 @@ jobs:
                   add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
                       prefs.barBottom = v; applyTheme()
                   })
+                  add(switchRow("⏪", "Küçük pencerede 10 sn atla", "Açıksa küçük pencerede önceki/sonraki yerine 10 sn geri/ileri düğmeleri çıkar", prefs.pipSeek) { v -> prefs.pipSeek = v })
                   add(settingsRow("🌐", "Varsayılan tarayıcı yap", if (isDefaultBrowser()) "Şu an varsayılan ✓" else "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
                   label("Görünüm ve arama")
                   add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
@@ -2319,20 +2410,25 @@ jobs:
                       "v.classList.add('__pipv');" +
                       "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e.style.setProperty('transform','none','important');e.style.setProperty('overflow','visible','important');e=e.parentElement;}" +
                       "(function(){var bar=document.createElement('div');bar.id='__pipbar';" +
-                      "bar.style.cssText='position:fixed;left:0;right:0;bottom:0;height:36px;z-index:2147483647;display:flex;align-items:center;gap:6px;padding:0 8px;background:linear-gradient(transparent,rgba(0,0,0,.8));color:#fff;font:600 11px sans-serif;touch-action:none;visibility:visible';" +
-                      "var a=document.createElement('span'),b=document.createElement('span'),tr=document.createElement('div'),rail=document.createElement('div'),fill=document.createElement('div');" +
-                      "tr.style.cssText='flex:1;height:28px;display:flex;align-items:center';" +
-                      "rail.style.cssText='width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,.3)';" +
-                      "fill.style.cssText='height:100%;border-radius:2px;background:#4c8dff;width:0';" +
-                      "rail.appendChild(fill);tr.appendChild(rail);bar.appendChild(a);bar.appendChild(tr);bar.appendChild(b);document.documentElement.appendChild(bar);" +
-                      "function f(t){t=Math.max(0,Math.floor(t));var h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return (h?h+':'+(m<10?'0':''):'')+m+':'+(s<10?'0':'')+s;}" +
-                      "var drag=false;" +
-                      "function sk(ev){var r=rail.getBoundingClientRect();var p=Math.min(1,Math.max(0,(ev.clientX-r.left)/r.width));if(isFinite(v.duration))v.currentTime=p*v.duration;tick();}" +
-                      "tr.addEventListener('pointerdown',function(ev){drag=true;try{tr.setPointerCapture(ev.pointerId);}catch(x){}sk(ev);});" +
-                      "tr.addEventListener('pointermove',function(ev){if(drag)sk(ev);});" +
-                      "tr.addEventListener('pointerup',function(){drag=false;});" +
-                      "function tick(){var d=v.duration;if(!isFinite(d)||d<=0){bar.style.display='none';return;}bar.style.display='flex';a.textContent=f(v.currentTime);b.textContent='-'+f(d-v.currentTime);fill.style.width=(v.currentTime/d*100)+'%';}" +
-                      "tick();window.__pipIv=setInterval(tick,250);})();" +
+                            "bar.style.cssText='position:fixed;left:0;right:0;bottom:0;height:40px;z-index:2147483647;display:flex;align-items:center;gap:6px;padding:0 8px;background:linear-gradient(transparent,rgba(0,0,0,.85));color:#fff;font:600 11px sans-serif;touch-action:none;visibility:visible;opacity:0;transition:opacity .2s';" +
+                            "var a=document.createElement('span'),b=document.createElement('span'),tr=document.createElement('div'),rail=document.createElement('div'),fill=document.createElement('div');" +
+                            "tr.style.cssText='flex:1;height:32px;display:flex;align-items:center';" +
+                            "rail.style.cssText='width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,.3)';" +
+                            "fill.style.cssText='height:100%;border-radius:2px;background:#4c8dff;width:0';" +
+                            "rail.appendChild(fill);tr.appendChild(rail);bar.appendChild(a);bar.appendChild(tr);bar.appendChild(b);document.documentElement.appendChild(bar);" +
+                            "function f(t){t=Math.max(0,Math.floor(t));var h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return (h?h+':'+(m<10?'0':''):'')+m+':'+(s<10?'0':'')+s;}" +
+                            "var drag=false,vis=false,wasVis=false,tm=0;" +
+                            "function hide(){if(drag){tm=setTimeout(hide,1000);return;}vis=false;bar.style.opacity='0';}" +
+                            "function show(){vis=true;bar.style.opacity='1';clearTimeout(tm);tm=setTimeout(hide,3000);}" +
+                            "function onDoc(){wasVis=vis;show();}" +
+                            "function sk(ev){var r=rail.getBoundingClientRect();var p=Math.min(1,Math.max(0,(ev.clientX-r.left)/r.width));if(isFinite(v.duration))v.currentTime=p*v.duration;tick();show();}" +
+                            "tr.addEventListener('pointerdown',function(ev){if(!wasVis)return;drag=true;try{tr.setPointerCapture(ev.pointerId);}catch(x){}sk(ev);});" +
+                            "tr.addEventListener('pointermove',function(ev){if(drag)sk(ev);});" +
+                            "tr.addEventListener('pointerup',function(){drag=false;show();});" +
+                            "tr.addEventListener('pointercancel',function(){drag=false;});" +
+                            "function tick(){var d=v.duration;if(!isFinite(d)||d<=0){bar.style.display='none';return;}bar.style.display='flex';a.textContent=f(v.currentTime);b.textContent='-'+f(d-v.currentTime);fill.style.width=(v.currentTime/d*100)+'%';}" +
+                            "window.__pipFlash=show;window.__pipDoc=onDoc;document.addEventListener('pointerdown',onDoc,true);" +
+                            "tick();show();window.__pipIv=setInterval(tick,250);})();" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
@@ -2340,7 +2436,7 @@ jobs:
                       "window.__pipBlock=false;window.__userPause=false;" +
                       "if(window.__op){HTMLMediaElement.prototype.pause=window.__op;window.__op=null;}" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
-                      "clearInterval(window.__pipIv);var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
+                      "clearInterval(window.__pipIv);document.removeEventListener('pointerdown',window.__pipDoc,true);window.__pipFlash=null;var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
                       "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
                       "document.querySelectorAll('*').forEach(function(x){try{if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');}catch(z){}});" +
                       "}catch(e){}})();"
@@ -2560,6 +2656,8 @@ jobs:
                   const val ACTION_PREVIOUS = "com.pusula.browser.MEDIA_PREVIOUS"
                   const val ACTION_NEXT = "com.pusula.browser.MEDIA_NEXT"
                   const val ACTION_SEEK = "com.pusula.browser.MEDIA_SEEK"
+                  const val ACTION_BACK10 = "com.pusula.browser.MEDIA_BACK10"
+                  const val ACTION_FWD10 = "com.pusula.browser.MEDIA_FWD10"
 
                   @Volatile var running = false
 
@@ -2626,6 +2724,8 @@ jobs:
                 set(v) { sp.edit().putString("startMode", v).apply() }
               var clearOnExit: Boolean get() = sp.getBoolean("clearOnExit", false)
                 set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
+              var pipSeek: Boolean get() = sp.getBoolean("pipSeek", true)
+                set(v) { sp.edit().putBoolean("pipSeek", v).apply() }
 
               private fun readList(key: String): MutableList<Entry> {
                   val out = ArrayList<Entry>()
@@ -2798,6 +2898,16 @@ jobs:
           </vector>
           EOF
 
+          cat > app/src/main/res/drawable/ic_pip_back10.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M24,8 L4,24 24,40z M44,8 L24,24 44,40z"/>
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_fwd10.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M4,8 L24,24 4,40z M24,8 L44,24 24,40z"/>
+          </vector>
+          EOF
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Rota</string></resources>
           EOF
