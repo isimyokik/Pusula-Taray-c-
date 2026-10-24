@@ -620,7 +620,7 @@ jobs:
               }
 
               private fun onPipChanged(pip: Boolean) {
-                  topBar.visibility = if (pip) View.GONE else View.VISIBLE
+                  topBar.visibility = if (pip || barHidden) View.GONE else View.VISIBLE
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
                   if (pip) {
                       closeFind()
@@ -699,7 +699,6 @@ jobs:
               private lateinit var urlField: EditText
               private lateinit var progress: ProgressBar
               private lateinit var backBtn: ImageButton
-              private lateinit var fwdBtn: ImageButton
               private lateinit var tabCount: TextView
               private lateinit var privateBadge: TextView
               private lateinit var findBar: LinearLayout
@@ -716,6 +715,33 @@ jobs:
               private var cAccent = 0
               private var cAccent2 = 0
               private lateinit var topBar: LinearLayout
+              private var barHidden = false
+              private var barAccum = 0
+              private var barIgnoreUntil = 0L
+
+              private fun setBarShown(show: Boolean) {
+                  val hide = !show
+                  if (barHidden == hide) return
+                  barHidden = hide
+                  barAccum = 0
+                  barIgnoreUntil = android.os.SystemClock.uptimeMillis() + 450L
+                  topBar.visibility = if (hide) View.GONE else View.VISIBLE
+              }
+
+              /** Çubuk, sayfanın bir parçası gibi davranır: kendi yönüne kayınca gizlenir, ters yöne kayınca geri gelir. */
+              private fun onPageScroll(tab: BTab, y: Int, oldY: Int) {
+                  if (tabs.getOrNull(cur) !== tab) return
+                  if (!prefs.autoHideBar) { setBarShown(true); return }
+                  if (urlField.hasFocus() || customView != null || isInPictureInPictureMode) return
+                  if (android.os.SystemClock.uptimeMillis() < barIgnoreUntil) return
+                  if (!prefs.barBottom && y <= dp(8)) { setBarShown(true); return }
+                  // Üstteki çubuk sayfayla birlikte yukarı kayar; alttaki çubuk sayfayla birlikte aşağı kayar.
+                  val dy = if (prefs.barBottom) oldY - y else y - oldY
+                  if (dy == 0) return
+                  barAccum = if (barAccum == 0 || (dy > 0) == (barAccum > 0)) barAccum + dy else dy
+                  if (barAccum > dp(48)) setBarShown(false)
+                  else if (barAccum < -dp(48)) setBarShown(true)
+              }
 
               private var customView: View? = null
               private var customCb: WebChromeClient.CustomViewCallback? = null
@@ -909,6 +935,7 @@ jobs:
                   root.isFocusable = true
                   root.isFocusableInTouchMode = true
 
+                  barHidden = false
                   topBar = LinearLayout(this)
                   topBar.orientation = LinearLayout.HORIZONTAL
                   topBar.gravity = Gravity.CENTER_VERTICAL
@@ -931,14 +958,8 @@ jobs:
                   val pill = LinearLayout(this)
                   pill.orientation = LinearLayout.HORIZONTAL
                   pill.gravity = Gravity.CENTER_VERTICAL
-                  pill.background = shape(cSurface, 24)
-                  pill.elevation = dp(3).toFloat()
-
-                  val lead = TextView(this)
-                  lead.text = "🔎"
-                  lead.textSize = 15f
-                  lead.gravity = Gravity.CENTER
-                  pill.addView(lead, LinearLayout.LayoutParams(dp(42), dp(46)))
+                  pill.background = shape(cSurface, 26)
+                  pill.elevation = dp(4).toFloat()
 
                   urlField = EditText(this)
                   urlField.hint = "Ara veya adres yaz"
@@ -950,16 +971,40 @@ jobs:
                   urlField.imeOptions = EditorInfo.IME_ACTION_GO
                   urlField.setSelectAllOnFocus(true)
                   urlField.background = null
-                  urlField.setPadding(0, 0, 0, 0)
+                  urlField.setPadding(dp(18), 0, 0, 0)
                   urlField.setOnEditorActionListener { _, actionId, event ->
                       if (actionId == EditorInfo.IME_ACTION_GO || (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER)) {
                           submitUrl(); true
                       } else false
                   }
-                  urlField.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) syncUrlText() }
-                  pill.addView(urlField, LinearLayout.LayoutParams(0, dp(46), 1f))
-                  pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(44), dp(46)))
-                  topBar.addView(pill, LinearLayout.LayoutParams(0, dp(46), 1f))
+                  urlField.setOnFocusChangeListener { _, hasFocus ->
+                      if (hasFocus) setBarShown(true) else syncUrlText()
+                  }
+                  pill.addView(urlField, LinearLayout.LayoutParams(0, dp(50), 1f))
+                  pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(38), dp(50)))
+
+                  backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }
+                  val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
+
+                  val tabsWrap = FrameLayout(this)
+                  tabsWrap.background = ripple(null)
+                  tabsWrap.contentDescription = "Sekmeler"
+                  tabsWrap.setOnClickListener { showTabs() }
+                  tabCount = TextView(this)
+                  tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f
+                  tabCount.setTypeface(null, Typeface.BOLD)
+                  tabCount.setTextColor(cIcon)
+                  val tcBg = GradientDrawable()
+                  tcBg.setColor(0)
+                  tcBg.cornerRadius = dp(7).toFloat()
+                  tcBg.setStroke(dp(2), cIcon)
+                  tabCount.background = tcBg
+                  tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+
+                  pill.addView(backBtn, LinearLayout.LayoutParams(dp(40), dp(50)))
+                  pill.addView(tabsWrap, LinearLayout.LayoutParams(dp(40), dp(50)))
+                  pill.addView(menuBtn, LinearLayout.LayoutParams(dp(40), dp(50)))
+                  topBar.addView(pill, LinearLayout.LayoutParams(0, dp(50), 1f))
 
                   progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
                   progress.max = 100
@@ -1011,52 +1056,6 @@ jobs:
                   }
 
                   dockBar = LinearLayout(this)
-                  val dock = dockBar
-                  dock.orientation = LinearLayout.VERTICAL
-                  dock.setBackgroundColor(cBg)
-                  dock.setPadding(dp(12), dp(6), dp(12), dp(8))
-                  dock.clipToPadding = false
-                  dock.clipChildren = false
-
-                  val bottom = LinearLayout(this)
-                  bottom.orientation = LinearLayout.HORIZONTAL
-                  bottom.gravity = Gravity.CENTER_VERTICAL
-                  bottom.background = shape(cSurface, 30)
-                  bottom.elevation = dp(8).toFloat()
-                  bottom.setPadding(dp(6), dp(4), dp(6), dp(4))
-
-                  backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }
-                  fwdBtn = iconBtn(R.drawable.ic_forward, "İleri") { goForward() }
-                  val homeBtn = iconBtn(R.drawable.ic_home, "Ana Sayfa") { goHome() }
-                  homeBtn.setColorFilter(Color.WHITE)
-                  val hg = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
-                  hg.shape = GradientDrawable.OVAL
-                  homeBtn.background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), hg, null)
-                  val addBtn = iconBtn(R.drawable.ic_add, "Yeni Sekme") { openTab(null) }
-                  val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
-
-                  val tabsWrap = FrameLayout(this)
-                  tabsWrap.background = ripple(null)
-                  tabsWrap.contentDescription = "Sekmeler"
-                  tabsWrap.setOnClickListener { showTabs() }
-                  tabCount = TextView(this)
-                  tabCount.gravity = Gravity.CENTER; tabCount.textSize = 12f
-                  tabCount.setTypeface(null, Typeface.BOLD)
-                  tabCount.setTextColor(cIcon)
-                  val tcBg = GradientDrawable()
-                  tcBg.setColor(0)
-                  tcBg.cornerRadius = dp(7).toFloat()
-                  tcBg.setStroke(dp(2), cIcon)
-                  tabCount.background = tcBg
-                  tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
-
-                  for (v in listOf<View>(backBtn, fwdBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f))
-                  val hlp = LinearLayout.LayoutParams(dp(48), dp(48))
-                  hlp.leftMargin = dp(4); hlp.rightMargin = dp(4)
-                  bottom.addView(homeBtn, hlp)
-                  for (v in listOf<View>(addBtn, tabsWrap, menuBtn)) bottom.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f))
-                  dock.addView(bottom, LinearLayout.LayoutParams(match, wrap))
-                  root.addView(dock, LinearLayout.LayoutParams(match, wrap))
 
                   fullscreen = FrameLayout(this)
                   fullscreen.setBackgroundColor(Color.BLACK)
@@ -1139,6 +1138,7 @@ jobs:
                           findCount.text = if (total == 0) "0" else "${active + 1}/$total"
                       }
                   }
+                  web.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY -> onPageScroll(tab, scrollY, oldScrollY) }
                   web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
                       startDownload(url, userAgent, contentDisposition, mimeType)
                   }
@@ -1198,6 +1198,7 @@ jobs:
                   val p = t.pendingUrl
                   if (p != null) { t.pendingUrl = null; t.web.loadUrl(p) }
                   closeFind()
+                  setBarShown(true)
                   privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE
                   topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg)
                   syncUi()
@@ -1259,7 +1260,6 @@ jobs:
               private fun refreshNav() {
                   val web = currentWeb()
                   backBtn.alpha = if (web != null && (web.canGoBack() || tabs.size > 1)) 1f else 0.35f
-                  fwdBtn.alpha = if (web != null && web.canGoForward()) 1f else 0.35f
               }
 
               private fun loadInCurrent(url: String) {
@@ -1348,7 +1348,7 @@ jobs:
                       tab.url = u
                       tab.progress = 5
                       if (tab.errorLoading) tab.errorLoading = false else tab.errorUrl = null
-                      if (tabs.getOrNull(cur) === tab) syncUi()
+                      if (tabs.getOrNull(cur) === tab) { setBarShown(true); syncUi() }
                   }
 
                   override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
@@ -1548,6 +1548,8 @@ jobs:
                   val items = listOf(
                       SheetItem("➕", "Yeni sekme", false) { openTab(null) },
                       SheetItem("🕶️", "Gizli sekme", false) { openTab(null, true, true) },
+                      SheetItem("🏠", "Ana sayfa", false) { goHome() },
+                      SheetItem("➡️", "İleri", false) { goForward() },
                       SheetItem(if (marked) "⭐" else "☆", if (marked) "İmi kaldır" else "Yer imi ekle", marked) {
                           prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
                       },
@@ -2069,6 +2071,10 @@ jobs:
                   add(switchRow("⬇️", "Adres çubuğu altta", "Açıksa adres çubuğu ekranın altında olur", prefs.barBottom) { v ->
                       prefs.barBottom = v; applyTheme()
                   })
+                  add(switchRow("↕️", "Kaydırınca çubuğu gizle", "Çubuk sayfayla birlikte kayıp gizlenir, ters yöne kaydırınca geri gelir", prefs.autoHideBar) { v ->
+                      prefs.autoHideBar = v
+                      if (!v) setBarShown(true)
+                  })
                   add(settingsRow("🌐", "Varsayılan tarayıcı yap", if (isDefaultBrowser()) "Şu an varsayılan ✓" else "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
                   label("Görünüm ve arama")
                   add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
@@ -2410,8 +2416,8 @@ jobs:
                       "v.classList.add('__pipv');" +
                       "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e.style.setProperty('transform','none','important');e.style.setProperty('overflow','visible','important');e=e.parentElement;}" +
                       "(function(){var bar=document.createElement('div');bar.id='__pipbar';" +
-                      "bar.style.cssText='position:fixed;left:0;right:0;bottom:0;height:3px;z-index:2147483647;background:rgba(255,255,255,.18);pointer-events:none;visibility:visible';" +
-                      "var fill=document.createElement('div');fill.style.cssText='height:100%;width:0;background:rgba(255,255,255,.55)';" +
+                      "bar.style.cssText='position:fixed;left:0;right:0;bottom:0;height:4px;z-index:2147483647;background:rgba(255,255,255,.4);pointer-events:none;visibility:visible';" +
+                      "var fill=document.createElement('div');fill.style.cssText='height:100%;width:0;background:rgba(255,255,255,.95)';" +
                       "bar.appendChild(fill);document.documentElement.appendChild(bar);" +
                       "function tick(){var d=v.duration;if(!isFinite(d)||d<=0){bar.style.display='none';return;}bar.style.display='block';fill.style.width=(v.currentTime/d*100)+'%';}" +
                       "tick();window.__pipIv=setInterval(tick,500);})();" +
@@ -2697,6 +2703,8 @@ jobs:
                 set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
               var theme: String get() = sp.getString("theme", "gece") ?: "gece"
                 set(v) { sp.edit().putString("theme", v).apply() }
+              var autoHideBar: Boolean get() = sp.getBoolean("autoHideBar", true)
+                set(v) { sp.edit().putBoolean("autoHideBar", v).apply() }
               var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
