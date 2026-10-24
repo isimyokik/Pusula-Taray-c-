@@ -1926,28 +1926,40 @@ jobs:
                       }
                       showFetchedDownloadOptions(links)
                   }
+                  // Sadece gerçek medya dosya linkleri (menü/site linkleri değil)
                   val extractJs =
                       "(function(){try{" +
                       "var out=[];" +
-                      "function add(u,l){if(!u||u.indexOf('http')!==0)return;for(var i=0;i<out.length;i++)if(out[i].u===u)return;out.push({u:u,l:l||'İndir'});}" +
-                      "document.querySelectorAll('a[href]').forEach(function(a){" +
-                      "var h=a.href||'';" +
-                      "if(/googlevideo\\.com|videoplayback|download|getfile|cdn|sf-tools/i.test(h)){" +
-                      "var t=(a.textContent||a.getAttribute('download')||a.title||'İndir').replace(/\\s+/g,' ').trim();" +
-                      "if(t.length>48)t=t.slice(0,48);" +
-                      "add(h,t||'İndir');}" +
+                      "function ok(u){" +
+                      "if(!u||u.indexOf('http')!==0)return false;" +
+                      "if(/savefrom\\.net|ssyoutube|facebook\\.com\\/?$|instagram\\.com|tiktok\\.com|reddit\\.com|pinterest|dailymotion|vimeo\\.com\\/?$|vk\\.com\\/?$|threads\\.net|play\\.google/i.test(u)&&!/googlevideo|videoplayback/i.test(u))return false;" +
+                      "return /googlevideo\\.com|videoplayback|\\/getfile|sf-tools\\.com\\/.*\\.(mp4|m4a|webm|mp3)|mime=video|mime=audio|itag=/i.test(u);" +
+                      "}" +
+                      "function add(u,l){if(!ok(u))return;for(var i=0;i<out.length;i++)if(out[i].u===u)return;" +
+                      "var t=(l||'İndir').replace(/\\s+/g,' ').trim();if(t.length>40)t=t.slice(0,40);" +
+                      "if(/^(youtube|facebook|instagram|tiktok|reddit|pinterest|threads|vimeo|vk\\.com|dailymotion)/i.test(t)&&t.length<20)return;" +
+                      "out.push({u:u,l:t||'İndir'});}" +
+                      "document.querySelectorAll('a[href]').forEach(function(a){add(a.href,a.textContent||a.getAttribute('download')||a.title);});" +
+                      "document.querySelectorAll('[data-link],[data-url],[data-download],[data-href]').forEach(function(el){" +
+                      "add(el.getAttribute('data-link')||el.getAttribute('data-url')||el.getAttribute('data-download')||el.getAttribute('data-href')||'',el.textContent);" +
                       "});" +
-                      "document.querySelectorAll('[data-link],[data-url],[data-download]').forEach(function(el){" +
-                      "var h=el.getAttribute('data-link')||el.getAttribute('data-url')||el.getAttribute('data-download')||'';" +
-                      "add(h,(el.textContent||'İndir').replace(/\\s+/g,' ').trim().slice(0,48));" +
-                      "});" +
-                      "return JSON.stringify(out.slice(0,12));" +
+                      "return JSON.stringify(out.slice(0,15));" +
                       "}catch(e){return '[]';}})();"
                   var tries = 0
                   fun poll() {
                       if (finished) return
                       tries++
                       try {
+                          // Dönüşümü tetiklemeye çalış
+                          if (tries == 1 || tries == 3) {
+                              loader.evaluateJavascript(
+                                  "(function(){try{" +
+                                  "var b=document.querySelector('button[type=submit],.def-btn,.btn-green,#sf_submit,.convert-btn,input[type=submit]');" +
+                                  "if(b)b.click();" +
+                                  "var inp=document.querySelector('input[type=text],input[name=sf_url],#sf_url');" +
+                                  "if(inp&&!inp.value){inp.value=" + JSONObject.quote(page) + ";}" +
+                                  "}catch(e){}})();", null)
+                          }
                           loader.evaluateJavascript(extractJs) { raw ->
                               try {
                                   val inner = org.json.JSONArray("[$raw]").getString(0)
@@ -1957,28 +1969,34 @@ jobs:
                                       val o = arr.getJSONObject(i)
                                       val u = o.optString("u")
                                       val l = o.optString("l", "İndir")
-                                      if (u.startsWith("http")) list.add(l to u)
+                                      if (u.contains("googlevideo.com") || u.contains("videoplayback") ||
+                                          u.contains("sf-tools.com") || u.contains("mime=video") || u.contains("mime=audio") ||
+                                          u.contains("itag=")) {
+                                          list.add(l to u)
+                                      }
                                   }
                                   if (list.isNotEmpty()) finishWith(list)
-                                  else if (tries < 10) handler.postDelayed({ poll() }, 800)
+                                  else if (tries < 12) handler.postDelayed({ poll() }, 900)
                                   else finishWith(emptyList())
                               } catch (_: Exception) {
-                                  if (tries < 10) handler.postDelayed({ poll() }, 800) else finishWith(emptyList())
+                                  if (tries < 12) handler.postDelayed({ poll() }, 900) else finishWith(emptyList())
                               }
                           }
                       } catch (_: Exception) {
-                          if (tries < 10) handler.postDelayed({ poll() }, 800) else finishWith(emptyList())
+                          if (tries < 12) handler.postDelayed({ poll() }, 900) else finishWith(emptyList())
                       }
                   }
                   loader.webViewClient = object : WebViewClient() {
                       override fun onPageFinished(view: WebView?, url: String?) {
-                          handler.postDelayed({ poll() }, 1500)
+                          handler.postDelayed({ poll() }, 1800)
                       }
                   }
                   loader.layoutParams = ViewGroup.LayoutParams(1, 1)
                   try { (window.decorView as? ViewGroup)?.addView(loader) } catch (_: Exception) {}
-                  loader.loadUrl("https://en.savefrom.net/#url=" + Uri.encode(page))
-                  handler.postDelayed({ if (!finished) finishWith(emptyList()) }, 14000)
+                  // Path formatı hash'ten daha güvenilir dönüşüm tetikler
+                  val sfUrl = "https://en.savefrom.net/" + page
+                  loader.loadUrl(sfUrl)
+                  handler.postDelayed({ if (!finished) finishWith(emptyList()) }, 16000)
               }
 
               /** Arka planda bulunan indirme linklerini kendi menümüzde göster. */
@@ -3083,6 +3101,13 @@ jobs:
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
                       "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e=e.parentElement;}" +
+                      // İlerleme çubuğu ÜSTTE — siyah şerit alanında, görünür renk
+                      "(function(){var bar=document.createElement('div');bar.id='__pipbar';" +
+                      "bar.style.cssText='position:fixed;left:0;right:0;top:0;height:5px;z-index:2147483648;background:rgba(255,255,255,.2);pointer-events:none;visibility:visible';" +
+                      "var fill=document.createElement('div');fill.style.cssText='height:100%;width:0;background:#4C8DFF';" +
+                      "bar.appendChild(fill);document.documentElement.appendChild(bar);" +
+                      "function tick(){var d=v.duration;if(!isFinite(d)||d<=0){bar.style.display='none';return;}bar.style.display='block';fill.style.width=(v.currentTime/d*100)+'%';}" +
+                      "tick();window.__pipIv=setInterval(tick,400);})();" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
@@ -3090,6 +3115,8 @@ jobs:
                       "window.__pipBlock=false;window.__userPause=false;" +
                       "if(window.__op){HTMLMediaElement.prototype.pause=window.__op;window.__op=null;}" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
+                      "clearInterval(window.__pipIv);" +
+                      "var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
                       "document.querySelectorAll('video.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
                       "document.querySelectorAll('*').forEach(function(x){try{" +
                       "if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')" +
