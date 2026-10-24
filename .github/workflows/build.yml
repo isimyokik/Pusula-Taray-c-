@@ -647,6 +647,25 @@ jobs:
                       if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true)
                   } else {
                       for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
+                      // WebView ve layout'u tam boyuta zorla
+                      try {
+                          content.requestLayout()
+                          shown?.requestLayout()
+                          currentWeb()?.requestLayout()
+                      } catch (_: Exception) { }
+                      handler.postDelayed({
+                          try {
+                              currentWeb()?.evaluateJavascript(PIP_OFF_JS, null)
+                              currentWeb()?.evaluateJavascript(
+                                  "(function(){try{window.dispatchEvent(new Event('resize'));" +
+                                  "var p=document.querySelector('.html5-video-player');" +
+                                  "if(p){p.style.cssText='';p.removeAttribute('style');}" +
+                                  "document.querySelectorAll('video').forEach(function(v){v.style.cssText='';v.classList.remove('__pipv');});" +
+                                  "document.body.style.cssText='';document.documentElement.style.cssText='';" +
+                                  "}catch(e){}})();", null)
+                              content.requestLayout()
+                          } catch (_: Exception) { }
+                      }, 250)
                       if (hasMedia && (lastPlaying || PlaybackService.running)) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false)
                   }
               }
@@ -2073,18 +2092,15 @@ jobs:
                   data class Opt(val label: String, val videoUrl: String?, val audioUrl: String?, val audioOnly: Boolean)
                   val opts = ArrayList<Opt>()
                   val seenH = HashSet<Int>()
-                  for (v in videos) {
+                  // Sadece net çözünürlüğü olanlar; etiket yalnızca "MP4 360p" vb.; küçükten büyüğe
+                  for (v in videos.sortedBy { heightOf(it.first + " " + it.second) }) {
                       val h = heightOf(v.first + " " + v.second)
-                      val key = if (h > 0) h else v.second.hashCode()
-                      if (h > 0 && !seenH.add(h)) continue
-                      val label = if (h > 0) "MP4 ${h}p" else "MP4"
-                      if (looksProgressive(v.second)) {
-                          opts.add(Opt(label, v.second, null, false))
-                      } else if (bestAudio != null) {
-                          opts.add(Opt("$label (sesli)", v.second, bestAudio, false))
-                      } else {
-                          opts.add(Opt("$label (sessiz olabilir)", v.second, null, false))
-                      }
+                      if (h <= 0) continue
+                      if (!seenH.add(h)) continue
+                      val label = "MP4 ${h}p"
+                      // Ses varsa birleştir (etikette "sesli" yazma)
+                      val audioForMerge = if (looksProgressive(v.second)) null else bestAudio
+                      opts.add(Opt(label, v.second, audioForMerge, false))
                   }
                   if (bestAudio != null) opts.add(Opt("MP3 / Ses", null, bestAudio, true))
                   if (opts.isEmpty()) {
@@ -3330,10 +3346,15 @@ jobs:
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "clearInterval(window.__pipIv);" +
                       "var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
-                      "document.querySelectorAll('video.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
+                      "document.querySelectorAll('video').forEach(function(x){x.classList.remove('__pipv');try{x.style.cssText='';}catch(z){}});" +
+                      "var p=document.querySelector('.html5-video-player');" +
+                      "if(p){try{p.style.cssText='';p.removeAttribute('style');}catch(z){}}" +
+                      "try{document.body.style.cssText='';document.documentElement.style.cssText='';}catch(z){}" +
                       "document.querySelectorAll('*').forEach(function(x){try{" +
-                      "if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')" +
-                      "x.style.removeProperty('visibility');}catch(z){}});" +
+                      "if(x.style&&x.style.getPropertyPriority&&x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');" +
+                      "if(x.style&&x.style.getPropertyPriority&&x.style.getPropertyPriority('position')==='important')x.style.removeProperty('position');" +
+                      "}catch(z){}});" +
+                      "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
 
                   const val LANDSCAPE_VIDEO_JS =
