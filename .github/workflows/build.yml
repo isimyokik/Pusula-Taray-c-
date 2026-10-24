@@ -1449,6 +1449,10 @@ jobs:
                       if (!dark && (u.contains("youtube.com") || u.contains("youtu.be"))) {
                           try { view?.evaluateJavascript(FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
                       }
+                      // YouTube ortadaki logo / büyük oynat katmanı
+                      if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
+                          try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
+                      }
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
 
@@ -3216,6 +3220,20 @@ jobs:
                       "}" +
                       "setInterval(hide,600);" +
                       "})();"
+
+                  // YouTube sayfasında ortadaki büyük logo / oynat katmanı ve watermark
+                  const val YT_HIDE_LOGO_JS =
+                      "(function(){try{" +
+                      "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
+                      "if(document.getElementById('__rota_nologo'))return;" +
+                      "var s=document.createElement('style');s.id='__rota_nologo';" +
+                      "s.textContent='" +
+                      ".ytp-large-play-button,.ytp-cued-thumbnail-overlay,.ytp-pause-overlay," +
+                      ".ytp-watermark,.ytp-youtube-button,.annotation," +
+                      ".ytp-cued-thumbnail-overlay-image{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important}" +
+                      "';" +
+                      "document.documentElement.appendChild(s);" +
+                      "}catch(e){}})();"
 
                   // Uygulama açık temadayken YouTube / YT Music arayüzünü de açık tona zorlar
                   const val FORCE_LIGHT_YT_JS =
