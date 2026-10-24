@@ -589,12 +589,15 @@ jobs:
                   val now = android.os.SystemClock.elapsedRealtime()
                   val expected = if (sentPlaying) sentPos + (now - sentAt) else sentPos
                   val jumped = hasMedia && Math.abs(pos - expected) > 2500L
-                  val changed = !hasMedia || playing != lastPlaying || title != lastTitle || artist != lastArtist || dur != lastDur || jumped
+                  val playChanged = playing != lastPlaying
+                  val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || dur != lastDur || jumped
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastDur = dur
                   if (changed && (playing || PlaybackService.running)) {
                       sentPos = pos; sentAt = now; sentPlaying = playing
                       PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur)
                   }
+                  // PiP düğme simgesi oynat/duraklat durumuna göre güncellensin
+                  if (playChanged && isInPictureInPictureMode) updatePipActions()
               }
 
               private fun seekRelJs(d: Int): String =
@@ -620,15 +623,26 @@ jobs:
 
               private fun enterPipWith(ratio: android.util.Rational) {
                   try {
-                      val b = android.app.PictureInPictureParams.Builder()
-                          .setAspectRatio(ratio)
-                      val acts = ArrayList<android.app.RemoteAction>()
-                      acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
-                      acts.add(pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE))
-                      acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
-                      b.setActions(acts)
-                      enterPictureInPictureMode(b.build())
+                      enterPictureInPictureMode(buildPipParams(ratio))
                   } catch (_: Exception) { toast("Küçük pencere açılamadı") }
+              }
+
+              private fun buildPipParams(ratio: android.util.Rational = android.util.Rational(16, 9)): android.app.PictureInPictureParams {
+                  val b = android.app.PictureInPictureParams.Builder().setAspectRatio(ratio)
+                  val acts = ArrayList<android.app.RemoteAction>()
+                  acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
+                  // Oynuyorsa duraklat ikonu, duruyorsa oynat ikonu
+                  val midIcon = if (lastPlaying) R.drawable.ic_pip_pause else R.drawable.ic_pip_play
+                  val midLabel = if (lastPlaying) "Duraklat" else "Oynat"
+                  acts.add(pipAction(12, midIcon, midLabel, PlaybackService.ACTION_TOGGLE))
+                  acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
+                  b.setActions(acts)
+                  return b.build()
+              }
+
+              private fun updatePipActions() {
+                  if (Build.VERSION.SDK_INT < 26 || !isInPictureInPictureMode) return
+                  try { setPictureInPictureParams(buildPipParams()) } catch (_: Exception) { }
               }
 
               private fun onPipChanged(pip: Boolean) {
@@ -644,9 +658,18 @@ jobs:
                       if (customView == null) {
                           try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
                       }
+                      updatePipActions()
                       if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true)
                   } else {
-                      for (t in tabs) { try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { } }
+                      for (t in tabs) {
+                          try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
+                      }
+                      // Çıkıştan sonra YouTube kontrollerini ve spinner'ı toparla
+                      handler.postDelayed({
+                          try {
+                              currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null)
+                          } catch (_: Exception) { }
+                      }, 150)
                       if (hasMedia && (lastPlaying || PlaybackService.running)) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false)
                   }
               }
@@ -3387,6 +3410,26 @@ jobs:
                       "if(x.style.getPropertyPriority('transform')==='important')x.style.removeProperty('transform');" +
                       "if(x.style.getPropertyPriority('overflow')==='important')x.style.removeProperty('overflow');" +
                       "}catch(z){}});" +
+                      "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
+                      "}catch(e){}})();"
+
+                  // PiP sonrası: pause engeli kalkmış olsun, spinner/kilitli kontroller toparlansın
+                  const val PIP_RECOVER_JS =
+                      "(function(){try{" +
+                      "window.__pipBlock=false;window.__userPause=false;" +
+                      "if(window.__op){try{HTMLMediaElement.prototype.pause=window.__op;}catch(z){}window.__op=null;}" +
+                      "document.querySelectorAll('.ytp-spinner,.ytp-cued-thumbnail-overlay').forEach(function(e){" +
+                      "try{e.style.removeProperty('display');e.style.removeProperty('visibility');}catch(z){}});" +
+                      "var p=document.querySelector('.html5-video-player');" +
+                      "if(p){p.classList.remove('ytp-pause-overlay');}" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
+                      "if(v){" +
+                      "try{v.style.cssText='';}catch(z){}" +
+                      "v.classList.remove('__pipv');" +
+                      // Kontrolleri uyandırmak için kısa timeupdate
+                      "try{var t=v.currentTime;v.currentTime=Math.max(0,t-0.001);v.currentTime=t;}catch(z){}" +
+                      "try{v.dispatchEvent(new Event('playing'));}catch(z){}" +
+                      "}" +
                       "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
 
