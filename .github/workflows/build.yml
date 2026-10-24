@@ -1540,6 +1540,7 @@ jobs:
                       // YouTube ortadaki logo / büyük oynat katmanı
                       if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
                           try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
+                          try { view?.evaluateJavascript(YT_PROMO_JS, null) } catch (_: Exception) { }
                       }
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
@@ -2277,12 +2278,48 @@ jobs:
                       toast("Video bulunamadı")
                       return
                   }
-                  val titleGuess = try {
-                      tabs.getOrNull(cur)?.web?.title?.takeIf { !it.isNullOrBlank() }
-                          ?.replace(Regex("\\s*[-|]\\s*YouTube(\\s*Music)?\\s*$", RegexOption.IGNORE_CASE), "")
-                          ?.trim()
-                  } catch (_: Exception) { null }
-                  val title = titleGuess?.takeIf { it.isNotBlank() && it.length > 2 } ?: "video_$id"
+                  fetchVideoTitle(id) { t -> downloadSingleTitled(page, audioOnly, id, t) }
+              }
+
+              /** Videonun gerçek başlığını YouTube'dan alır; olmazsa oynatıcıdan dener. */
+              private fun fetchVideoTitle(id: String, onDone: (String?) -> Unit) {
+                  Thread {
+                      var title: String? = null
+                      try {
+                          val u = java.net.URL("https://www.youtube.com/oembed?format=json&url=" + Uri.encode("https://www.youtube.com/watch?v=" + id))
+                          val c = u.openConnection() as java.net.HttpURLConnection
+                          c.connectTimeout = 5000
+                          c.readTimeout = 5000
+                          c.setRequestProperty("User-Agent", "Mozilla/5.0")
+                          if (c.responseCode in 200..299) {
+                              val t = JSONObject(c.inputStream.bufferedReader().readText()).optString("title").trim()
+                              if (t.isNotBlank()) title = t
+                          }
+                          c.disconnect()
+                      } catch (_: Exception) { }
+                      val found = title
+                      handler.post {
+                          if (found != null) { onDone(found); return@post }
+                          val js = "(function(){try{var p=document.getElementById('movie_player');" +
+                              "if(p&&p.getVideoData){var d=p.getVideoData();if(d&&d.title)return d.title;}" +
+                              "var md=navigator.mediaSession&&navigator.mediaSession.metadata;if(md&&md.title)return md.title;" +
+                              "return (document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');}catch(e){return '';}})();"
+                          val w = tabs.getOrNull(cur)?.web
+                          if (w == null) { onDone(null); return@post }
+                          try {
+                              w.evaluateJavascript(js) { raw ->
+                                  val r = try { JSONArray("[" + raw + "]").getString(0) } catch (_: Exception) { "" }
+                                  onDone(if (r.isBlank() || r == "null") null else r)
+                              }
+                          } catch (_: Exception) { onDone(null) }
+                      }
+                  }.start()
+              }
+
+              private fun downloadSingleTitled(page: String, audioOnly: Boolean, id: String, ytTitle: String?) {
+                  val title = ytTitle?.takeIf {
+                      it.isNotBlank() && !it.equals("YouTube", true) && !it.equals("YouTube Music", true)
+                  } ?: "video_$id"
                   val base = safeFileName(title, id)
                   val watch = "https://www.youtube.com/watch?v=$id"
 
@@ -3314,13 +3351,48 @@ jobs:
                       m.contains("msword") || m.contains("ms-excel") || m.contains("ms-powerpoint") || m.contains("rtf")
               }
 
+              /** İndirilen dosya başka bir paket (DownloadManager) adına kaydedildiği için yoldan okunamayabilir; gerekirse kopyasını alır. */
+              private fun resolveReadable(f: java.io.File, e: Prefs.DownloadEntry): java.io.File? {
+                  try {
+                      if (f.length() > 0) { f.inputStream().use { it.read() }; return f }
+                  } catch (_: Exception) { }
+                  try {
+                      val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                      var id = -1L
+                      dm.query(DownloadManager.Query().setFilterByStatus(DownloadManager.STATUS_SUCCESSFUL))?.use { c ->
+                          val iT = c.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE)
+                          val iId = c.getColumnIndexOrThrow(DownloadManager.COLUMN_ID)
+                          while (c.moveToNext()) {
+                              if (c.getString(iT) == e.title) { id = c.getLong(iId); break }
+                          }
+                      }
+                      if (id >= 0) {
+                          val uri = dm.getUriForDownloadedFile(id)
+                          if (uri != null) {
+                              val dir = java.io.File(cacheDir, "docs")
+                              dir.mkdirs()
+                              val out = java.io.File(dir, e.title.replace(Regex("[\\\\/:*?\"<>|]+"), "_"))
+                              contentResolver.openInputStream(uri)?.use { ins -> out.outputStream().use { o -> ins.copyTo(o) } }
+                              if (out.length() > 0) return out
+                          }
+                      }
+                  } catch (_: Exception) { }
+                  return null
+              }
+
               private fun openLocalDocument(f: java.io.File, e: Prefs.DownloadEntry) {
-                  val i = Intent(this, DocumentViewerActivity::class.java)
-                      .putExtra(DocumentViewerActivity.EXTRA_PATH, f.absolutePath)
-                      .putExtra(DocumentViewerActivity.EXTRA_NAME, e.title)
-                      .putExtra(DocumentViewerActivity.EXTRA_MIME, e.mime)
-                      .putExtra(DocumentViewerActivity.EXTRA_URL, e.url)
-                  try { startActivity(i) } catch (_: Exception) { toast("Dosya açılamadı") }
+                  Thread {
+                      val rf = resolveReadable(f, e)
+                      handler.post {
+                          if (rf == null) { toast("Dosya okunamadı"); return@post }
+                          val i = Intent(this, DocumentViewerActivity::class.java)
+                              .putExtra(DocumentViewerActivity.EXTRA_PATH, rf.absolutePath)
+                              .putExtra(DocumentViewerActivity.EXTRA_NAME, e.title)
+                              .putExtra(DocumentViewerActivity.EXTRA_MIME, e.mime)
+                              .putExtra(DocumentViewerActivity.EXTRA_URL, e.url)
+                          try { startActivity(i) } catch (_: Exception) { toast("Dosya açılamadı") }
+                      }
+                  }.start()
               }
 
               /** Uygulama içi İndirilenler listesi. */
@@ -4104,6 +4176,32 @@ jobs:
                       "return JSON.stringify(out.slice(0,20));" +
                       "}catch(e){return '[]';}})();"
 
+
+                            // YouTube / YouTube Music: "Uygulamayı dene / aç / yükle" öneri ve örtülerini kaldırır
+                            const val YT_PROMO_JS = """
+                            (function(){try{
+                            if(window.__rotaPromo)return;window.__rotaPromo=1;
+                            var re=/uygulama(y[ıi]|n[ıi])?\s*(dene|a[cç]|y[üu]kle|indir|edin|al\b|ile)|uygulamada\s*(a[cç]|dinle|izle|devam)|get\s*the\s*app|open\s*(in\s*)?(the\s*)?app|try\s*the\s*app|use\s*the\s*app|install\s*(the\s*)?app|download\s*the\s*app|listen\s*in\s*the\s*app|continue\s*in\s*(the\s*)?app/i;
+                            var no=/^(hay[ıi]r|şimdi de[gğ]il|simdi degil|belki sonra|not now|no,? thanks|continue in browser|taray[ıi]c[ıi]da devam|kapat|close|dismiss|vazge[cç])/i;
+                            function hide(e){try{e.style.setProperty('display','none','important');}catch(x){}}
+                            function scan(){
+                            document.querySelectorAll('ytmusic-mealbar-promo-renderer,ytmusic-app-promo,ytm-promo-banner,ytm-app-promo,ytmusic-premium-upsell,[class*="app-promo"],[class*="open-app"],[class*="get-app"],[id*="app-promo"],[id*="open-app"]').forEach(hide);
+                            document.querySelectorAll('a,button,[role=button],yt-button-renderer,ytmusic-button-renderer,ytm-button-renderer').forEach(function(e){
+                            var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\s+/g,' ').trim();
+                            if(t&&t.length<90&&re.test(t)){var c=e.closest('ytmusic-mealbar-promo-renderer,ytm-promo-banner,tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog]')||e;hide(c);}
+                            });
+                            document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog],ytmusic-popup-container,ytm-bottom-sheet-renderer').forEach(function(d){
+                            var t=(d.textContent||'').replace(/\s+/g,' ');
+                            if(t.length<600&&re.test(t)){
+                            d.querySelectorAll('a,button,[role=button]').forEach(function(b){var bt=(b.textContent||b.getAttribute('aria-label')||'').trim();if(no.test(bt)){try{b.click();}catch(x){}}});
+                            hide(d);
+                            document.querySelectorAll('iron-overlay-backdrop,tp-yt-iron-overlay-backdrop').forEach(hide);
+                            try{document.body.style.setProperty('overflow','auto','important');document.documentElement.style.setProperty('overflow','auto','important');}catch(x){}
+                            }});
+                            }
+                            setInterval(scan,500);scan();
+                            }catch(e){}})();
+                            """
 
                   const val KEEP_PLAYING_JS =
                       "(function(){try{" +
@@ -5562,6 +5660,8 @@ jobs:
               private var quiet = false
               private var position = PlaybackState.PLAYBACK_POSITION_UNKNOWN
               private var duration = -1L
+              private val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
+              private val idleStop = Runnable { stopSelf() }
 
               override fun onCreate() {
                   super.onCreate()
@@ -5652,7 +5752,11 @@ jobs:
                           mb.putBitmap(MediaMetadata.METADATA_KEY_ART, it)
                       }
                   } catch (_: Exception) { }
-                  s.setMetadata(mb.build())
+                  // Yalnızca çalarken aktif oturum: duraklayınca diğer uygulamaların (YouTube Müzik vb.) bildirimine yer açılır
+                            s.isActive = playing
+                            idleHandler.removeCallbacks(idleStop)
+                            if (!playing) idleHandler.postDelayed(idleStop, 90000L)
+                            s.setMetadata(mb.build())
                   val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
                       PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or
                       (if (duration > 0) PlaybackState.ACTION_SEEK_TO else 0L)
@@ -5694,6 +5798,9 @@ jobs:
 
               override fun onDestroy() {
                   running = false
+                            idleHandler.removeCallbacks(idleStop)
+                            try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
+                            try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) } catch (_: Exception) { }
                   try { session?.release() } catch (_: Exception) { }
                   session = null
                   super.onDestroy()
