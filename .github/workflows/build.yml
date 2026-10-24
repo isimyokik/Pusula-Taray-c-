@@ -137,6 +137,13 @@ jobs:
                           <data android:scheme="https" />
                       </intent-filter>
                   </activity>
+
+                  <activity
+                      android:name=".DocumentViewerActivity"
+                      android:exported="false"
+                      android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+                      android:theme="@style/Theme.Pusula"
+                      android:windowSoftInputMode="adjustResize" />
               </application>
           </manifest>
           EOF
@@ -1148,7 +1155,11 @@ jobs:
                   }
                   web.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY -> onPageScroll(tab, scrollY, oldScrollY) }
                   web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-                      startDownload(url, userAgent, contentDisposition, mimeType)
+                      if (isViewableDocument(url, mimeType, contentDisposition)) {
+                          openDocumentViewer(url, mimeType, contentDisposition)
+                      } else {
+                          promptDownload(url, userAgent, contentDisposition, mimeType)
+                      }
                   }
                   web.webViewClient = makeClient(tab)
                   web.webChromeClient = makeChrome(tab)
@@ -1338,17 +1349,21 @@ jobs:
                       val u = request?.url ?: return false
                       val scheme = u.scheme ?: return false
                       val gesture = request?.hasGesture() == true
+                      val urlStr = u.toString()
                       return when (scheme) {
                           "http", "https" -> {
                               if (prefs.adBlock && tab.fromPopup && shouldBlockAd(u)) {
                                   toast("Reklam penceresi engellendi")
                                   closePopupIfEmpty(tab)
                                   true
+                              } else if (isViewableDocument(urlStr, null, null) && gesture) {
+                                  openDocumentViewer(urlStr, null, null)
+                                  true
                               } else false
                           }
                           "about", "blob", "data" -> false
                           "file", "content", "javascript" -> true
-                          else -> askExternal(u.toString(), tab, gesture)
+                          else -> askExternal(urlStr, tab, gesture)
                       }
                   }
 
@@ -1517,10 +1532,132 @@ jobs:
                       "</style></head><body><h1>Yüklenemedi</h1><p>${Html.escapeHtml(url)}</p><p>${Html.escapeHtml(desc)}</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
               }
 
-              private fun startDownload(url: String, ua: String?, cd: String?, mime: String?) {
+              /** PDF, Word, Excel, metin vb. uygulama içinde açılabilecek dosya mı? */
+              private fun isViewableDocument(url: String, mime: String?, cd: String?): Boolean {
+                  val m = (mime ?: "").lowercase()
+                  val name = URLUtil.guessFileName(url, cd, mime).lowercase()
+                  val path = try { Uri.parse(url).path?.lowercase() ?: "" } catch (_: Exception) { "" }
+                  return m.contains("pdf") || name.endsWith(".pdf") || path.endsWith(".pdf") ||
+                      m.contains("msword") || m.contains("wordprocessingml") || name.endsWith(".doc") || name.endsWith(".docx") ||
+                      m.contains("ms-excel") || m.contains("spreadsheetml") || name.endsWith(".xls") || name.endsWith(".xlsx") ||
+                      m.contains("ms-powerpoint") || m.contains("presentationml") || name.endsWith(".ppt") || name.endsWith(".pptx") ||
+                      m.contains("rtf") || name.endsWith(".rtf") ||
+                      m.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".csv") ||
+                      name.endsWith(".md") || name.endsWith(".json") || name.endsWith(".log") || name.endsWith(".xml")
+              }
+
+              private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
+                  val name = URLUtil.guessFileName(url, cd, mime)
+                  val i = Intent(this, DocumentViewerActivity::class.java)
+                      .putExtra(DocumentViewerActivity.EXTRA_URL, url)
+                      .putExtra(DocumentViewerActivity.EXTRA_NAME, name)
+                      .putExtra(DocumentViewerActivity.EXTRA_MIME, mime)
+                  try { startActivity(i) } catch (_: Exception) { startDownload(url, null, cd, mime) }
+              }
+
+              private fun mediaKind(url: String, mime: String?, cd: String?): String {
+                  val m = (mime ?: "").lowercase()
+                  val name = URLUtil.guessFileName(url, cd, mime).lowercase()
+                  return when {
+                      m.startsWith("video/") || name.endsWith(".mp4") || name.endsWith(".webm") ||
+                      name.endsWith(".mkv") || name.endsWith(".mov") || name.endsWith(".m4v") ||
+                      name.endsWith(".avi") || name.endsWith(".3gp") -> "video"
+                      m.startsWith("audio/") || name.endsWith(".mp3") || name.endsWith(".m4a") ||
+                      name.endsWith(".aac") || name.endsWith(".ogg") || name.endsWith(".wav") ||
+                      name.endsWith(".flac") || name.endsWith(".opus") -> "audio"
+                      m.startsWith("image/") || name.endsWith(".jpg") || name.endsWith(".jpeg") ||
+                      name.endsWith(".png") || name.endsWith(".gif") || name.endsWith(".webp") ||
+                      name.endsWith(".bmp") || name.endsWith(".svg") -> "image"
+                      else -> "file"
+                  }
+              }
+
+              /** Medya ve diğer dosyalar için indirme seçenekleri gösterir. */
+              private fun promptDownload(url: String, ua: String?, cd: String?, mime: String?) {
+                  if (!url.startsWith("http")) return
+                  val kind = mediaKind(url, mime, cd)
+                  val name = URLUtil.guessFileName(url, cd, mime)
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(18), dp(18), dp(18), dp(22))
+                  val r = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+
+                  val title = TextView(this)
+                  title.text = when (kind) {
+                      "video" -> "Videoyu indir"
+                      "audio" -> "Sesi indir"
+                      "image" -> "Görseli indir"
+                      else -> "Dosyayı indir"
+                  }
+                  title.textSize = 18f
+                  title.setTypeface(null, Typeface.BOLD)
+                  title.setTextColor(cText)
+                  title.setPadding(0, 0, 0, dp(6))
+                  col.addView(title)
+
+                  val sub = TextView(this)
+                  sub.text = name
+                  sub.textSize = 13f
+                  sub.setTextColor(cSub)
+                  sub.setPadding(0, 0, 0, dp(14))
+                  col.addView(sub)
+
+                  fun addOpt(label: String, forceMime: String? = null, forceExt: String? = null) {
+                      val btn = textBtn(label) {
+                          d.dismiss()
+                          var finalName = name
+                          var finalMime = forceMime ?: mime
+                          if (forceExt != null && !finalName.lowercase().endsWith(forceExt)) {
+                              finalName = finalName.substringBeforeLast('.') + forceExt
+                          }
+                          startDownload(url, ua, cd, finalMime, finalName)
+                      }
+                      btn.setTextColor(cText)
+                      btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                      btn.setPadding(dp(16), 0, dp(16), 0)
+                      btn.background = shape(cField, 14)
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
+                      lp.bottomMargin = dp(8)
+                      col.addView(btn, lp)
+                  }
+
+                  when (kind) {
+                      "video" -> {
+                          addOpt("En yüksek kalite (orijinal)", mime)
+                          addOpt("1080p olarak dene", "video/mp4", ".mp4")
+                          addOpt("720p olarak dene", "video/mp4", ".mp4")
+                          addOpt("480p olarak dene", "video/mp4", ".mp4")
+                      }
+                      "audio" -> {
+                          addOpt("MP3 / Ses olarak indir", "audio/mpeg", ".mp3")
+                          addOpt("Orijinal formatta indir", mime)
+                      }
+                      "image" -> {
+                          addOpt("Görseli indir", mime)
+                      }
+                      else -> {
+                          addOpt("İndir", mime)
+                      }
+                  }
+
+                  val cancel = textBtn("İptal") { d.dismiss() }
+                  cancel.setTextColor(cSub)
+                  cancel.gravity = Gravity.CENTER
+                  col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+                  sheetWindow(d, col, false)
+                  d.show()
+              }
+
+              private fun startDownload(url: String, ua: String?, cd: String?, mime: String?, forcedName: String? = null) {
                   if (!url.startsWith("http")) return
                   try {
-                      val name = URLUtil.guessFileName(url, cd, mime)
+                      val name = forcedName ?: URLUtil.guessFileName(url, cd, mime)
                       val req = DownloadManager.Request(Uri.parse(url))
                       if (mime != null) req.setMimeType(mime)
                       val cookie = CookieManager.getInstance().getCookie(url)
@@ -1528,9 +1665,17 @@ jobs:
                       if (ua != null) req.addRequestHeader("User-Agent", ua)
                       req.setTitle(name)
                       req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                      if (Build.VERSION.SDK_INT >= 29) req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-                      else req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
+                      val destPath: String
+                      if (Build.VERSION.SDK_INT >= 29) {
+                          req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+                          destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + name
+                      } else {
+                          req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
+                          destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + name
+                      }
                       (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+                      // Uygulama içi "İndirilenler" listesine ekle
+                      prefs.addDownload(name, url, destPath, mime ?: "")
                       toast("İndiriliyor: $name")
                   } catch (_: Exception) { toast("İndirilemedi") }
               }
@@ -1565,6 +1710,7 @@ jobs:
                       },
                       SheetItem("🔖", "Yer imleri", false) { showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) },
                       SheetItem("🕘", "Geçmiş", false) { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) },
+                      SheetItem("⬇️", "İndirilenler", false) { showDownloads() },
                       SheetItem("🔍", "Sayfada bul", false) { openFind() },
                       SheetItem("🖥️", "Masaüstü sitesi", t.desktop) { toggleDesktop() },
                       SheetItem("🪟", "Küçük pencere", false) { enterPip() },
@@ -1618,6 +1764,131 @@ jobs:
                       col.addView(lr, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                   }
                   sheetWindow(d, col, false)
+                  d.show()
+              }
+
+              /** Uygulama içi İndirilenler listesi. */
+              private fun showDownloads() {
+                  val items = ArrayList(prefs.downloads())
+                  val d = Dialog(this)
+                  val rootV = LinearLayout(this)
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  val tt = TextView(this)
+                  tt.text = "İndirilenler"
+                  tt.textSize = 20f
+                  tt.setTypeface(null, Typeface.BOLD)
+                  tt.setTextColor(cText)
+                  head.addView(tt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  if (items.isNotEmpty()) {
+                      val clear = textBtn("Temizle") {
+                          themedConfirm("Tüm indirme kayıtları silinsin mi?\n(Dosyalar telefonunda kalır)", onYes = {
+                              prefs.clearDownloads()
+                              d.dismiss()
+                              toast("Temizlendi")
+                          }, onNo = {})
+                      }
+                      clear.setTextColor(cAccent)
+                      head.addView(clear)
+                  }
+                  rootV.addView(head)
+
+                  if (items.isEmpty()) {
+                      val empty = TextView(this)
+                      empty.text = "Henüz indirilen dosya yok.\nİndirdiğin dosyalar burada görünür."
+                      empty.textSize = 15f
+                      empty.setTextColor(cSub)
+                      empty.gravity = Gravity.CENTER
+                      empty.setPadding(0, dp(40), 0, 0)
+                      rootV.addView(empty)
+                  } else {
+                      val scroll = ScrollView(this)
+                      val listCol = LinearLayout(this)
+                      listCol.orientation = LinearLayout.VERTICAL
+                      listCol.setPadding(0, dp(12), 0, dp(20))
+                      for (e in items) {
+                          val row = LinearLayout(this)
+                          row.orientation = LinearLayout.HORIZONTAL
+                          row.gravity = Gravity.CENTER_VERTICAL
+                          row.setPadding(dp(12), dp(12), dp(12), dp(12))
+                          row.background = shape(cSurface, 14)
+                          val icon = TextView(this)
+                          icon.text = when {
+                              e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
+                              e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") -> "🎵"
+                              e.mime.startsWith("image") -> "🖼️"
+                              e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
+                              else -> "📁"
+                          }
+                          icon.textSize = 22f
+                          row.addView(icon, LinearLayout.LayoutParams(dp(36), dp(36)).apply { rightMargin = dp(10) })
+                          val info = LinearLayout(this)
+                          info.orientation = LinearLayout.VERTICAL
+                          val nameTv = TextView(this)
+                          nameTv.text = e.title
+                          nameTv.textSize = 15f
+                          nameTv.setTextColor(cText)
+                          nameTv.maxLines = 1
+                          nameTv.ellipsize = android.text.TextUtils.TruncateAt.END
+                          val subTv = TextView(this)
+                          subTv.text = try {
+                              java.text.SimpleDateFormat("dd MMM yyyy HH:mm", java.util.Locale("tr")).format(java.util.Date(e.time))
+                          } catch (_: Exception) { "" }
+                          subTv.textSize = 12f
+                          subTv.setTextColor(cSub)
+                          info.addView(nameTv)
+                          info.addView(subTv)
+                          row.addView(info, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                          row.setOnClickListener {
+                              try {
+                                  val f = java.io.File(e.path)
+                                  if (f.exists()) {
+                                      val uri = Uri.fromFile(f)
+                                      val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
+                                      open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                      try {
+                                          startActivity(Intent.createChooser(open, "Aç"))
+                                      } catch (_: Exception) {
+                                          // Dosya yöneticisinde göster
+                                          toast("Dosya İndirilenler klasöründe: ${e.title}")
+                                      }
+                                  } else if (e.url.startsWith("http")) {
+                                      openTab(e.url)
+                                      d.dismiss()
+                                  } else {
+                                      toast("Dosya bulunamadı")
+                                  }
+                              } catch (_: Exception) {
+                                  toast("Dosya açılamadı")
+                              }
+                          }
+                          row.setOnLongClickListener {
+                              themedConfirm("\"${e.title}\" kaydı silinsin mi?", onYes = {
+                                  prefs.removeDownload(e.path)
+                                  d.dismiss()
+                                  showDownloads()
+                              }, onNo = {})
+                              true
+                          }
+                          val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                          lp.bottomMargin = dp(8)
+                          listCol.addView(row, lp)
+                      }
+                      scroll.addView(listCol)
+                      rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+                  }
+
+                  val close = textBtn("Kapat") { d.dismiss() }
+                  close.setTextColor(cSub)
+                  close.gravity = Gravity.CENTER
+                  rootV.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+
+                  sheetWindow(d, rootV, true)
                   d.show()
               }
 
@@ -2511,7 +2782,7 @@ jobs:
                       "body>*{visibility:hidden!important}" +
                       "video.__pipv,.html5-video-player,ytmusic-player-page,ytmusic-player{visibility:visible!important}" +
                       ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
-                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:scale(1.012)!important}" +
+                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:cover!important;object-position:center!important;margin:0!important;padding:0!important;transform:scale(1.03)!important}" +
                       "';" +
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
@@ -2598,6 +2869,216 @@ jobs:
               )
 
               fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
+          }
+          EOF
+          cat > app/src/main/java/com/pusula/browser/DocumentViewerActivity.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.annotation.SuppressLint
+          import android.content.Intent
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Environment
+          import android.view.Gravity
+          import android.view.View
+          import android.view.ViewGroup
+          import android.webkit.CookieManager
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebSettings
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.ImageButton
+          import android.widget.LinearLayout
+          import android.widget.ProgressBar
+          import android.widget.TextView
+          import android.widget.Toast
+          import androidx.activity.OnBackPressedCallback
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.view.WindowCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+
+          /** PDF, Word, Excel, metin vb. dosyaları uygulama içinde açar. Pinch-zoom + indirme düğmesi. */
+          class DocumentViewerActivity : AppCompatActivity() {
+
+              private lateinit var web: WebView
+              private lateinit var progress: ProgressBar
+              private lateinit var titleView: TextView
+              private var fileUrl: String = ""
+              private var fileName: String = ""
+              private var mime: String? = null
+
+              @SuppressLint("SetJavaScriptEnabled")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  fileUrl = intent.getStringExtra(EXTRA_URL) ?: run { finish(); return }
+                  fileName = intent.getStringExtra(EXTRA_NAME) ?: guessName(fileUrl)
+                  mime = intent.getStringExtra(EXTRA_MIME)
+
+                  val prefs = Prefs(this)
+                  val pal = Themes.get(prefs.theme)
+                  val cBg = pal.bg
+                  val cSurface = pal.surface
+                  val cText = pal.text
+                  val cIcon = pal.icon
+                  val cAccent = pal.accent
+                  val cSub = pal.sub
+
+                  WindowCompat.setDecorFitsSystemWindows(window, false)
+                  window.setBackgroundDrawable(ColorDrawable(cBg))
+                  val bars = WindowInsetsControllerCompat(window, window.decorView)
+                  bars.isAppearanceLightStatusBars = !pal.dark
+                  bars.isAppearanceLightNavigationBars = !pal.dark
+
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setBackgroundColor(cBg)
+                  }
+
+                  val top = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(8), dp(10), dp(8), dp(10))
+                      setBackgroundColor(cSurface)
+                      elevation = dp(4).toFloat()
+                  }
+
+                  val back = ImageButton(this).apply {
+                      setImageResource(R.drawable.ic_back)
+                      setColorFilter(cIcon)
+                      background = null
+                      contentDescription = "Geri"
+                      setOnClickListener { finish() }
+                  }
+                  top.addView(back, LinearLayout.LayoutParams(dp(44), dp(44)))
+
+                  titleView = TextView(this).apply {
+                      text = fileName
+                      textSize = 16f
+                      setTextColor(cText)
+                      maxLines = 1
+                      ellipsize = android.text.TextUtils.TruncateAt.END
+                      gravity = Gravity.CENTER_VERTICAL
+                  }
+                  top.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                      leftMargin = dp(4); rightMargin = dp(8)
+                  })
+
+                  val downloadBtn = ImageButton(this).apply {
+                      setImageResource(android.R.drawable.stat_sys_download)
+                      setColorFilter(cAccent)
+                      background = null
+                      contentDescription = "İndir"
+                      setOnClickListener { downloadFile(prefs) }
+                  }
+                  top.addView(downloadBtn, LinearLayout.LayoutParams(dp(48), dp(44)))
+
+                  root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                  progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                      max = 100; progress = 0; visibility = View.VISIBLE
+                  }
+                  root.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)))
+
+                  web = WebView(this).apply {
+                      setBackgroundColor(cBg)
+                      settings.apply {
+                          javaScriptEnabled = true
+                          domStorageEnabled = true
+                          loadWithOverviewMode = true
+                          useWideViewPort = true
+                          builtInZoomControls = true
+                          displayZoomControls = false
+                          setSupportZoom(true)
+                          mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                          defaultTextEncodingName = "utf-8"
+                          allowFileAccess = true
+                      }
+                      webViewClient = object : WebViewClient() {
+                          override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+                          override fun onPageFinished(view: WebView?, url: String?) { progress.visibility = View.GONE }
+                      }
+                      webChromeClient = object : WebChromeClient() {
+                          override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                              progress.progress = newProgress
+                              progress.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
+                          }
+                      }
+                  }
+                  root.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+                  setContentView(root)
+
+                  onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                      override fun handleOnBackPressed() {
+                          if (web.canGoBack()) web.goBack() else finish()
+                      }
+                  })
+                  loadDocument()
+              }
+
+              private fun loadDocument() {
+                  val lowerMime = (mime ?: "").lowercase()
+                  val lowerName = fileName.lowercase()
+                  val isText = lowerMime.startsWith("text/") ||
+                          lowerName.endsWith(".txt") || lowerName.endsWith(".csv") ||
+                          lowerName.endsWith(".md") || lowerName.endsWith(".json") ||
+                          lowerName.endsWith(".log") || lowerName.endsWith(".xml")
+                  if (isText) {
+                      web.loadUrl(fileUrl)
+                  } else {
+                      val viewer = "https://docs.google.com/gview?embedded=true&url=" + Uri.encode(fileUrl)
+                      web.loadUrl(viewer)
+                  }
+              }
+
+              private fun downloadFile(prefs: Prefs) {
+                  try {
+                      val req = android.app.DownloadManager.Request(Uri.parse(fileUrl))
+                      req.setTitle(fileName)
+                      req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                      if (mime != null) req.setMimeType(mime)
+                      val cookie = CookieManager.getInstance().getCookie(fileUrl)
+                      if (cookie != null) req.addRequestHeader("Cookie", cookie)
+                      val destPath: String
+                      if (Build.VERSION.SDK_INT >= 29) {
+                          req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                          destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + fileName
+                      } else {
+                          req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)
+                          destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + fileName
+                      }
+                      (getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(req)
+                      prefs.addDownload(fileName, fileUrl, destPath, mime ?: "")
+                      Toast.makeText(this, "İndiriliyor: $fileName", Toast.LENGTH_SHORT).show()
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "İndirilemedi", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              private fun guessName(url: String): String {
+                  return try {
+                      val path = Uri.parse(url).lastPathSegment ?: "dosya"
+                      if (path.contains(".")) path else "dosya"
+                  } catch (_: Exception) { "dosya" }
+              }
+
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
+
+              override fun onDestroy() {
+                  try { web.destroy() } catch (_: Exception) {}
+                  super.onDestroy()
+              }
+
+              companion object {
+                  const val EXTRA_URL = "url"
+                  const val EXTRA_NAME = "name"
+                  const val EXTRA_MIME = "mime"
+              }
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
@@ -2858,6 +3339,63 @@ jobs:
               }
               fun removeHistory(url: String) { val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l) }
               fun clearHistory() { sp.edit().putString("history", "[]").apply() }
+
+              /** İndirilen dosya kaydı (uygulama içi liste için). */
+              class DownloadEntry(val title: String, val url: String, val path: String, val mime: String, val time: Long)
+
+              fun downloads(): List<DownloadEntry> {
+                  val out = ArrayList<DownloadEntry>()
+                  try {
+                      val arr = JSONArray(sp.getString("downloads", "[]") ?: "[]")
+                      for (i in 0 until arr.length()) {
+                          val o = arr.getJSONObject(i)
+                          out.add(DownloadEntry(
+                              o.optString("t"),
+                              o.optString("u"),
+                              o.optString("p"),
+                              o.optString("m"),
+                              o.optLong("ts", 0L)
+                          ))
+                      }
+                  } catch (_: Exception) {}
+                  return out
+              }
+
+              fun addDownload(title: String, url: String, path: String, mime: String) {
+                  val list = downloads().toMutableList()
+                  // Aynı dosya varsa üste taşı
+                  list.removeAll { it.path == path || (it.url == url && it.title == title) }
+                  list.add(0, DownloadEntry(title, url, path, mime, System.currentTimeMillis()))
+                  while (list.size > 200) list.removeAt(list.size - 1)
+                  val arr = JSONArray()
+                  for (e in list) {
+                      arr.put(JSONObject()
+                          .put("t", e.title)
+                          .put("u", e.url)
+                          .put("p", e.path)
+                          .put("m", e.mime)
+                          .put("ts", e.time))
+                  }
+                  sp.edit().putString("downloads", arr.toString()).apply()
+              }
+
+              fun removeDownload(path: String) {
+                  val list = downloads().toMutableList()
+                  list.removeAll { it.path == path }
+                  val arr = JSONArray()
+                  for (e in list) {
+                      arr.put(JSONObject()
+                          .put("t", e.title)
+                          .put("u", e.url)
+                          .put("p", e.path)
+                          .put("m", e.mime)
+                          .put("ts", e.time))
+                  }
+                  sp.edit().putString("downloads", arr.toString()).apply()
+              }
+
+              fun clearDownloads() { sp.edit().putString("downloads", "[]").apply() }
+
               fun saveTabs(urls: List<String>, current: Int) {
                   val arr = JSONArray()
                   for (u in urls) arr.put(u)
