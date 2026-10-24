@@ -3131,16 +3131,7 @@ jobs:
                   frame.keepScreenOn = true
 
                   val vv = android.widget.VideoView(this)
-                  val vlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER)
-                  vlp.topMargin = 0
-                  vlp.bottomMargin = 0
-                  frame.addView(vv, vlp)
-
-                  // Alttaki oynatma çubuğu bu görünmez satırın alt kenarına oturur (dikeyde 2 cm yukarıda).
-                  val anchor = View(this)
-                  val alp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                  alp.bottomMargin = dp(126)
-                  frame.addView(anchor, alp)
+                  frame.addView(vv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
 
                   if (audio) {
                       val box = LinearLayout(this)
@@ -3174,32 +3165,29 @@ jobs:
                   tlp.topMargin = dp(71)
                   frame.addView(top, tlp)
 
-                  // Çubuklar yatayda ekranı kısaltmasın diye boşluklar yöne göre ayarlanır
+                  // Alttaki oynatma çubuğunu dikeyde yaklaşık 2 cm yukarı almak için görünmez bir dayanak satırı
+                  val anchor = View(this)
+                  val alp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                  alp.bottomMargin = dp(126)
+                  frame.addView(anchor, 0, alp)
                   frame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
                       val land = (r - l) > (b - t)
-                      val wantTop = if (land) dp(44) else 0
-                      val wantBottom = if (land) dp(48) else 0
                       val wantTopBar = if (land) 0 else dp(71)
                       val wantAnchor = if (land) 0 else dp(126)
-                      if (vlp.topMargin != wantTop || vlp.bottomMargin != wantBottom || tlp.topMargin != wantTopBar || alp.bottomMargin != wantAnchor) {
-                          vlp.topMargin = wantTop
-                          vlp.bottomMargin = wantBottom
+                      if (tlp.topMargin != wantTopBar || alp.bottomMargin != wantAnchor) {
                           tlp.topMargin = wantTopBar
                           alp.bottomMargin = wantAnchor
-                          vv.layoutParams = vlp
                           top.layoutParams = tlp
                           anchor.layoutParams = alp
                       }
                   }
 
                   val mc = android.widget.MediaController(this)
-                  mc.setMediaPlayer(vv)
-                  mc.setAnchorView(anchor)
-                  vv.setOnClickListener {
-                      if (mc.isShowing) mc.hide() else mc.show(3000)
-                  }
+                  mc.setAnchorView(vv)
+                  vv.setMediaController(mc)
                   vv.setOnPreparedListener {
                       vv.start()
+                      mc.setAnchorView(anchor)
                       mc.show(3000)
                   }
                   vv.setOnErrorListener { _, _, _ ->
@@ -4688,14 +4676,9 @@ jobs:
                   running = true
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
-                      // Eski kanallar simgede kırmızı nokta çıkarıyordu; nokta kapalı yeni kanallarla değiştirildi.
-                      try { nm.deleteNotificationChannel("playback"); nm.deleteNotificationChannel("playback_quiet") } catch (_: Exception) { }
-                      val pc = NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW)
-                      pc.setShowBadge(false)
-                      nm.createNotificationChannel(pc)
+                      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
                       val qc = NotificationChannel(CHANNEL_QUIET, "Medya oynatıcı (küçük pencere)", NotificationManager.IMPORTANCE_MIN)
                       qc.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                      qc.setShowBadge(false)
                       nm.createNotificationChannel(qc)
                   }
                   val s = MediaSession(this, "Rota")
@@ -4796,8 +4779,8 @@ jobs:
               override fun onBind(intent: Intent?): IBinder? = null
 
               companion object {
-                  const val CHANNEL = "playback_nb"
-                  const val CHANNEL_QUIET = "playback_quiet_nb"
+                  const val CHANNEL = "playback"
+                  const val CHANNEL_QUIET = "playback_quiet"
                   const val NOTIF_ID = 1002
                   const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
                   const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
@@ -4842,21 +4825,17 @@ jobs:
            * ses yalnızca indirme bitince gelir.
            */
           object DownloadNotifier {
-              private const val CH_PROGRESS = "dl_progress_nb"
-              private const val CH_DONE = "dl_done_nb"
+              private const val CH_PROGRESS = "dl_progress"
+              private const val CH_DONE = "dl_done"
 
               private fun ensureChannels(ctx: Context) {
                   if (Build.VERSION.SDK_INT < 26) return
                   val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                  try { nm.deleteNotificationChannel("dl_progress"); nm.deleteNotificationChannel("dl_done") } catch (_: Exception) { }
                   val p = NotificationChannel(CH_PROGRESS, "İndirme ilerlemesi", NotificationManager.IMPORTANCE_LOW)
                   p.setSound(null, null)
                   p.enableVibration(false)
-                  p.setShowBadge(false)
                   nm.createNotificationChannel(p)
-                  val dn = NotificationChannel(CH_DONE, "İndirme tamamlandı", NotificationManager.IMPORTANCE_DEFAULT)
-                  dn.setShowBadge(false)
-                  nm.createNotificationChannel(dn)
+                  nm.createNotificationChannel(NotificationChannel(CH_DONE, "İndirme tamamlandı", NotificationManager.IMPORTANCE_DEFAULT))
               }
 
               private fun post(ctx: Context, id: Int, n: Notification) {
