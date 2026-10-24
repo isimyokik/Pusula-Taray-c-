@@ -495,6 +495,8 @@ jobs:
                   var adScript: ScriptHandler? = null
                   var keepScript: ScriptHandler? = null
                   var hookScript: ScriptHandler? = null
+                  var capScript: ScriptHandler? = null
+                  var openScript: ScriptHandler? = null
                   var errorUrl: String? = null
                   var errorLoading: Boolean = false
                   var fromPopup: Boolean = false
@@ -606,9 +608,13 @@ jobs:
               /** Küçük pencereye yalnızca menüdeki "Küçük pencere" düğmesiyle geçilir. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
+                  enterPipWith(android.util.Rational(16, 9))
+              }
+
+              private fun enterPipWith(ratio: android.util.Rational) {
                   try {
                       val b = android.app.PictureInPictureParams.Builder()
-                          .setAspectRatio(android.util.Rational(16, 9))
+                          .setAspectRatio(ratio)
                       val acts = ArrayList<android.app.RemoteAction>()
                       val prevA = pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS)
                       val playA = pipAction(12, R.drawable.ic_pip_play, "Oynat/Duraklat", PlaybackService.ACTION_TOGGLE)
@@ -621,6 +627,8 @@ jobs:
 
               private fun onPipChanged(pip: Boolean) {
                   topBar.visibility = if (pip || barHidden) View.GONE else View.VISIBLE
+                  root.setBackgroundColor(if (pip) Color.BLACK else cBg)
+                  content.setBackgroundColor(if (pip) Color.BLACK else cBg)
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
                   if (pip) {
                       closeFind()
@@ -1152,6 +1160,8 @@ jobs:
               private fun syncScripts(t: BTab) {
                   if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
                   try {
+                      if (t.openScript == null) t.openScript = WebViewCompat.addDocumentStartJavaScript(t.web, OPEN_APP_HIDE_JS, setOf("*"))
+                      if (t.capScript == null) t.capScript = WebViewCompat.addDocumentStartJavaScript(t.web, CAPTIONS_OFF_JS, setOf("*"))
                       if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
                       if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
                       else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
@@ -2246,24 +2256,14 @@ jobs:
                           "e.stopImmediatePropagation();},true);" +
                           "}catch(e){}})();"
 
-                  // Reklam görüntüsünü gizler (siyah bekleme ekranı kalır), veriyi değiştirmez, yalnızca inmiş (tamponlanmış) kısmı atlar, inmemiş yere sarmaz:
-                  // reklam sırasında sesi kapatıp 16 kat hızlandırır ve "Atla" düğmesine basar.
+                  // Reklam sırasında: siyah bekleme ekranı örtülür, ses tamamen kısılır, altyazı ve reklam arayüzü gizlenir,
+                  // reklam 16 kat hızlandırılır ve "Atla" düğmesine basılır. Reklam bitince ekran varsayılan haline döner.
                   const val STABLE_AD_BLOCKER_JS =
                       "(function(){" +
                       "if(location.hostname.indexOf('youtube.com')<0)return;" +
-                      "var fast=false,adn=0;" +
+                      "var fast=false,gap=0,cover=null,obs=null,obsPl=null,tick=0;" +
+                      "var sels=['.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info','.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text','.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container','.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list','.ytp-ad-feedback-dialog-container','.ytp-ad-skip-button-container','.caption-window','.ytp-caption-window-container','.ytp-caption-segment','.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial','ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer','.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'];" +
                       "function hideAdUi(on){" +
-                      "var sels=[" +
-                      "'.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info'," +
-                      "'.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text'," +
-                      "'.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container'," +
-                      "'.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list'," +
-                      "'.ytp-ad-feedback-dialog-container','.ytp-ad-skip-button-container'," +
-                      "'.caption-window','.ytp-caption-window-container','.ytp-caption-segment'," +
-                      "'.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial'," +
-                      "'ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer'," +
-                      "'.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'" +
-                      "];" +
                       "for(var i=0;i<sels.length;i++){" +
                       "document.querySelectorAll(sels[i]).forEach(function(el){" +
                       "try{" +
@@ -2273,35 +2273,136 @@ jobs:
                       "});" +
                       "}" +
                       "}" +
-                      "setInterval(function(){try{" +
+                      "function ensureCover(pl){" +
+                      "if(cover&&cover.parentNode===pl)return cover;" +
+                      "cover=document.createElement('div');" +
+                      "cover.id='__adcover';" +
+                      "cover.style.cssText='position:absolute;left:0;top:0;right:0;bottom:0;background:#000;z-index:2147483000;pointer-events:none;display:none';" +
+                      "if(!document.getElementById('__adcss')){" +
+                      "var st=document.createElement('style');" +
+                      "st.id='__adcss';" +
+                      "st.textContent='@keyframes __adsp{to{transform:rotate(360deg)}}';" +
+                      "document.documentElement.appendChild(st);" +
+                      "}" +
+                      "var sp=document.createElement('div');" +
+                      "sp.style.cssText='position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;box-sizing:border-box;border:4px solid rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.9);border-radius:50%;animation:__adsp .9s linear infinite';" +
+                      "cover.appendChild(sp);" +
+                      "pl.appendChild(cover);" +
+                      "return cover;" +
+                      "}" +
+                      "function endAd(vd){" +
+                      "fast=false;" +
+                      "hideAdUi(false);" +
+                      "if(!vd)return;" +
+                      "vd.style.visibility='';" +
+                      "vd.playbackRate=1;" +
+                      "var tv=parseFloat(vd.dataset.pv||'1')||1;" +
+                      "if(vd.dataset.pm!=='1'){" +
+                      "vd.volume=0;vd.muted=false;" +
+                      "var k=0;" +
+                      "var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;}},30);" +
+                      "}else{" +
+                      "vd.volume=tv;vd.muted=true;" +
+                      "}" +
+                      "}" +
+                      "function check(){" +
+                      "try{" +
                       "var pl=document.querySelector('.html5-video-player');" +
                       "if(!pl)return;" +
                       "var vd=pl.querySelector('video');" +
                       "var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');" +
-                      "adn=ad?adn+1:0;" +
-                      "if(ad&&adn>=1){" +
-                      "hideAdUi(true);" +
+                      "var cv=ensureCover(pl);" +
+                      "if(ad){" +
+                      "gap=0;" +
+                      "cv.style.display='block';" +
+                      "tick++;" +
+                      "if(tick%5===1)hideAdUi(true);" +
                       "if(vd){" +
                       "if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';vd.dataset.pv=String(vd.volume||1);}" +
-                      "vd.style.visibility='hidden';" +
                       "vd.muted=true;" +
+                      "try{vd.volume=0;}catch(x){}" +
+                      "vd.style.visibility='hidden';" +
                       "if(vd.playbackRate<8)vd.playbackRate=16;" +
                       "}" +
                       "var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytp-ad-skip-button-container button');" +
                       "if(b)try{b.click();}catch(x){}" +
-                      "}else if(!ad&&fast){" +
-                      "fast=false;" +
-                      "hideAdUi(false);" +
-                      "if(vd){" +
-                      "vd.style.visibility='';" +
-                      "vd.playbackRate=1;" +
-                      "if(vd.dataset.pm!=='1'){" +
-                      "var tv=parseFloat(vd.dataset.pv||'1')||1;vd.volume=0;vd.muted=false;" +
-                      "var k=0;var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;}},30);" +
-                      "}else{vd.muted=true;}" +
+                      "}else if(fast||cv.style.display!=='none'){" +
+                      "if(vd&&vd.playbackRate>1)vd.playbackRate=1;" +
+                      "gap++;" +
+                      "if(gap>=6){" +
+                      "gap=0;" +
+                      "cv.style.display='none';" +
+                      "endAd(vd);" +
                       "}" +
-                      "}else if(!ad){hideAdUi(false);}" +
-                      "}catch(e){}},120);" +
+                      "}" +
+                      "}catch(e){}" +
+                      "}" +
+                      "function watch(){" +
+                      "var pl=document.querySelector('.html5-video-player');" +
+                      "if(pl&&pl!==obsPl){" +
+                      "obsPl=pl;" +
+                      "if(obs)obs.disconnect();" +
+                      "obs=new MutationObserver(check);" +
+                      "obs.observe(pl,{attributes:true,attributeFilter:['class']});" +
+                      "}" +
+                      "}" +
+                      "setInterval(function(){watch();check();},60);" +
+                      "})();"
+
+                  // YouTube üst çubuğundaki "Uygulamada aç" düğmesini gizler; başka hiçbir şeye dokunmaz.
+                  const val OPEN_APP_HIDE_JS =
+                      "(function(){" +
+                      "if(location.hostname.indexOf('youtube.com')<0)return;" +
+                      "var re=/uygulamada\\s*a[cç]|uygulamay[ıi]\\s*a[cç]|uygulamay[ıi]\\s*(edin|indir)|open\\s*(in\\s*)?(the\\s*)?app|get\\s*the\\s*app|use\\s*the\\s*app/i;" +
+                      "function hide(){" +
+                      "try{" +
+                      "document.querySelectorAll('ytm-open-app-button-renderer,ytm-open-app-banner-renderer').forEach(function(e){e.style.setProperty('display','none','important');});" +
+                      "var head=document.querySelector('ytm-mobile-topbar-renderer')||document.querySelector('header');" +
+                      "if(!head)return;" +
+                      "head.querySelectorAll('a,button,ytm-button-renderer').forEach(function(e){" +
+                      "var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).trim();" +
+                      "if(t.length<60&&re.test(t)){" +
+                      "var c=e.closest('ytm-button-renderer')||e;" +
+                      "c.style.setProperty('display','none','important');" +
+                      "}" +
+                      "});" +
+                      "}catch(x){}" +
+                      "}" +
+                      "setInterval(hide,700);" +
+                      "})();"
+
+                  // Normal videolar altyazısız başlar (reklam dışında). Kullanıcı sonradan açarsa karışılmaz.
+                  const val CAPTIONS_OFF_JS =
+                      "(function(){" +
+                      "if(location.hostname.indexOf('youtube.com')<0)return;" +
+                      "var vid='',t0=0,tries=0,clicked=false;" +
+                      "function curId(){" +
+                      "try{var p=document.getElementById('movie_player');if(p&&p.getVideoData){var d=p.getVideoData();if(d&&d.video_id)return d.video_id;}}catch(e){}" +
+                      "return location.href;" +
+                      "}" +
+                      "function capsOff(){" +
+                      "try{" +
+                      "var pl=document.getElementById('movie_player')||document.querySelector('.html5-video-player');" +
+                      "if(!pl)return;" +
+                      "if(pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting'))return;" +
+                      "var id=curId();" +
+                      "if(id!==vid){vid=id;t0=Date.now();tries=0;clicked=false;}" +
+                      "if(Date.now()-t0>8000)return;" +
+                      "var btn=pl.querySelector('.ytp-subtitles-button');" +
+                      "var on=false;" +
+                      "if(btn&&btn.getAttribute('aria-pressed')==='true')on=true;" +
+                      "if(!on&&pl.getOption){try{var tr=pl.getOption('captions','track');if(tr&&tr.languageCode)on=true;}catch(x){}}" +
+                      "if(!on)return;" +
+                      "tries++;" +
+                      "if(tries<=3&&pl.setOption){" +
+                      "try{pl.setOption('captions','track',{});}catch(x){}" +
+                      "}else if(!clicked&&btn&&btn.getAttribute('aria-pressed')==='true'){" +
+                      "clicked=true;" +
+                      "try{btn.click();}catch(x){}" +
+                      "}" +
+                      "}catch(e){}" +
+                      "}" +
+                      "setInterval(capsOff,400);" +
                       "})();"
 
                   const val BACKGROUND_MEDIA_JS =
@@ -2410,7 +2511,7 @@ jobs:
                       "body>*{visibility:hidden!important}" +
                       "video.__pipv,.html5-video-player,ytmusic-player-page,ytmusic-player{visibility:visible!important}" +
                       ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
-                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:none!important}" +
+                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:scale(1.012)!important}" +
                       "';" +
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
