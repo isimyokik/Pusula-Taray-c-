@@ -1692,18 +1692,55 @@ jobs:
                   d.show()
               }
 
+              /** Sekme başlığından temiz dosya adı (videoplayback yazmasın). */
+              private fun mediaFileBase(): String {
+                  val t = tabs.getOrNull(cur)
+                  var title = t?.title?.trim().orEmpty()
+                  if (title.isBlank() || title.equals("YouTube", true) || title.equals("YouTube Music", true)) {
+                      title = lastTitle.ifBlank { "medya" }
+                  }
+                  title = title
+                      .replace(Regex("\\s*[-|]\\s*YouTube(\\s*Music)?\\s*$", RegexOption.IGNORE_CASE), "")
+                      .replace(Regex("[\\\\/:*?\"<>|]+"), " ")
+                      .replace(Regex("\\s+"), " ")
+                      .trim()
+                      .take(80)
+                  if (title.isBlank()) title = "medya"
+                  return title
+              }
+
               private fun startDownload(url: String, ua: String?, cd: String?, mime: String?, forcedName: String? = null) {
                   if (!url.startsWith("http")) return
                   try {
-                      val name = forcedName ?: URLUtil.guessFileName(url, cd, mime)
+                      var name = forcedName
+                      if (name.isNullOrBlank()) {
+                          val guessed = URLUtil.guessFileName(url, cd, mime)
+                          // videoplayback / generik isimleri başlıkla değiştir
+                          val base = mediaFileBase()
+                          val ext = when {
+                              mime?.contains("audio") == true || guessed.endsWith(".mp3", true) || guessed.endsWith(".m4a", true) ->
+                                  if (guessed.contains(".")) guessed.substringAfterLast('.') else "mp3"
+                              mime?.contains("video") == true || guessed.endsWith(".mp4", true) || guessed.endsWith(".webm", true) ->
+                                  if (guessed.contains(".")) guessed.substringAfterLast('.') else "mp4"
+                              guessed.contains(".") -> guessed.substringAfterLast('.')
+                              else -> "bin"
+                          }
+                          name = if (guessed.startsWith("videoplayback", true) || guessed.startsWith("audio", true) ||
+                              guessed.length < 8 || guessed.matches(Regex("(?i)download|file|media.*"))) {
+                              "$base.$ext"
+                          } else {
+                              // Yine de başlığı tercih et
+                              "$base.$ext"
+                          }
+                      }
                       val req = DownloadManager.Request(Uri.parse(url))
                       if (mime != null) req.setMimeType(mime)
                       val cookie = CookieManager.getInstance().getCookie(url)
                       if (cookie != null) req.addRequestHeader("Cookie", cookie)
                       if (ua != null) req.addRequestHeader("User-Agent", ua)
                       req.setTitle(name)
-                      // Sadece tamamlanınca bildirim; sürekli yenileme / uyarı sesi yok
-                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_ONLY_COMPLETION)
+                      // İlerleme görünsün; tamamlanınca bildir (sürekli ötme sisteme bağlı)
+                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                       val destPath: String
                       if (Build.VERSION.SDK_INT >= 29) {
                           req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
@@ -1713,7 +1750,6 @@ jobs:
                           destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + name
                       }
                       (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
-                      // Uygulama içi "İndirilenler" listesine ekle
                       prefs.addDownload(name, url, destPath, mime ?: "")
                       toast("İndiriliyor: $name")
                   } catch (_: Exception) { toast("İndirilemedi") }
@@ -2019,35 +2055,39 @@ jobs:
                   fun isAudio(label: String, url: String): Boolean {
                       val t = "$label $url".lowercase()
                       return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
-                          t.contains("mime=audio") || (t.contains("itag=140") || t.contains("itag=251"))
+                          t.contains("mime=audio") || t.contains("itag=140") || t.contains("itag=251") || t.contains("itag=139")
                   }
-                  fun isVideoOnly(url: String): Boolean {
-                      // Adaptive sadece-video (ses yok) — bunları listede geri plana at / çıkar
+                  fun looksProgressive(url: String): Boolean {
                       val u = url.lowercase()
-                      return u.contains("mime=video") && !u.contains("audio") &&
-                          (u.contains("itag=137") || u.contains("itag=136") || u.contains("itag=135") ||
-                              u.contains("itag=298") || u.contains("itag=299") || u.contains("itag=248") || u.contains("itag=247"))
+                      // Birleşik video+ses (progressive) — sessiz olmaz
+                      return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
+                          (u.contains("mime=video") && u.contains("audio")) ||
+                          (!u.contains("mime=video") && !u.contains("mime=audio") && u.contains("videoplayback"))
                   }
-                  // Sadece MP4 / MP3 benzeri; sesli video tercih, küçükten büyüğe
-                  val video = links.filter { !isAudio(it.first, it.second) && !isVideoOnly(it.second) }
-                      .sortedBy { heightOf(it.first + " " + it.second) }
-                  val audio = links.filter { isAudio(it.first, it.second) }
-                  val ordered = ArrayList<Pair<String, String>>()
-                  for (v in video) {
+                  val audioLinks = links.filter { isAudio(it.first, it.second) }
+                  val bestAudio = audioLinks.maxByOrNull { it.second.length }?.second
+                  // Videolar: progressive önce, sonra diğerleri (sesle birleştirilecek)
+                  val videos = links.filter { !isAudio(it.first, it.second) }
+                      .sortedWith(compareBy<Pair<String, String>> { if (looksProgressive(it.second)) 0 else 1 }
+                          .thenBy { heightOf(it.first + " " + it.second) })
+                  data class Opt(val label: String, val videoUrl: String?, val audioUrl: String?, val audioOnly: Boolean)
+                  val opts = ArrayList<Opt>()
+                  val seenH = HashSet<Int>()
+                  for (v in videos) {
                       val h = heightOf(v.first + " " + v.second)
-                      val label = when {
-                          h > 0 -> "MP4 ${h}p"
-                          v.first.contains("mp4", true) -> v.first
-                          else -> "MP4 — ${v.first}"
+                      val key = if (h > 0) h else v.second.hashCode()
+                      if (h > 0 && !seenH.add(h)) continue
+                      val label = if (h > 0) "MP4 ${h}p" else "MP4"
+                      if (looksProgressive(v.second)) {
+                          opts.add(Opt(label, v.second, null, false))
+                      } else if (bestAudio != null) {
+                          opts.add(Opt("$label (sesli)", v.second, bestAudio, false))
+                      } else {
+                          opts.add(Opt("$label (sessiz olabilir)", v.second, null, false))
                       }
-                      ordered.add(label to v.second)
                   }
-                  if (audio.isNotEmpty()) {
-                      ordered.add("MP3 / Ses" to audio.first().second)
-                  } else {
-                      // Ses linki yoksa yine de MP3 satırı gösterme; kullanıcıya bilgi
-                  }
-                  if (ordered.isEmpty()) {
+                  if (bestAudio != null) opts.add(Opt("MP3 / Ses", null, bestAudio, true))
+                  if (opts.isEmpty()) {
                       toast("Uygun MP4/MP3 linki bulunamadı")
                       return
                   }
@@ -2067,11 +2107,18 @@ jobs:
                   title.setTextColor(cText)
                   title.setPadding(0, 0, 0, dp(12))
                   col.addView(title)
-                  for ((label, url) in ordered) {
-                      val btn = textBtn(label) {
+                  for (opt in opts) {
+                      val btn = textBtn(opt.label) {
                           d.dismiss()
-                          val mime = if (label.contains("MP3") || label.contains("Ses")) "audio/mpeg" else "video/mp4"
-                          startDownload(url, null, null, mime)
+                          val base = mediaFileBase()
+                          when {
+                              opt.audioOnly && opt.audioUrl != null ->
+                                  startDownload(opt.audioUrl, null, null, "audio/mpeg", "$base.mp3")
+                              opt.videoUrl != null && opt.audioUrl != null ->
+                                  downloadAndMerge(opt.videoUrl, opt.audioUrl, "$base.mp4")
+                              opt.videoUrl != null ->
+                                  startDownload(opt.videoUrl, null, null, "video/mp4", "$base.mp4")
+                          }
                       }
                       btn.setTextColor(cText)
                       btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -2087,6 +2134,134 @@ jobs:
                   col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
                   sheetWindow(d, col, false)
                   d.show()
+              }
+
+              /** Video + ses ayrıysa indirip MediaMuxer ile birleştirir. */
+              private fun downloadAndMerge(videoUrl: String, audioUrl: String, outName: String) {
+                  toast("Sesli video hazırlanıyor…")
+                  Thread {
+                      try {
+                          val dir = cacheDir
+                          val vFile = java.io.File(dir, "v_${System.currentTimeMillis()}.mp4")
+                          val aFile = java.io.File(dir, "a_${System.currentTimeMillis()}.m4a")
+                          val oFile = java.io.File(dir, outName)
+                          if (!httpToFile(videoUrl, vFile) || !httpToFile(audioUrl, aFile)) {
+                              handler.post { toast("İndirme başarısız") }
+                              return@Thread
+                          }
+                          val ok = muxAv(vFile.absolutePath, aFile.absolutePath, oFile.absolutePath)
+                          vFile.delete(); aFile.delete()
+                          if (!ok || !oFile.exists()) {
+                              handler.post { toast("Birleştirme başarısız, sessiz video deneniyor…")
+                                  startDownload(videoUrl, null, null, "video/mp4", outName) }
+                              return@Thread
+                          }
+                          // Public Downloads'a kopyala
+                          val resolver = contentResolver
+                          val values = android.content.ContentValues().apply {
+                              put(android.provider.MediaStore.Downloads.DISPLAY_NAME, outName)
+                              put(android.provider.MediaStore.Downloads.MIME_TYPE, "video/mp4")
+                              if (Build.VERSION.SDK_INT >= 29) {
+                                  put(android.provider.MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                                  put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                              }
+                          }
+                          val uri = if (Build.VERSION.SDK_INT >= 29) {
+                              resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                          } else {
+                              val dest = java.io.File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), outName)
+                              oFile.copyTo(dest, true)
+                              android.net.Uri.fromFile(dest)
+                          }
+                          if (uri != null && Build.VERSION.SDK_INT >= 29) {
+                              resolver.openOutputStream(uri)?.use { out ->
+                                  oFile.inputStream().use { it.copyTo(out) }
+                              }
+                              values.clear()
+                              values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                              resolver.update(uri, values, null, null)
+                          }
+                          oFile.delete()
+                          val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + outName
+                          handler.post {
+                              prefs.addDownload(outName, videoUrl, path, "video/mp4")
+                              toast("İndirildi: $outName")
+                          }
+                      } catch (_: Exception) {
+                          handler.post {
+                              toast("Birleştirme hatası, düz indirme…")
+                              startDownload(videoUrl, null, null, "video/mp4", outName)
+                          }
+                      }
+                  }.start()
+              }
+
+              private fun httpToFile(url: String, dest: java.io.File): Boolean {
+                  return try {
+                      val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                      conn.connectTimeout = 20000
+                      conn.readTimeout = 60000
+                      conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                      val cookie = CookieManager.getInstance().getCookie(url)
+                      if (cookie != null) conn.setRequestProperty("Cookie", cookie)
+                      conn.inputStream.use { input ->
+                          dest.outputStream().use { output -> input.copyTo(output) }
+                      }
+                      dest.length() > 0
+                  } catch (_: Exception) { false }
+              }
+
+              private fun muxAv(videoPath: String, audioPath: String, outPath: String): Boolean {
+                  return try {
+                      val vExt = android.media.MediaExtractor()
+                      vExt.setDataSource(videoPath)
+                      val aExt = android.media.MediaExtractor()
+                      aExt.setDataSource(audioPath)
+                      val muxer = android.media.MediaMuxer(outPath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                      var vTrack = -1
+                      var aTrack = -1
+                      var vIdx = -1
+                      var aIdx = -1
+                      for (i in 0 until vExt.trackCount) {
+                          val fmt = vExt.getTrackFormat(i)
+                          val mime = fmt.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                          if (mime.startsWith("video/")) { vIdx = i; vTrack = muxer.addTrack(fmt); break }
+                      }
+                      for (i in 0 until aExt.trackCount) {
+                          val fmt = aExt.getTrackFormat(i)
+                          val mime = fmt.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                          if (mime.startsWith("audio/")) { aIdx = i; aTrack = muxer.addTrack(fmt); break }
+                      }
+                      if (vTrack < 0 || aTrack < 0) {
+                          vExt.release(); aExt.release(); muxer.release(); return false
+                      }
+                      vExt.selectTrack(vIdx)
+                      aExt.selectTrack(aIdx)
+                      muxer.start()
+                      val buf = java.nio.ByteBuffer.allocate(1024 * 1024)
+                      val info = android.media.MediaCodec.BufferInfo()
+                      while (true) {
+                          val size = vExt.readSampleData(buf, 0)
+                          if (size < 0) break
+                          info.offset = 0; info.size = size
+                          info.presentationTimeUs = vExt.sampleTime
+                          info.flags = vExt.sampleFlags
+                          muxer.writeSampleData(vTrack, buf, info)
+                          vExt.advance()
+                      }
+                      while (true) {
+                          val size = aExt.readSampleData(buf, 0)
+                          if (size < 0) break
+                          info.offset = 0; info.size = size
+                          info.presentationTimeUs = aExt.sampleTime
+                          info.flags = aExt.sampleFlags
+                          muxer.writeSampleData(aTrack, buf, info)
+                          aExt.advance()
+                      }
+                      muxer.stop(); muxer.release()
+                      vExt.release(); aExt.release()
+                      true
+                  } catch (_: Exception) { false }
               }
 
               /** Uygulama içi İndirilenler listesi. */
