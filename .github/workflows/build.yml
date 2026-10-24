@@ -1764,10 +1764,15 @@ jobs:
                       if (mime != null) req.setMimeType(mime)
                       val cookie = CookieManager.getInstance().getCookie(url)
                       if (cookie != null) req.addRequestHeader("Cookie", cookie)
-                      if (ua != null) req.addRequestHeader("User-Agent", ua)
+                      req.addRequestHeader("User-Agent", ua ?: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+                      if (url.contains("googlevideo.com") || url.contains("youtube.com")) {
+                          req.addRequestHeader("Referer", "https://www.youtube.com/")
+                      }
                       req.setTitle(name)
-                      // İlerleme görünsün; ses yalnızca tamamlanınca (ara güncellemelerde ötmesin)
+                      // Bildirimde ilerleme görünsün; ses sadece bitince
                       req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_ONLY_COMPLETION)
+                      req.setAllowedOverMetered(true)
+                      req.setAllowedOverRoaming(true)
                       val destPath: String
                       if (Build.VERSION.SDK_INT >= 29) {
                           req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
@@ -2101,63 +2106,71 @@ jobs:
                       .sortedWith(compareBy<Pair<String, String>> { if (looksProgressive(it.second)) 0 else 1 }
                           .thenBy { heightOf(it.first + " " + it.second) })
                   data class Opt(val label: String, val videoUrl: String?, val audioUrl: String?, val audioOnly: Boolean, val bytes: Long)
-                  // Hızlı paralel boyut/erişim kontrolü (max ~2 sn) — sadece çalışanlar
-                  toast("Kontrol ediliyor…")
+                  // Az aday: önce sesli progressive (gerçekten inen), en fazla birkaç kalite
+                  val progressive = videos.filter { looksProgressive(it.second) }
+                  val rest = videos.filter { !looksProgressive(it.second) }
+                  val pick = ArrayList<Pair<String, String>>()
+                  val seenH = HashSet<Int>()
+                  for (v in (progressive + rest).sortedBy { heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 } }) {
+                      val h = heightOf(v.first + " " + v.second)
+                      if (h > 0 && !seenH.add(h)) continue
+                      pick.add(v)
+                      if (pick.size >= 4) break
+                  }
+                  toast("Kontrol…")
                   Thread {
                       fun probe(u: String): Long {
                           return try {
                               val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
                               c.instanceFollowRedirects = true
-                              c.connectTimeout = 2500
-                              c.readTimeout = 2500
-                              c.setRequestProperty("User-Agent", "Mozilla/5.0")
+                              c.connectTimeout = 1500
+                              c.readTimeout = 1500
+                              c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+                              c.setRequestProperty("Referer", "https://www.youtube.com/")
                               c.setRequestProperty("Range", "bytes=0-0")
-                              val cookie = CookieManager.getInstance().getCookie(u)
-                              if (cookie != null) c.setRequestProperty("Cookie", cookie)
                               c.connect()
                               val code = c.responseCode
                               var len = c.getHeaderField("Content-Range")?.substringAfter("/")?.toLongOrNull()
                                   ?: c.contentLengthLong
                               if (len <= 0) len = c.contentLength.toLong()
                               c.disconnect()
-                              if (code in 200..399 && len > 2048) len else -1L
+                              // googlevideo bazen 403 verir — o linki alma
+                              if (code in 200..299 && len > 50_000) len else -1L
                           } catch (_: Exception) { -1L }
                       }
                       fun mb(b: Long): String {
                           val m = b / (1024.0 * 1024.0)
                           return if (m >= 10) "${m.toInt()} MB" else String.format("%.1f MB", m)
                       }
-                      val candidates = ArrayList<Triple<String, String, String?>>() // label, videoUrl, audioUrl?
-                      val seenH = HashSet<Int>()
-                      for (v in videos.sortedBy { heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 } }) {
-                          val h = heightOf(v.first + " " + v.second)
-                          if (h > 0 && !seenH.add(h)) continue
-                          val label = if (h > 0) "MP4 ${h}p" else "MP4"
-                          val audioForMerge = if (looksProgressive(v.second)) null else bestAudio
-                          candidates.add(Triple(label, v.second, audioForMerge))
-                      }
-                      if (bestAudio != null) candidates.add(Triple("MP3", bestAudio, null))
-
                       val opts = java.util.Collections.synchronizedList(ArrayList<Opt>())
-                      val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
-                      val jobs = candidates.map { cand ->
-                          pool.submit<Unit> {
-                              val isMp3 = cand.first == "MP3"
-                              val mainUrl = if (isMp3) cand.second else cand.second
-                              val len = probe(mainUrl)
+                      val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
+                      val jobs = ArrayList<java.util.concurrent.Future<*>>()
+                      for (v in pick) {
+                          jobs.add(pool.submit {
+                              val h = heightOf(v.first + " " + v.second)
+                              val len = probe(v.second)
                               if (len < 0) return@submit
-                              var total = len
-                              var audioUrl: String? = null
-                              if (!isMp3 && cand.third != null) {
-                                  val al = probe(cand.third!!)
-                                  if (al > 0) { total += al; audioUrl = cand.third }
+                              // Progressive değilse ses şart; ses yoksa veya probe fail ise atla
+                              if (!looksProgressive(v.second)) {
+                                  if (bestAudio == null) return@submit
+                                  val al = probe(bestAudio)
+                                  if (al < 0) return@submit
+                                  val total = len + al
+                                  val lab = (if (h > 0) "MP4 ${h}p" else "MP4") + " · ${mb(total)}"
+                                  opts.add(Opt(lab, v.second, bestAudio, false, total))
+                              } else {
+                                  val lab = (if (h > 0) "MP4 ${h}p" else "MP4") + " · ${mb(len)}"
+                                  opts.add(Opt(lab, v.second, null, false, len))
                               }
-                              val label = "${cand.first} · ${mb(total)}"
-                              if (isMp3) opts.add(Opt(label, null, mainUrl, true, total))
-                              else opts.add(Opt(label, mainUrl, audioUrl, false, total))
-                          }
+                          })
                       }
-                      try { jobs.forEach { it.get(4, java.util.concurrent.TimeUnit.SECONDS) } } catch (_: Exception) {}
+                      if (bestAudio != null) {
+                          jobs.add(pool.submit {
+                              val al = probe(bestAudio)
+                              if (al > 0) opts.add(Opt("MP3 · ${mb(al)}", null, bestAudio, true, al))
+                          })
+                      }
+                      try { jobs.forEach { it.get(3, java.util.concurrent.TimeUnit.SECONDS) } } catch (_: Exception) {}
                       pool.shutdownNow()
                       val sorted = opts.sortedBy { it.bytes }
                       handler.post {
@@ -2275,10 +2288,13 @@ jobs:
               private fun httpToFile(url: String, dest: java.io.File): Boolean {
                   return try {
                       val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                      conn.instanceFollowRedirects = true
                       conn.connectTimeout = 20000
-                      conn.readTimeout = 60000
-                      conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                      conn.readTimeout = 120000
+                      conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+                      conn.setRequestProperty("Referer", "https://www.youtube.com/")
                       val cookie = CookieManager.getInstance().getCookie(url)
+                          ?: CookieManager.getInstance().getCookie("https://www.youtube.com/")
                       if (cookie != null) conn.setRequestProperty("Cookie", cookie)
                       conn.inputStream.use { input ->
                           dest.outputStream().use { output -> input.copyTo(output) }
@@ -3402,7 +3418,7 @@ jobs:
                       "body>*{visibility:hidden!important}" +
                       "video.__pipv,.html5-video-player,ytmusic-player-page,ytmusic-player{visibility:visible!important}" +
                       ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
-                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;margin:0!important;padding:0!important;transform:scale(1.012)!important}" +
+                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:cover!important;object-position:center!important;margin:0!important;padding:0!important;transform:scale(1.06)!important;transform-origin:center center!important}" +
                       ".ytp-large-play-button,.ytp-cued-thumbnail-overlay,.ytp-pause-overlay,.ytp-watermark," +
                       ".ytp-youtube-button,.ytp-title-channel,.ytp-chrome-top,.ytp-chrome-bottom," +
                       ".ytp-gradient-top,.ytp-gradient-bottom,.annotation{display:none!important;opacity:0!important;visibility:hidden!important}" +
