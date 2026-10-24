@@ -4492,8 +4492,8 @@ jobs:
                       "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
                       "var art='';" +
                       "try{if(md&&md.artwork&&md.artwork.length){art=md.artwork[md.artwork.length-1].src||md.artwork[0].src||'';}}catch(x){}" +
-                      "if(!art){try{var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){var p=ms[i].getAttribute('property')||ms[i].getAttribute('name')||'';if(p==='og:image'||p==='twitter:image'){art=ms[i].getAttribute('content')||'';if(art)break;}}}catch(x){}" +
-                      "if(!art){try{var img=document.querySelector('ytmusic-player-bar img,ytmusic-player-page img.image,ytm-player-microformat-renderer img,#movie_player .ytp-cued-thumbnail-overlay-image,ytd-video-owner-renderer img');if(img)art=img.src||img.getAttribute('src')||'';}catch(x){}" +
+                      "if(!art){try{var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){var p=ms[i].getAttribute('property')||ms[i].getAttribute('name')||'';if(p==='og:image'||p==='twitter:image'){art=ms[i].getAttribute('content')||'';if(art)break;}}}catch(x){}}" +
+                      "if(!art){try{var img=document.querySelector('ytmusic-player-bar img,ytmusic-player-page img.image,ytm-player-microformat-renderer img,#movie_player .ytp-cued-thumbnail-overlay-image,ytd-video-owner-renderer img');if(img)art=img.src||img.getAttribute('src')||'';}catch(x){}}" +
                       "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a,d:(isFinite(v.duration)?Math.round(v.duration*1000):-1),c:Math.round((v.currentTime||0)*1000),art:art||''});" +
                       "}catch(e){return '';}})();"
                   const val KEEP_MEDIA_PLAYING_JS =
@@ -5709,6 +5709,13 @@ jobs:
                           }
                       }
                       ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
+                      ACTION_CLOSE -> {
+                          send(ACTION_PAUSE)
+                          try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
+                          try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) } catch (_: Exception) { }
+                          stopSelf()
+                          return START_NOT_STICKY
+                      }
                   }
                   refresh()
                   return START_NOT_STICKY
@@ -5778,7 +5785,9 @@ jobs:
                   if (playing) b.addAction(act(android.R.drawable.ic_media_pause, "Duraklat", pi(2, ACTION_PAUSE)))
                   else b.addAction(act(android.R.drawable.ic_media_play, "Oynat", pi(3, ACTION_PLAY)))
                   b.addAction(act(android.R.drawable.ic_media_next, "Sonraki", pi(4, ACTION_NEXT)))
-                  b.setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2))
+                  val closePi = PendingIntent.getService(this, 5, Intent(this, PlaybackService::class.java).setAction(ACTION_CLOSE), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                  b.addAction(act(android.R.drawable.ic_menu_close_clear_cancel, "Kapat", closePi))
+                  b.setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2, 3))
                   val n = b.build()
                   try {
                       if (!foregroundStarted) {
@@ -5821,6 +5830,7 @@ jobs:
                   const val ACTION_SEEK = "com.pusula.browser.MEDIA_SEEK"
                   const val ACTION_BACK10 = "com.pusula.browser.MEDIA_BACK10"
                   const val ACTION_FWD10 = "com.pusula.browser.MEDIA_FWD10"
+                  const val ACTION_CLOSE = "com.pusula.browser.MEDIA_CLOSE"
 
                   @Volatile var running = false
 
