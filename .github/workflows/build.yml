@@ -1957,6 +1957,36 @@ jobs:
                * kendi kalite menümüzde "İndir" sunar.
                */
               @SuppressLint("SetJavaScriptEnabled")
+              private var dlSearchDialog: Dialog? = null
+
+              private fun showDlSearching() {
+                  if (dlSearchDialog?.isShowing == true) return
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(22), dp(20), dp(22), dp(20))
+                  val bg = GradientDrawable()
+                  bg.setColor(cSurface)
+                  bg.cornerRadius = dp(18).toFloat()
+                  col.background = bg
+                  val tv = TextView(this)
+                  tv.text = "İndirme seçenekleri aranıyor…"
+                  tv.textSize = 15f
+                  tv.setTextColor(cText)
+                  tv.gravity = Gravity.CENTER
+                  col.addView(tv)
+                  d.setCancelable(true)
+                  d.setOnCancelListener { dlSearchDialog = null }
+                  sheetWindow(d, col, false)
+                  dlSearchDialog = d
+                  d.show()
+              }
+
+              private fun hideDlSearching() {
+                  try { dlSearchDialog?.dismiss() } catch (_: Exception) {}
+                  dlSearchDialog = null
+              }
+
               private fun downloadCurrentMedia() {
                   val t = tabs.getOrNull(cur) ?: return
                   val page = t.url
@@ -1989,20 +2019,17 @@ jobs:
                       return
                   }
 
-                  toast("YouTube'dan alınıyor…")
-                  // 1) Açık sekmeden player JSON
+                  showDlSearching()
                   try {
                       t.web.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
                           val links = parseYtFormatLinks(raw)
                           if (links.isNotEmpty()) {
                               showFetchedDownloadOptions(links)
                           } else {
-                              // 2) InnerTube (çerezli) — arka plan
                               fetchViaInnertube(page) { innertubeLinks ->
                                   if (innertubeLinks.isNotEmpty()) {
                                       showFetchedDownloadOptions(innertubeLinks)
                                   } else {
-                                      // 3) SaveFrom yedek
                                       fetchViaSavefrom(page)
                                   }
                               }
@@ -2022,7 +2049,6 @@ jobs:
                       val v = u.getQueryParameter("v")
                       if (!v.isNullOrBlank()) return v
                       val path = u.path ?: return null
-                      // youtu.be/ID veya /shorts/ID veya /embed/ID
                       val parts = path.trim('/').split('/')
                       when {
                           page.contains("youtu.be") && parts.isNotEmpty() -> parts[0].takeWhile { it.isLetterOrDigit() || it == '_' || it == '-' }
@@ -2032,7 +2058,6 @@ jobs:
                   } catch (_: Exception) { null }
               }
 
-              /** Sayfadaki ytInitialPlayerResponse / streamingData'dan düz URL'leri çıkarır. */
               private fun parseYtFormatLinks(raw: String?): List<Pair<String, String>> {
                   if (raw.isNullOrBlank() || raw == "null" || raw == "\"\"") return emptyList()
                   return try {
@@ -2044,7 +2069,7 @@ jobs:
                           val o = arr.getJSONObject(i)
                           val u = o.optString("u")
                           if (!u.startsWith("http")) continue
-                          val kind = o.optString("k") // p | a
+                          val kind = o.optString("k")
                           val q = o.optString("q")
                           val itag = o.optInt("itag", 0)
                           val label = when {
@@ -2096,38 +2121,41 @@ jobs:
                           c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                           val code = c.responseCode
                           val stream = if (code in 200..299) c.inputStream else c.errorStream
-                          val text = stream?.bufferedReader()?.readText() ?: ""
+                          val respText = stream?.bufferedReader()?.readText() ?: ""
                           c.disconnect()
-                          if (text.isNotEmpty()) {
-                              val root = JSONObject(text)
+                          if (respText.isNotEmpty()) {
+                              val root = JSONObject(respText)
                               val sd = root.optJSONObject("streamingData") ?: JSONObject()
-                              fun eat(arr: JSONArray?, audioHint: Boolean) {
+                              fun eat(arr: JSONArray?, audioOnly: Boolean) {
                                   if (arr == null) return
                                   for (i in 0 until arr.length()) {
                                       val f = arr.optJSONObject(i) ?: continue
                                       val u = f.optString("url")
-                                      if (!u.startsWith("http")) continue // cipher'lı olanları atla
+                                      if (!u.startsWith("http")) continue
                                       val mime = f.optString("mimeType").lowercase()
                                       val itag = f.optInt("itag")
                                       val q = f.optString("qualityLabel")
-                                      val isAudio = audioHint || mime.contains("audio") ||
+                                      val isAudio = audioOnly || mime.contains("audio") ||
                                           itag in listOf(139, 140, 141, 249, 250, 251)
                                       if (isAudio) {
                                           links.add("MP3" to u)
                                       } else {
-                                          // progressive listesi veya ratebypass'lı
                                           val progressive = mime.contains("audio") ||
                                               itag in listOf(18, 22, 37) ||
                                               u.contains("ratebypass")
                                           if (progressive) {
-                                              val lab = if (q.isNotBlank()) "MP4 $q" else if (itag == 18) "MP4 360p" else if (itag == 22) "MP4 720p" else "MP4"
+                                              val lab = when {
+                                                  q.isNotBlank() -> "MP4 $q"
+                                                  itag == 18 -> "MP4 360p"
+                                                  itag == 22 -> "MP4 720p"
+                                                  else -> "MP4"
+                                              }
                                               links.add(lab to u)
                                           }
                                       }
                                   }
                               }
                               eat(sd.optJSONArray("formats"), false)
-                              // adaptive içinden sadece ses
                               val ad = sd.optJSONArray("adaptiveFormats")
                               if (ad != null) {
                                   for (i in 0 until ad.length()) {
@@ -2148,7 +2176,6 @@ jobs:
               }
 
               private fun fetchViaSavefrom(page: String) {
-                  toast("Yedek kaynak deneniyor…")
                   val loader = WebView(this)
                   loader.settings.javaScriptEnabled = true
                   loader.settings.domStorageEnabled = true
@@ -2159,11 +2186,13 @@ jobs:
                       if (finished) return
                       finished = true
                       try { loader.stopLoading(); loader.destroy() } catch (_: Exception) {}
-                      try {
-                          (loader.parent as? ViewGroup)?.removeView(loader)
-                      } catch (_: Exception) {}
-                      if (links.isEmpty()) toast("İndirme linki alınamadı")
-                      else showFetchedDownloadOptions(links)
+                      try { (loader.parent as? ViewGroup)?.removeView(loader) } catch (_: Exception) {}
+                      if (links.isEmpty()) {
+                          hideDlSearching()
+                          toast("İndirme linki alınamadı")
+                      } else {
+                          showFetchedDownloadOptions(links)
+                      }
                   }
                   val extractJs =
                       "(function(){try{" +
@@ -2232,7 +2261,7 @@ jobs:
                   handler.postDelayed({ if (!finished) finishWith(emptyList()) }, 18000)
               }
 
-              /** Yalnızca progressive sesli MP4 + MP3. DASH birleştirme yok. */
+              /** Yalnızca progressive sesli MP4 + MP3. */
               private fun showFetchedDownloadOptions(links: List<Pair<String, String>>) {
                   fun heightOf(s: String): Int {
                       val m = Regex("(\\d{3,4})\\s*p", RegexOption.IGNORE_CASE).find(s)
@@ -2268,11 +2297,11 @@ jobs:
                   }
 
                   if (pick.isEmpty() && bestAudio == null) {
+                      hideDlSearching()
                       toast("İndirme linki alınamadı")
                       return
                   }
 
-                  toast("Kontrol…")
                   Thread {
                       val ytCookie = try {
                           CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
@@ -2349,8 +2378,9 @@ jobs:
                       }
 
                       handler.post {
+                          hideDlSearching()
                           if (sorted.isEmpty()) {
-                              toast("Çalışan indirme linki bulunamadı")
+                              toast("İndirme linki alınamadı")
                               return@post
                           }
                           val d = Dialog(this)
