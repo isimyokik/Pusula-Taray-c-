@@ -1706,73 +1706,117 @@ jobs:
                   val onYt = t.url.contains("youtube.com") || t.url.contains("youtu.be") || t.url.contains("music.youtube.com")
                   val d = Dialog(this)
 
-                  // Daha sade dikey menü
-                  data class MItem(val icon: String, val label: String, val act: () -> Unit)
-                  val items = mutableListOf<MItem>()
-                  items.add(MItem("➕", "Yeni sekme") { openTab(null) })
-                  items.add(MItem("🕶️", "Gizli sekme") { openTab(null, true, true) })
-                  items.add(MItem("🏠", "Ana sayfa") { goHome() })
-                  items.add(MItem(if (marked) "⭐" else "☆", if (marked) "İmi kaldır" else "Yer imi ekle") {
-                      prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
-                  })
-                  items.add(MItem("🔖", "Yer imleri") { showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null) })
-                  items.add(MItem("🕘", "Geçmiş") { showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() }) })
-                  items.add(MItem("⬇️", "İndirilenler") { showDownloads() })
-                  if (onYt) {
-                      items.add(MItem("📥", "Videoyu / Sesi indir") { downloadCurrentMedia() })
-                      items.add(MItem("📺", "YouTube küçült") { handler.postDelayed({ enterPip() }, 150) })
-                  } else {
-                      items.add(MItem("📺", "YouTube küçült") { handler.postDelayed({ enterPip() }, 150) })
+                  fun row(icon: String, label: String, trailing: String? = null, act: () -> Unit): View {
+                      val r = LinearLayout(this)
+                      r.orientation = LinearLayout.HORIZONTAL
+                      r.gravity = Gravity.CENTER_VERTICAL
+                      r.setPadding(dp(16), dp(15), dp(16), dp(15))
+                      r.background = ripple(null)
+                      val ic = TextView(this)
+                      ic.text = icon
+                      ic.textSize = 20f
+                      ic.gravity = Gravity.CENTER
+                      r.addView(ic, LinearLayout.LayoutParams(dp(32), dp(32)).apply { rightMargin = dp(14) })
+                      val lb = TextView(this)
+                      lb.text = label
+                      lb.textSize = 16f
+                      lb.setTextColor(cText)
+                      r.addView(lb, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                      if (trailing != null) {
+                          val tr = TextView(this)
+                          tr.text = trailing
+                          tr.textSize = 13f
+                          tr.setTextColor(cSub)
+                          tr.setPadding(dp(10), dp(4), dp(10), dp(4))
+                          tr.background = shape(cField, 12)
+                          r.addView(tr)
+                      }
+                      r.setOnClickListener { d.dismiss(); act() }
+                      return r
                   }
-                  items.add(MItem("🔍", "Sayfada bul") { openFind() })
-                  items.add(MItem("🖥️", "Masaüstü sitesi") { toggleDesktop() })
-                  items.add(MItem("📤", "Paylaş") { shareCurrent() })
-                  items.add(MItem("🎨", "Tema") { chooseTheme { } })
-                  items.add(MItem("⚙️", "Ayarlar") { showSettings() })
+
+                  fun sep(): View {
+                      val v = View(this)
+                      v.setBackgroundColor(cField)
+                      return v
+                  }
 
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
-                  col.setPadding(dp(12), dp(10), dp(12), dp(18))
-                  val r = dp(28).toFloat()
+                  col.setPadding(dp(10), dp(8), dp(10), dp(16))
+                  val rad = dp(28).toFloat()
                   val bgd = GradientDrawable()
                   bgd.setColor(cSurface)
-                  bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                  bgd.cornerRadii = floatArrayOf(rad, rad, rad, rad, 0f, 0f, 0f, 0f)
                   col.background = bgd
+
                   val handle = View(this)
                   handle.background = shape(cField, 3)
-                  val hlp = LinearLayout.LayoutParams(dp(42), dp(5))
-                  hlp.gravity = Gravity.CENTER_HORIZONTAL; hlp.bottomMargin = dp(12)
-                  col.addView(handle, hlp)
+                  col.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
+                      gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(6); bottomMargin = dp(10)
+                  })
 
-                  val scroll = ScrollView(this)
-                  val list = LinearLayout(this)
-                  list.orientation = LinearLayout.VERTICAL
-                  for (item in items) {
-                      val row = LinearLayout(this)
-                      row.orientation = LinearLayout.HORIZONTAL
-                      row.gravity = Gravity.CENTER_VERTICAL
-                      row.setPadding(dp(14), dp(14), dp(14), dp(14))
-                      row.background = ripple(shape(cField, 14))
-                      val ic = TextView(this)
-                      ic.text = item.icon
-                      ic.textSize = 20f
-                      ic.gravity = Gravity.CENTER
-                      row.addView(ic, LinearLayout.LayoutParams(dp(36), dp(36)).apply { rightMargin = dp(12) })
-                      val lb = TextView(this)
-                      lb.text = item.label
-                      lb.textSize = 16f
-                      lb.setTextColor(cText)
-                      row.addView(lb, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                      row.setOnClickListener {
-                          d.dismiss()
-                          item.act()
-                      }
-                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                      lp.bottomMargin = dp(6)
-                      list.addView(row, lp)
+                  // Üst aksiyonlar
+                  col.addView(row(if (marked) "⭐" else "☆", if (marked) "Yer iminden kaldır" else "Yer imlerine ekle") {
+                      prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
+                  })
+                  col.addView(row("🔍", "Sayfada bul") { openFind() })
+                  col.addView(row("🖥️", "Masaüstü sitesi", if (t.desktop) "Açık" else "Kapalı") { toggleDesktop() })
+                  if (onYt) {
+                      col.addView(row("📥", "Videoyu / Sesi indir") { downloadCurrentMedia() })
+                      col.addView(row("📺", "YouTube küçült") { handler.postDelayed({ enterPip() }, 150) })
                   }
-                  scroll.addView(list)
-                  col.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                  col.addView(row("➕", "Yeni sekme") { openTab(null) })
+                  col.addView(row("🕶️", "Gizli sekme") { openTab(null, true, true) })
+
+                  col.addView(sep(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                      topMargin = dp(6); bottomMargin = dp(10); leftMargin = dp(12); rightMargin = dp(12)
+                  })
+
+                  // Hızlı erişim kutuları (Geçmiş / Yer imleri / İndirilenler / Paylaş)
+                  val quick = LinearLayout(this)
+                  quick.orientation = LinearLayout.HORIZONTAL
+                  quick.setPadding(dp(6), 0, dp(6), dp(8))
+                  fun qBtn(icon: String, label: String, act: () -> Unit): View {
+                      val cell = LinearLayout(this)
+                      cell.orientation = LinearLayout.VERTICAL
+                      cell.gravity = Gravity.CENTER
+                      cell.setPadding(dp(6), dp(12), dp(6), dp(12))
+                      cell.background = ripple(shape(cField, 16))
+                      val ic = TextView(this)
+                      ic.text = icon
+                      ic.textSize = 22f
+                      ic.gravity = Gravity.CENTER
+                      cell.addView(ic)
+                      val lb = TextView(this)
+                      lb.text = label
+                      lb.textSize = 11f
+                      lb.setTextColor(cSub)
+                      lb.gravity = Gravity.CENTER
+                      lb.setPadding(0, dp(4), 0, 0)
+                      cell.addView(lb)
+                      cell.setOnClickListener { d.dismiss(); act() }
+                      return cell
+                  }
+                  quick.addView(qBtn("🕘", "Geçmiş") {
+                      showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() })
+                  }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+                  quick.addView(qBtn("⭐", "Yer imleri") {
+                      showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null)
+                  }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+                  quick.addView(qBtn("⬇️", "İndirilenler") { showDownloads() },
+                      LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+                  quick.addView(qBtn("📤", "Paylaş") { shareCurrent() },
+                      LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  col.addView(quick)
+
+                  col.addView(sep(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                      topMargin = dp(4); bottomMargin = dp(6); leftMargin = dp(12); rightMargin = dp(12)
+                  })
+
+                  col.addView(row("🎨", "Tema") { chooseTheme { } })
+                  col.addView(row("⚙️", "Ayarlar") { showSettings() })
+
                   sheetWindow(d, col, false)
                   d.show()
               }
@@ -2875,7 +2919,7 @@ jobs:
                       "body>*{visibility:hidden!important}" +
                       "video.__pipv,.html5-video-player,ytmusic-player-page,ytmusic-player{visibility:visible!important}" +
                       ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
-                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:cover!important;object-position:center center!important;margin:0!important;padding:0!important;transform:scale(1.12)!important;transform-origin:center center!important}" +
+                      "video.__pipv{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483647!important;background:#000!important;object-fit:cover!important;object-position:center center!important;margin:0!important;padding:0!important;transform:scale(1.22)!important;transform-origin:center center!important}" +
                       "';" +
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
