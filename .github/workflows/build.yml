@@ -10,7 +10,7 @@ jobs:
       - name: Projeyi olustur
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
-          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/values app/src/main/res/values-night
+          mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/xml app/src/main/res/values app/src/main/res/values-night
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.7.3" apply false
@@ -91,6 +91,7 @@ jobs:
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
               <application
                   android:allowBackup="false"
@@ -98,6 +99,16 @@ jobs:
                   android:label="@string/app_name"
                   android:theme="@style/Theme.Pusula"
                   android:usesCleartextTraffic="true">
+
+                  <provider
+                      android:name="androidx.core.content.FileProvider"
+                      android:authorities="com.pusula.browser.files"
+                      android:exported="false"
+                      android:grantUriPermissions="true">
+                      <meta-data
+                          android:name="android.support.FILE_PROVIDER_PATHS"
+                          android:resource="@xml/file_paths" />
+                  </provider>
 
                   <service
                       android:name=".PlaybackService"
@@ -495,6 +506,7 @@ jobs:
                   var title: String = "Yeni Sekme"
                   var url: String = ""
                   var pendingUrl: String? = null
+                  var pendingState: Bundle? = null
                   var desktop: Boolean = false
                   var mobileUa: String = ""
                   var progress: Int = 100
@@ -891,6 +903,7 @@ jobs:
                           clearBrowsingData()
                           prefs.clearHistory()
                           prefs.saveTabs(emptyList(), 0)
+                          clearTabStates()
                       } catch (_: Exception) { }
                   }
                   for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
@@ -1121,36 +1134,16 @@ jobs:
                                   openTab(null)
                               } else {
                                   val want = prefs.savedCurrent()
-                                  for (snap in saved.take(12)) {
+                                  for ((i, u) in saved.take(12).withIndex()) {
                                       val t = createTab()
-                                      val u = snap.url
-                                      val restored = snap.state.isNotBlank() && restoreTabHistory(t, snap.state)
-                                      if (restored) {
-                                          // Geçmiş geri geldi; tekrar loadUrl etme
-                                          t.pendingUrl = null
-                                          try {
-                                              val wu = t.web.url
-                                              if (!wu.isNullOrBlank()) {
-                                                  t.url = wu
-                                                  t.title = t.web.title?.takeIf { it.isNotBlank() } ?: shownUrl(wu)
-                                              } else if (u.startsWith("http")) {
-                                                  t.url = u
-                                                  t.title = shownUrl(u)
-                                              }
-                                          } catch (_: Exception) {
-                                              if (u.startsWith("http")) { t.url = u; t.title = shownUrl(u) }
-                                          }
-                                      } else if (u.startsWith("http")) {
-                                          t.pendingUrl = u
-                                          t.url = u
-                                          t.title = shownUrl(u)
-                                      } else {
-                                          t.pendingUrl = NEWTAB_URL
+                                      if (u.startsWith("http")) { t.pendingUrl = u; t.url = u; t.title = shownUrl(u) }
+                                      else { t.pendingUrl = NEWTAB_URL }
+                                      val f = stateFile(i)
+                                      if (f.exists()) {
+                                          try { t.pendingState = bytesToBundle(f.readBytes()) } catch (_: Exception) { }
                                       }
                                   }
                                   switchTo(if (want in tabs.indices) want else 0)
-                                  // Geri düğmesi durumu
-                                  handler.post { refreshNav(); syncUi() }
                               }
                           }
                       }
@@ -1297,8 +1290,17 @@ jobs:
 
                   try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
 
+                  val ps = t.pendingState
                   val p = t.pendingUrl
-                  if (p != null) { t.pendingUrl = null; t.web.loadUrl(p) }
+                  if (ps != null) {
+                      t.pendingState = null
+                      t.pendingUrl = null
+                      val ok = try { t.web.restoreState(ps) != null } catch (_: Exception) { false }
+                      if (!ok && p != null) t.web.loadUrl(p)
+                  } else if (p != null) {
+                      t.pendingUrl = null
+                      t.web.loadUrl(p)
+                  }
                   closeFind()
                   setBarShown(true)
                   privateBadge.visibility = if (t.incognito) View.VISIBLE else View.GONE
@@ -1326,56 +1328,61 @@ jobs:
 
               private fun updateTabCount() { tabCount.text = tabs.size.toString() }
 
-              private fun saveTabs() {
-                  if (tabs.isEmpty()) return
-                  val snaps = ArrayList<Prefs.TabSnap>()
-                  for (t in tabs) {
-                      if (t.incognito) continue
-                      val u = t.pendingUrl ?: t.url
-                      val url = if (u.startsWith("http")) u else NEWTAB_URL
-                      val state = try {
-                          val b = android.os.Bundle()
-                          val n = t.web.saveState(b)
-                          if (n == 0) "" else bundleToBase64(b)
-                      } catch (_: Exception) { "" }
-                      snaps.add(Prefs.TabSnap(url, state))
-                  }
-                  val curIdx = cur.coerceIn(0, maxOf(0, snaps.size - 1))
-                  prefs.saveTabs(snaps, curIdx)
-              }
+              private fun stateFile(i: Int) = java.io.File(filesDir, "tabstate_$i.bin")
 
-              private fun bundleToBase64(b: android.os.Bundle): String {
+              private fun bundleToBytes(b: Bundle): ByteArray {
                   val p = android.os.Parcel.obtain()
                   try {
                       p.writeBundle(b)
-                      val bytes = p.marshall()
-                      return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                      return p.marshall()
                   } finally {
                       p.recycle()
                   }
               }
 
-              private fun base64ToBundle(b64: String): android.os.Bundle? {
-                  if (b64.isBlank()) return null
+              private fun bytesToBundle(data: ByteArray): Bundle? {
+                  val p = android.os.Parcel.obtain()
                   return try {
-                      val bytes = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
-                      val p = android.os.Parcel.obtain()
-                      try {
-                          p.unmarshall(bytes, 0, bytes.size)
-                          p.setDataPosition(0)
-                          p.readBundle(java.lang.ClassLoader.getSystemClassLoader())
-                      } finally {
-                          p.recycle()
-                      }
-                  } catch (_: Exception) { null }
+                      p.unmarshall(data, 0, data.size)
+                      p.setDataPosition(0)
+                      p.readBundle(MainActivity::class.java.classLoader)
+                  } catch (_: Exception) {
+                      null
+                  } finally {
+                      p.recycle()
+                  }
               }
 
-              private fun restoreTabHistory(t: BTab, stateB64: String): Boolean {
-                  val b = base64ToBundle(stateB64) ?: return false
-                  return try {
-                      val n = t.web.restoreState(b)
-                      n != 0
-                  } catch (_: Exception) { false }
+              private fun clearTabStates() {
+                  filesDir.listFiles()?.forEach { if (it.name.startsWith("tabstate_")) it.delete() }
+              }
+
+              /** Sekme adreslerini ve her sekmenin geri/ileri geçmişini kaydeder. */
+              private fun saveTabs() {
+                  if (tabs.isEmpty()) return
+                  val urls = ArrayList<String>()
+                  val keep = HashSet<String>()
+                  var curSaved = 0
+                  for ((idx, t) in tabs.withIndex()) {
+                      if (t.incognito) continue
+                      if (idx == cur) curSaved = urls.size
+                      val i = urls.size
+                      val u = t.pendingUrl ?: t.url
+                      urls.add(if (u.startsWith("http")) u else NEWTAB_URL)
+                      try {
+                          val st = t.pendingState ?: Bundle().also { b ->
+                              if (t.web.saveState(b) == null) b.clear()
+                          }
+                          if (!st.isEmpty) {
+                              stateFile(i).writeBytes(bundleToBytes(st))
+                              keep.add(stateFile(i).name)
+                          }
+                      } catch (_: Exception) { }
+                  }
+                  filesDir.listFiles()?.forEach {
+                      if (it.name.startsWith("tabstate_") && it.name !in keep) it.delete()
+                  }
+                  prefs.saveTabs(urls, curSaved)
               }
 
               private fun shownUrl(u: String): String =
@@ -1408,6 +1415,7 @@ jobs:
               private fun loadInCurrent(url: String) {
                   val t = tabs.getOrNull(cur) ?: return
                   t.pendingUrl = null
+                  t.pendingState = null
                   t.web.loadUrl(url)
               }
 
@@ -1836,8 +1844,8 @@ jobs:
                           req.addRequestHeader("Origin", "https://www.youtube.com")
                       }
                       req.setTitle(name)
-                      // Bildirimde ilerleme görünsün; ses sadece bitince
-                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_ONLY_COMPLETION)
+                      // Sistem bildirimi kapalı; ilerleme ve bitiş bildirimini DownloadNotifier kendisi gösterir
+                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
                       req.setAllowedOverMetered(true)
                       req.setAllowedOverRoaming(true)
                       val destPath: String
@@ -1848,7 +1856,8 @@ jobs:
                           req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
                           destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + name
                       }
-                      (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+                      val dlId = (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+                      DownloadNotifier.track(this, dlId, name.orEmpty())
                       prefs.addDownload(name, url, destPath, mime ?: "")
                       val kind = when {
                           mime?.contains("audio") == true || name.endsWith(".mp3", true) -> "MP3 indiriliyor"
@@ -3102,6 +3111,79 @@ jobs:
                   } catch (_: Exception) { false }
               }
 
+              private fun mediaKindOf(name: String, mime: String): String? {
+                  val n = name.lowercase()
+                  return when {
+                      mime.startsWith("video") || n.endsWith(".mp4") || n.endsWith(".webm") || n.endsWith(".mkv") ||
+                          n.endsWith(".3gp") || n.endsWith(".mov") || n.endsWith(".m4v") -> "video"
+                      mime.startsWith("audio") || n.endsWith(".mp3") || n.endsWith(".m4a") || n.endsWith(".aac") ||
+                          n.endsWith(".ogg") || n.endsWith(".opus") || n.endsWith(".wav") || n.endsWith(".flac") -> "audio"
+                      else -> null
+                  }
+              }
+
+              /** İndirilen video / müziği uygulama içinde oynatır (sistemin hafif VideoView bileşeni). */
+              private fun openMediaPlayer(file: java.io.File, title: String, audio: Boolean) {
+                  for (t in tabs) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
+                  val d = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+                  val frame = FrameLayout(this)
+                  frame.setBackgroundColor(Color.BLACK)
+                  frame.keepScreenOn = true
+
+                  val vv = android.widget.VideoView(this)
+                  frame.addView(vv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+
+                  if (audio) {
+                      val box = LinearLayout(this)
+                      box.orientation = LinearLayout.VERTICAL
+                      box.gravity = Gravity.CENTER
+                      val ic = TextView(this)
+                      ic.text = "🎵"
+                      ic.textSize = 72f
+                      ic.gravity = Gravity.CENTER
+                      box.addView(ic)
+                      frame.addView(box, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  }
+
+                  val top = LinearLayout(this)
+                  top.orientation = LinearLayout.HORIZONTAL
+                  top.gravity = Gravity.CENTER_VERTICAL
+                  top.setBackgroundColor(0x99000000.toInt())
+                  top.setPadding(dp(14), dp(28), dp(6), dp(8))
+                  val ttv = TextView(this)
+                  ttv.text = title
+                  ttv.textSize = 15f
+                  ttv.setTextColor(Color.WHITE)
+                  ttv.maxLines = 1
+                  ttv.ellipsize = android.text.TextUtils.TruncateAt.END
+                  top.addView(ttv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  val x = textBtn("✕") { d.dismiss() }
+                  x.setTextColor(Color.WHITE)
+                  x.textSize = 20f
+                  top.addView(x, LinearLayout.LayoutParams(dp(48), dp(44)))
+                  frame.addView(top, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+
+                  val mc = android.widget.MediaController(this)
+                  mc.setAnchorView(vv)
+                  vv.setMediaController(mc)
+                  vv.setOnPreparedListener {
+                      vv.start()
+                      mc.show(3000)
+                  }
+                  vv.setOnErrorListener { _, _, _ ->
+                      toast("Bu dosya oynatılamadı")
+                      true
+                  }
+                  vv.setVideoPath(file.absolutePath)
+
+                  d.setOnDismissListener {
+                      try { mc.hide() } catch (_: Exception) { }
+                      try { vv.stopPlayback() } catch (_: Exception) { }
+                  }
+                  d.setContentView(frame)
+                  d.show()
+              }
+
               /** Uygulama içi İndirilenler listesi. */
               private fun showDownloads() {
                   val items = ArrayList(prefs.downloads())
@@ -3183,14 +3265,18 @@ jobs:
                               try {
                                   val f = java.io.File(e.path)
                                   if (f.exists()) {
-                                      val uri = Uri.fromFile(f)
-                                      val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
-                                      open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                      try {
-                                          startActivity(Intent.createChooser(open, "Aç"))
-                                      } catch (_: Exception) {
-                                          // Dosya yöneticisinde göster
-                                          toast("Dosya İndirilenler klasöründe: ${e.title}")
+                                      val kind = mediaKindOf(e.title, e.mime)
+                                      if (kind != null) {
+                                          openMediaPlayer(f, e.title, kind == "audio")
+                                      } else {
+                                          val uri = androidx.core.content.FileProvider.getUriForFile(this, "com.pusula.browser.files", f)
+                                          val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
+                                          open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                          try {
+                                              startActivity(Intent.createChooser(open, "Aç"))
+                                          } catch (_: Exception) {
+                                              toast("Bu dosyayı açacak uygulama yok: ${e.title}")
+                                          }
                                       }
                                   } else if (e.url.startsWith("http")) {
                                       openTab(e.url)
@@ -4492,7 +4578,7 @@ jobs:
                   try {
                       val req = android.app.DownloadManager.Request(Uri.parse(fileUrl))
                       req.setTitle(fileName)
-                      req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_ONLY_COMPLETION)
+                      req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_HIDDEN)
                       if (mime != null) req.setMimeType(mime)
                       val cookie = CookieManager.getInstance().getCookie(fileUrl)
                       if (cookie != null) req.addRequestHeader("Cookie", cookie)
@@ -4504,7 +4590,8 @@ jobs:
                           req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)
                           destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + fileName
                       }
-                      (getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(req)
+                      val dlId = (getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(req)
+                      DownloadNotifier.track(this, dlId, fileName)
                       prefs.addDownload(fileName, fileUrl, destPath, mime ?: "")
                       Toast.makeText(this, "İndiriliyor: $fileName", Toast.LENGTH_SHORT).show()
                   } catch (e: Exception) {
@@ -4699,6 +4786,111 @@ jobs:
               }
           }
           EOF
+          cat > app/src/main/java/com/pusula/browser/DownloadNotifier.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.app.DownloadManager
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.PendingIntent
+          import android.content.Context
+          import android.content.Intent
+          import android.os.Build
+          import androidx.core.app.NotificationCompat
+          import androidx.core.app.NotificationManagerCompat
+
+          /**
+           * İndirme bildirimleri: ilerleme SESSİZ kanalda canlı güncellenir (damlacık sesi yok),
+           * ses yalnızca indirme bitince gelir.
+           */
+          object DownloadNotifier {
+              private const val CH_PROGRESS = "dl_progress"
+              private const val CH_DONE = "dl_done"
+
+              private fun ensureChannels(ctx: Context) {
+                  if (Build.VERSION.SDK_INT < 26) return
+                  val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                  val p = NotificationChannel(CH_PROGRESS, "İndirme ilerlemesi", NotificationManager.IMPORTANCE_LOW)
+                  p.setSound(null, null)
+                  p.enableVibration(false)
+                  nm.createNotificationChannel(p)
+                  nm.createNotificationChannel(NotificationChannel(CH_DONE, "İndirme tamamlandı", NotificationManager.IMPORTANCE_DEFAULT))
+              }
+
+              private fun post(ctx: Context, id: Int, n: Notification) {
+                  try { NotificationManagerCompat.from(ctx).notify(id, n) } catch (_: SecurityException) { }
+              }
+
+              fun track(context: Context, dlId: Long, name: String) {
+                  val ctx = context.applicationContext
+                  ensureChannels(ctx)
+                  val nid = 7000 + (dlId % 100000).toInt()
+                  val doneId = nid + 1000000
+                  val open = PendingIntent.getActivity(
+                      ctx, nid,
+                      Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                  )
+                  Thread {
+                      val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                      var lastPct = -2
+                      while (true) {
+                          var found = false
+                          var status = -1
+                          var got = 0L
+                          var total = -1L
+                          try {
+                              dm.query(DownloadManager.Query().setFilterById(dlId))?.use { c ->
+                                  if (c.moveToFirst()) {
+                                      found = true
+                                      status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                                      got = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                                      total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                                  }
+                              }
+                          } catch (_: Exception) { }
+
+                          if (!found) {
+                              NotificationManagerCompat.from(ctx).cancel(nid)
+                              return@Thread
+                          }
+                          if (status == DownloadManager.STATUS_SUCCESSFUL || status == DownloadManager.STATUS_FAILED) {
+                              NotificationManagerCompat.from(ctx).cancel(nid)
+                              val ok = status == DownloadManager.STATUS_SUCCESSFUL
+                              val n = NotificationCompat.Builder(ctx, CH_DONE)
+                                  .setSmallIcon(if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
+                                  .setContentTitle(name)
+                                  .setContentText(if (ok) "İndirme tamamlandı" else "İndirme başarısız")
+                                  .setContentIntent(open)
+                                  .setAutoCancel(true)
+                                  .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                                  .build()
+                              post(ctx, doneId, n)
+                              return@Thread
+                          }
+
+                          val pct = if (total > 0) ((got * 100) / total).toInt().coerceIn(0, 100) else -1
+                          if (pct != lastPct) {
+                              lastPct = pct
+                              val b = NotificationCompat.Builder(ctx, CH_PROGRESS)
+                                  .setSmallIcon(android.R.drawable.stat_sys_download)
+                                  .setContentTitle(name)
+                                  .setContentText(if (pct >= 0) "İndiriliyor… %" + pct else "İndiriliyor…")
+                                  .setContentIntent(open)
+                                  .setOngoing(true)
+                                  .setOnlyAlertOnce(true)
+                                  .setSilent(true)
+                                  .setPriority(NotificationCompat.PRIORITY_LOW)
+                                  .setProgress(100, if (pct >= 0) pct else 0, pct < 0)
+                              post(ctx, nid, b.build())
+                          }
+                          try { Thread.sleep(800) } catch (_: InterruptedException) { return@Thread }
+                      }
+                  }.start()
+              }
+          }
+          EOF
           cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
           package com.pusula.browser
 
@@ -4848,32 +5040,16 @@ jobs:
 
               fun clearDownloads() { sp.edit().putString("downloads", "[]").apply() }
 
-              /** url + isteğe bağlı WebView geçmişi (base64 Bundle). */
-              class TabSnap(val url: String, val state: String = "")
-
-              fun saveTabs(snaps: List<TabSnap>, current: Int) {
+              fun saveTabs(urls: List<String>, current: Int) {
                   val arr = JSONArray()
-                  for (s in snaps) {
-                      arr.put(JSONObject().put("u", s.url).put("s", s.state))
-                  }
+                  for (u in urls) arr.put(u)
                   sp.edit().putString("tabs", arr.toString()).putInt("tabCur", current).apply()
               }
-              fun savedTabs(): List<TabSnap> {
-                  val out = ArrayList<TabSnap>()
+              fun savedTabs(): List<String> {
+                  val out = ArrayList<String>()
                   try {
-                      val raw = sp.getString("tabs", "[]") ?: "[]"
-                      val arr = JSONArray(raw)
-                      for (i in 0 until arr.length()) {
-                          val el = arr.opt(i)
-                          when (el) {
-                              is String -> out.add(TabSnap(el, ""))
-                              is JSONObject -> out.add(TabSnap(el.optString("u"), el.optString("s")))
-                              else -> {
-                                  val o = arr.optJSONObject(i)
-                                  if (o != null) out.add(TabSnap(o.optString("u"), o.optString("s")))
-                              }
-                          }
-                      }
+                      val arr = JSONArray(sp.getString("tabs", "[]") ?: "[]")
+                      for (i in 0 until arr.length()) out.add(arr.getString(i))
                   } catch (_: Exception) {}
                   return out
               }
@@ -5008,6 +5184,14 @@ jobs:
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
               <path android:fillColor="#FFFFFFFF" android:pathData="M4,8 L24,24 4,40z M24,8 L44,24 24,40z"/>
           </vector>
+          EOF
+          cat > app/src/main/res/xml/file_paths.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths>
+              <external-path name="dl" path="Download/" />
+              <external-files-path name="dlf" path="." />
+              <cache-path name="cache" path="." />
+          </paths>
           EOF
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <resources><string name="app_name">Rota</string></resources>
