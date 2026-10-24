@@ -1958,7 +1958,7 @@ jobs:
                */
               @SuppressLint("SetJavaScriptEnabled")
               private var dlSearchDialog: Dialog? = null
-              private var playlistQueue: ArrayList<String> = ArrayList()
+              private var playlistQueue: ArrayList<Pair<String, String>> = ArrayList() // id to title
               private var playlistIndex: Int = 0
               private var playlistRunning: Boolean = false
               private var playlistAudioOnly: Boolean = false
@@ -2031,7 +2031,6 @@ jobs:
                   }
               }
 
-              /** Liste varsa: bu video veya tüm liste. */
               private fun offerPlaylistOrSingle(page: String, listId: String) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -2063,8 +2062,8 @@ jobs:
                   }
 
                   addBtn("Bu video") { startSingleYtDownload(page) }
-                  addBtn("Listedeki videolar (MP4)") { startPlaylistDownload(page, listId, audioOnly = false) }
-                  addBtn("Listedeki videolar (MP3)") { startPlaylistDownload(page, listId, audioOnly = true) }
+                  addBtn("Listeden seç (MP4)") { loadPlaylistPicker(page, listId, audioOnly = false) }
+                  addBtn("Listeden seç (MP3)") { loadPlaylistPicker(page, listId, audioOnly = true) }
 
                   val cancel = textBtn("İptal") { d.dismiss() }
                   cancel.setTextColor(cSub)
@@ -2098,82 +2097,106 @@ jobs:
                   }
               }
 
-              private fun startPlaylistDownload(page: String, listId: String, audioOnly: Boolean) {
+              /** Liste videolarını getir → tikli seçim ekranı (henüz indirmez). */
+              private fun loadPlaylistPicker(page: String, listId: String, audioOnly: Boolean) {
                   if (playlistRunning) {
                       toast("Liste indirmesi sürüyor")
                       return
                   }
                   showDlSearching()
                   val t = tabs.getOrNull(cur)
-                  // Önce açık sayfadan ID listesini çek
                   val extractPl = """
                       (function(){try{
-                        var ids=[],seen={};
-                        function add(id){if(!id||id.length<8||seen[id])return;seen[id]=1;ids.push(id);}
-                        var cur=new URLSearchParams(location.search).get('v');if(cur)add(cur);
-                        function walk(o){
-                          if(!o)return;
-                          if(Array.isArray(o)){o.forEach(walk);return;}
-                          if(typeof o!=='object')return;
-                          if(o.videoId&&typeof o.videoId==='string')add(o.videoId);
-                          if(o.playlistVideoId&&typeof o.playlistVideoId==='string')add(o.playlistVideoId);
-                          for(var k in o){try{walk(o[k]);}catch(e){}}
+                        var items=[],seen={};
+                        function add(id,title){
+                          if(!id||id.length<8||seen[id])return;seen[id]=1;
+                          title=(title||'').replace(/\s+/g,' ').trim();
+                          if(!title)title=id;
+                          if(title.length>80)title=title.slice(0,80);
+                          items.push({id:id,t:title});
                         }
-                        walk(window.ytInitialData);
-                        walk(window.ytInitialPlayerResponse);
+                        var cur=new URLSearchParams(location.search).get('v');
+                        if(cur)add(cur,document.title||'');
+                        function walk(o,depth){
+                          if(!o||depth>12)return;
+                          if(Array.isArray(o)){o.forEach(function(x){walk(x,depth+1);});return;}
+                          if(typeof o!=='object')return;
+                          var id=o.videoId||o.playlistVideoId||'';
+                          if(typeof id==='string'&&id.length>=8){
+                            var title='';
+                            try{
+                              if(o.title){
+                                if(typeof o.title==='string')title=o.title;
+                                else if(o.title.simpleText)title=o.title.simpleText;
+                                else if(o.title.runs)title=o.title.runs.map(function(r){return r.text||'';}).join('');
+                              }
+                              if(!title&&o.headline){
+                                if(typeof o.headline==='string')title=o.headline;
+                                else if(o.headline.simpleText)title=o.headline.simpleText;
+                              }
+                            }catch(e){}
+                            add(id,title);
+                          }
+                          for(var k in o){try{walk(o[k],depth+1);}catch(e){}}
+                        }
+                        walk(window.ytInitialData,0);
+                        walk(window.ytInitialPlayerResponse,0);
                         document.querySelectorAll('a[href*="watch"]').forEach(function(a){
-                          try{var u=new URL(a.href,location.href);var v=u.searchParams.get('v');if(v)add(v);}catch(e){}
+                          try{
+                            var u=new URL(a.href,location.href);var v=u.searchParams.get('v');
+                            if(!v)return;
+                            var t=(a.getAttribute('title')||a.textContent||'').replace(/\s+/g,' ').trim();
+                            add(v,t);
+                          }catch(e){}
                         });
-                        return JSON.stringify(ids.slice(0,40));
+                        return JSON.stringify(items.slice(0,50));
                       }catch(e){return '[]';}})();
                   """.trimIndent()
-                  fun onIds(ids: List<String>) {
-                      if (ids.isEmpty()) {
-                          hideDlSearching()
+                  fun onItems(items: List<Pair<String, String>>) {
+                      hideDlSearching()
+                      if (items.isEmpty()) {
                           toast("Liste videoları bulunamadı")
                           return
                       }
-                      hideDlSearching()
-                      playlistQueue = ArrayList(ids)
-                      playlistIndex = 0
-                      playlistRunning = true
-                      playlistAudioOnly = audioOnly
-                      toast("Liste: ${ids.size} video kuyruğa alındı")
-                      processPlaylistQueue()
+                      showPlaylistPicker(items, audioOnly)
                   }
                   try {
                       t?.web?.evaluateJavascript(extractPl) { raw ->
-                          val ids = parseIdList(raw)
-                          if (ids.isNotEmpty()) onIds(ids)
-                          else fetchPlaylistIdsInnertube(listId) { onIds(it) }
-                      } ?: fetchPlaylistIdsInnertube(listId) { onIds(it) }
+                          val items = parsePlaylistItems(raw)
+                          if (items.isNotEmpty()) onItems(items)
+                          else fetchPlaylistItemsInnertube(listId) { onItems(it) }
+                      } ?: fetchPlaylistItemsInnertube(listId) { onItems(it) }
                   } catch (_: Exception) {
-                      fetchPlaylistIdsInnertube(listId) { onIds(it) }
+                      fetchPlaylistItemsInnertube(listId) { onItems(it) }
                   }
               }
 
-              private fun parseIdList(raw: String?): List<String> {
+              private fun parsePlaylistItems(raw: String?): List<Pair<String, String>> {
                   if (raw.isNullOrBlank() || raw == "null") return emptyList()
                   return try {
                       val inner = org.json.JSONArray("[$raw]").getString(0)
                       val arr = org.json.JSONArray(inner)
-                      val out = ArrayList<String>()
+                      val out = ArrayList<Pair<String, String>>()
+                      val seen = HashSet<String>()
                       for (i in 0 until arr.length()) {
-                          val id = arr.optString(i)
-                          if (id.length >= 8) out.add(id)
+                          val o = arr.optJSONObject(i) ?: continue
+                          val id = o.optString("id")
+                          if (id.length < 8 || !seen.add(id)) continue
+                          val title = o.optString("t").ifBlank { id }
+                          out.add(id to title)
                       }
                       out
                   } catch (_: Exception) { emptyList() }
               }
 
-              private fun fetchPlaylistIdsInnertube(listId: String, onDone: (List<String>) -> Unit) {
+              private fun fetchPlaylistItemsInnertube(listId: String, onDone: (List<Pair<String, String>>) -> Unit) {
                   Thread {
-                      val ids = ArrayList<String>()
+                      val items = ArrayList<Pair<String, String>>()
+                      val seen = HashSet<String>()
                       try {
                           val cookie = try {
                               CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
                           } catch (_: Exception) { "" }
-                          // playlist browse
                           val browseId = if (listId.startsWith("VL")) listId else "VL$listId"
                           val body = JSONObject()
                               .put("context", JSONObject().put("client", JSONObject()
@@ -2202,24 +2225,150 @@ jobs:
                           val resp = stream?.bufferedReader()?.readText() ?: ""
                           c.disconnect()
                           if (resp.isNotEmpty()) {
-                              val seen = HashSet<String>()
-                              fun walk(node: Any?) {
+                              fun titleOf(node: JSONObject): String {
+                                  val t = node.opt("title")
+                                  when (t) {
+                                      is String -> if (t.isNotBlank()) return t
+                                      is JSONObject -> {
+                                          t.optString("simpleText").takeIf { it.isNotBlank() }?.let { return it }
+                                          val runs = t.optJSONArray("runs")
+                                          if (runs != null) {
+                                              val sb = StringBuilder()
+                                              for (i in 0 until runs.length()) {
+                                                  sb.append(runs.optJSONObject(i)?.optString("text") ?: "")
+                                              }
+                                              if (sb.isNotEmpty()) return sb.toString()
+                                          }
+                                      }
+                                  }
+                                  return ""
+                              }
+                              fun walk(node: Any?, depth: Int) {
+                                  if (depth > 14) return
                                   when (node) {
                                       is JSONObject -> {
                                           val vid = node.optString("videoId")
-                                          if (vid.length >= 8 && seen.add(vid)) ids.add(vid)
+                                          if (vid.length >= 8 && seen.add(vid)) {
+                                              val title = titleOf(node).ifBlank { vid }
+                                              items.add(vid to title)
+                                          }
                                           val keys = node.keys()
-                                          while (keys.hasNext()) walk(node.opt(keys.next()))
+                                          while (keys.hasNext()) walk(node.opt(keys.next()), depth + 1)
                                       }
-                                      is JSONArray -> for (i in 0 until node.length()) walk(node.opt(i))
+                                      is JSONArray -> for (i in 0 until node.length()) walk(node.opt(i), depth + 1)
                                   }
                               }
-                              walk(JSONObject(resp))
+                              walk(JSONObject(resp), 0)
                           }
                       } catch (_: Exception) { }
-                      val limited = ids.take(40)
-                      handler.post { onDone(limited) }
+                      handler.post { onDone(items.take(50)) }
                   }.start()
+              }
+
+              /** Tikli liste: tümünü seç / tek tek / indirmeyi başlat. */
+              private fun showPlaylistPicker(items: List<Pair<String, String>>, audioOnly: Boolean) {
+                  val selected = BooleanArray(items.size) { true }
+                  val d = Dialog(this)
+                  val rootV = LinearLayout(this)
+                  rootV.orientation = LinearLayout.VERTICAL
+                  rootV.setBackgroundColor(cBg)
+                  rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+
+                  val head = LinearLayout(this)
+                  head.orientation = LinearLayout.HORIZONTAL
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  val tt = TextView(this)
+                  tt.text = if (audioOnly) "MP3 seç" else "MP4 seç"
+                  tt.textSize = 20f
+                  tt.setTypeface(null, Typeface.BOLD)
+                  tt.setTextColor(cText)
+                  head.addView(tt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  val close = textBtn("Kapat") { d.dismiss() }
+                  close.setTextColor(cSub)
+                  head.addView(close)
+                  rootV.addView(head)
+
+                  val selectAll = textBtn("Tümünü seç / kaldır") { }
+                  selectAll.setTextColor(cAccent)
+                  selectAll.setTypeface(null, Typeface.BOLD)
+                  rootV.addView(selectAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+                  val scroll = ScrollView(this)
+                  val listCol = LinearLayout(this)
+                  listCol.orientation = LinearLayout.VERTICAL
+                  listCol.setPadding(0, dp(8), 0, dp(12))
+
+                  val checks = ArrayList<android.widget.CheckBox>()
+                  for (i in items.indices) {
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.HORIZONTAL
+                      row.gravity = Gravity.CENTER_VERTICAL
+                      row.setPadding(dp(8), dp(10), dp(8), dp(10))
+                      row.background = shape(cSurface, 14)
+                      val cb = android.widget.CheckBox(this)
+                      cb.isChecked = true
+                      try {
+                          cb.buttonTintList = ColorStateList.valueOf(cAccent)
+                      } catch (_: Exception) {}
+                      cb.setOnCheckedChangeListener { _, v -> selected[i] = v }
+                      checks.add(cb)
+                      row.addView(cb, LinearLayout.LayoutParams(dp(40), dp(40)))
+                      val name = TextView(this)
+                      name.text = items[i].second
+                      name.textSize = 14f
+                      name.setTextColor(cText)
+                      name.maxLines = 2
+                      row.addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                      row.setOnClickListener { cb.isChecked = !cb.isChecked }
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      lp.bottomMargin = dp(8)
+                      listCol.addView(row, lp)
+                  }
+                  scroll.addView(listCol)
+                  rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+                  var allOn = true
+                  selectAll.setOnClickListener {
+                      allOn = !allOn
+                      for (i in checks.indices) {
+                          checks[i].isChecked = allOn
+                          selected[i] = allOn
+                      }
+                  }
+
+                  val startBtn = textBtn("İndirmeyi başlat") {
+                      val picked = ArrayList<Pair<String, String>>()
+                      for (i in items.indices) if (selected[i]) picked.add(items[i])
+                      if (picked.isEmpty()) {
+                          toast("En az bir video seç")
+                          return@textBtn
+                      }
+                      d.dismiss()
+                      playlistQueue = picked
+                      playlistIndex = 0
+                      playlistRunning = true
+                      playlistAudioOnly = audioOnly
+                      toast("${picked.size} video kuyruğa alındı")
+                      processPlaylistQueue()
+                  }
+                  startBtn.setTextColor(Color.WHITE)
+                  startBtn.gravity = Gravity.CENTER
+                  startBtn.background = shape(cAccent, 22)
+                  rootV.addView(startBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+
+                  sheetWindow(d, rootV, true)
+                  d.show()
+              }
+
+              private fun safeFileName(title: String, id: String): String {
+                  var t = title.trim()
+                      .replace(Regex("\\s*[-|]\\s*YouTube(\\s*Music)?\\s*$", RegexOption.IGNORE_CASE), "")
+                      .replace(Regex("[\\\\/:*?\"<>|]+"), " ")
+                      .replace(Regex("\\s+"), " ")
+                      .trim()
+                      .take(80)
+                  if (t.isBlank() || t == id) t = "video_$id"
+                  return t
               }
 
               private fun processPlaylistQueue() {
@@ -2229,40 +2378,140 @@ jobs:
                       toast("Liste indirmesi bitti")
                       return
                   }
-                  val id = playlistQueue[playlistIndex]
+                  val (id, title) = playlistQueue[playlistIndex]
                   val n = playlistIndex + 1
                   val total = playlistQueue.size
-                  toast("İndiriliyor $n/$total")
                   val watch = "https://www.youtube.com/watch?v=$id"
-                  fetchViaInnertube(watch) { links ->
-                      // Pick best progressive or audio
+                  val base = safeFileName(title, id)
+
+                  fun advance() {
+                      playlistIndex++
+                      handler.postDelayed({ processPlaylistQueue() }, 3000L)
+                  }
+
+                  fun tryDownload(links: List<Pair<String, String>>) {
                       fun isAudio(label: String, url: String): Boolean {
                           val t = "$label $url".lowercase()
                           return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
-                              t.contains("mime=audio") || t.contains("itag=140") || t.contains("itag=251")
+                              t.contains("mime=audio") || t.contains("itag=140") || t.contains("itag=251") ||
+                              t.contains("itag=139") || t.contains("itag=249") || t.contains("itag=250")
                       }
                       fun looksProgressive(url: String): Boolean {
                           val u = url.lowercase()
                           return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
+                              u.contains("itag=37") ||
                               (u.contains("mime=video") && u.contains("audio")) ||
                               (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
                       }
                       val audio = links.firstOrNull { isAudio(it.first, it.second) }?.second
                       val prog = links.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
-                      val base = "yt_${id}"
                       when {
-                          playlistAudioOnly && audio != null ->
+                          playlistAudioOnly && audio != null -> {
                               startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
-                          !playlistAudioOnly && prog != null ->
+                              advance()
+                          }
+                          !playlistAudioOnly && prog != null -> {
                               startDownload(prog, null, null, "video/mp4", "$base.mp4")
-                          audio != null ->
+                              advance()
+                          }
+                          audio != null -> {
+                              // MP4 istendi ama sadece ses bulundu
                               startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
-                          else -> toast("Atlandı $n/$total")
+                              advance()
+                          }
+                          else -> {
+                              // SaveFrom yedek (sessiz)
+                              fetchLinksViaSavefromSilent(watch) { sfLinks ->
+                                  val sfAudio = sfLinks.firstOrNull { isAudio(it.first, it.second) }?.second
+                                  val sfProg = sfLinks.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
+                                  when {
+                                      playlistAudioOnly && sfAudio != null ->
+                                          startDownload(sfAudio, null, null, "audio/mpeg", "$base.mp3")
+                                      sfProg != null ->
+                                          startDownload(sfProg, null, null, "video/mp4", "$base.mp4")
+                                      sfAudio != null ->
+                                          startDownload(sfAudio, null, null, "audio/mpeg", "$base.mp3")
+                                      else -> { /* atla */ }
+                                  }
+                                  advance()
+                              }
+                          }
                       }
-                      playlistIndex++
-                      // Sıradakine biraz nefes: DM kuyruğu dolmasın
-                      handler.postDelayed({ processPlaylistQueue() }, 2500L)
                   }
+
+                  fetchViaInnertube(watch) { links ->
+                      if (links.isNotEmpty()) tryDownload(links)
+                      else fetchLinksViaSavefromSilent(watch) { tryDownload(it) }
+                  }
+              }
+
+              /** Liste kuyruğu için SaveFrom — UI toast yok. */
+              private fun fetchLinksViaSavefromSilent(page: String, onDone: (List<Pair<String, String>>) -> Unit) {
+                  val loader = WebView(this)
+                  loader.settings.javaScriptEnabled = true
+                  loader.settings.domStorageEnabled = true
+                  loader.settings.userAgentString =
+                      "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                  var finished = false
+                  fun finish(links: List<Pair<String, String>>) {
+                      if (finished) return
+                      finished = true
+                      try { loader.stopLoading(); loader.destroy() } catch (_: Exception) {}
+                      try { (loader.parent as? ViewGroup)?.removeView(loader) } catch (_: Exception) {}
+                      onDone(links)
+                  }
+                  val extractJs =
+                      "(function(){try{" +
+                      "var out=[];" +
+                      "function ok(u){if(!u||u.indexOf('http')!==0)return false;" +
+                      "return /googlevideo\\.com|videoplayback|sf-tools\\.com|mime=video|mime=audio|itag=/i.test(u);}" +
+                      "function add(u,l){if(!ok(u))return;for(var i=0;i<out.length;i++)if(out[i].u===u)return;" +
+                      "out.push({u:u,l:(l||'İndir').slice(0,40)});}" +
+                      "document.querySelectorAll('a[href],[data-link],[data-url]').forEach(function(el){" +
+                      "add(el.href||el.getAttribute('data-link')||el.getAttribute('data-url')||'',el.textContent||'');});" +
+                      "return JSON.stringify(out.slice(0,20));" +
+                      "}catch(e){return '[]';}})();"
+                  var tries = 0
+                  fun poll() {
+                      if (finished) return
+                      tries++
+                      try {
+                          if (tries <= 3) {
+                              loader.evaluateJavascript(
+                                  "(function(){try{var b=document.querySelector('button[type=submit],.def-btn,#sf_submit');if(b)b.click();" +
+                                  "var inp=document.querySelector('input[type=text],#sf_url');if(inp&&!inp.value)inp.value=" +
+                                  JSONObject.quote(page) + ";}catch(e){}})();", null)
+                          }
+                          loader.evaluateJavascript(extractJs) { raw ->
+                              try {
+                                  val inner = org.json.JSONArray("[$raw]").getString(0)
+                                  val arr = org.json.JSONArray(inner)
+                                  val list = ArrayList<Pair<String, String>>()
+                                  for (i in 0 until arr.length()) {
+                                      val o = arr.getJSONObject(i)
+                                      val u = o.optString("u")
+                                      if (u.startsWith("http")) list.add(o.optString("l", "İndir") to u)
+                                  }
+                                  if (list.isNotEmpty()) finish(list)
+                                  else if (tries < 10) handler.postDelayed({ poll() }, 900)
+                                  else finish(emptyList())
+                              } catch (_: Exception) {
+                                  if (tries < 10) handler.postDelayed({ poll() }, 900) else finish(emptyList())
+                              }
+                          }
+                      } catch (_: Exception) {
+                          if (tries < 10) handler.postDelayed({ poll() }, 900) else finish(emptyList())
+                      }
+                  }
+                  loader.webViewClient = object : WebViewClient() {
+                      override fun onPageFinished(view: WebView?, url: String?) {
+                          handler.postDelayed({ poll() }, 1600)
+                      }
+                  }
+                  loader.layoutParams = ViewGroup.LayoutParams(1, 1)
+                  try { (window.decorView as? ViewGroup)?.addView(loader) } catch (_: Exception) {}
+                  loader.loadUrl("https://en.savefrom.net/" + page)
+                  handler.postDelayed({ if (!finished) finish(emptyList()) }, 14000)
               }
 
               private fun videoIdOf(page: String): String? {
@@ -2359,12 +2608,10 @@ jobs:
                                       val q = f.optString("qualityLabel")
                                       val isAudio = audioOnly || mime.contains("audio") ||
                                           itag in listOf(139, 140, 141, 249, 250, 251)
-                                      if (isAudio) {
-                                          links.add("MP3" to u)
-                                      } else {
-                                          val progressive = mime.contains("audio") ||
-                                              itag in listOf(18, 22, 37) ||
-                                              u.contains("ratebypass")
+                                      if (isAudio) links.add("MP3" to u)
+                                      else {
+                                          val progressive = itag in listOf(18, 22, 37) || u.contains("ratebypass") ||
+                                              (mime.contains("video") && mime.contains("audio"))
                                           if (progressive) {
                                               val lab = when {
                                                   q.isNotBlank() -> "MP4 $q"
@@ -2412,9 +2659,7 @@ jobs:
                       if (links.isEmpty()) {
                           hideDlSearching()
                           toast("İndirme linki alınamadı")
-                      } else {
-                          showFetchedDownloadOptions(links)
-                      }
+                      } else showFetchedDownloadOptions(links)
                   }
                   val extractJs =
                       "(function(){try{" +
