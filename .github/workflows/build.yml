@@ -1740,8 +1740,8 @@ jobs:
                       if (cookie != null) req.addRequestHeader("Cookie", cookie)
                       if (ua != null) req.addRequestHeader("User-Agent", ua)
                       req.setTitle(name)
-                      // İlerleme görünsün; tamamlanınca bildir (sürekli ötme sisteme bağlı)
-                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                      // İlerleme görünsün; ses yalnızca tamamlanınca (ara güncellemelerde ötmesin)
+                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_ONLY_COMPLETION)
                       val destPath: String
                       if (Build.VERSION.SDK_INT >= 29) {
                           req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
@@ -1752,7 +1752,11 @@ jobs:
                       }
                       (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
                       prefs.addDownload(name, url, destPath, mime ?: "")
-                      toast("İndiriliyor: $name")
+                      val kind = when {
+                          mime?.contains("audio") == true || name.endsWith(".mp3", true) -> "MP3 indiriliyor"
+                          else -> "MP4 indiriliyor"
+                      }
+                      toast("$kind: $name")
                   } catch (_: Exception) { toast("İndirilemedi") }
               }
 
@@ -2070,76 +2074,114 @@ jobs:
                   val videos = links.filter { !isAudio(it.first, it.second) }
                       .sortedWith(compareBy<Pair<String, String>> { if (looksProgressive(it.second)) 0 else 1 }
                           .thenBy { heightOf(it.first + " " + it.second) })
-                  data class Opt(val label: String, val videoUrl: String?, val audioUrl: String?, val audioOnly: Boolean)
-                  val opts = ArrayList<Opt>()
-                  val seenH = HashSet<Int>()
-                  var unlabeled = 0
-                  // Küçükten büyüğe; çözünürlük okunamasa da çalışan linkleri atlama
-                  for (v in videos.sortedBy { heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 } }) {
-                      val h = heightOf(v.first + " " + v.second)
-                      if (h > 0) {
-                          if (!seenH.add(h)) continue
-                      } else {
-                          unlabeled++
-                          if (unlabeled > 4) continue
+                  data class Opt(val label: String, val videoUrl: String?, val audioUrl: String?, val audioOnly: Boolean, val bytes: Long)
+                  toast("Seçenekler hazırlanıyor…")
+                  Thread {
+                      fun headLen(u: String): Long {
+                          return try {
+                              val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                              c.requestMethod = "HEAD"
+                              c.connectTimeout = 8000
+                              c.readTimeout = 8000
+                              c.setRequestProperty("User-Agent", "Mozilla/5.0")
+                              val cookie = CookieManager.getInstance().getCookie(u)
+                              if (cookie != null) c.setRequestProperty("Cookie", cookie)
+                              c.connect()
+                              val code = c.responseCode
+                              val len = c.contentLengthLong
+                              c.disconnect()
+                              if (code in 200..399 && len > 1024) len else -1L
+                          } catch (_: Exception) { -1L }
                       }
-                      val label = if (h > 0) "MP4 ${h}p" else "MP4"
-                      val audioForMerge = if (looksProgressive(v.second)) null else bestAudio
-                      opts.add(Opt(label, v.second, audioForMerge, false))
-                  }
-                  if (bestAudio != null) opts.add(Opt("MP3 / Ses", null, bestAudio, true))
-                  if (opts.isEmpty()) {
-                      toast("Uygun MP4/MP3 linki bulunamadı")
-                      return
-                  }
-                  val d = Dialog(this)
-                  val col = LinearLayout(this)
-                  col.orientation = LinearLayout.VERTICAL
-                  col.setPadding(dp(18), dp(18), dp(18), dp(22))
-                  val rr = dp(28).toFloat()
-                  val bgd = GradientDrawable()
-                  bgd.setColor(cSurface)
-                  bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
-                  col.background = bgd
-                  val title = TextView(this)
-                  title.text = "İndirme seçenekleri"
-                  title.textSize = 18f
-                  title.setTypeface(null, Typeface.BOLD)
-                  title.setTextColor(cText)
-                  title.setPadding(0, 0, 0, dp(12))
-                  col.addView(title)
-                  for (opt in opts) {
-                      val btn = textBtn(opt.label) {
-                          d.dismiss()
-                          val base = mediaFileBase()
-                          when {
-                              opt.audioOnly && opt.audioUrl != null ->
-                                  startDownload(opt.audioUrl, null, null, "audio/mpeg", "$base.mp3")
-                              opt.videoUrl != null && opt.audioUrl != null ->
-                                  downloadAndMerge(opt.videoUrl, opt.audioUrl, "$base.mp4")
-                              opt.videoUrl != null ->
-                                  startDownload(opt.videoUrl, null, null, "video/mp4", "$base.mp4")
+                      fun fmtMb(b: Long): String {
+                          if (b <= 0) return ""
+                          val mb = b / (1024.0 * 1024.0)
+                          return if (mb >= 10) "${mb.toInt()} MB" else String.format("%.1f MB", mb)
+                      }
+                      val opts = ArrayList<Opt>()
+                      val seenH = HashSet<Int>()
+                      for (v in videos.sortedBy { heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 } }) {
+                          val h = heightOf(v.first + " " + v.second)
+                          if (h > 0 && !seenH.add(h)) continue
+                          val len = headLen(v.second)
+                          if (len < 0) continue // çalışmayan / erişilemeyen link
+                          val audioForMerge = if (looksProgressive(v.second)) null else bestAudio
+                          var total = len
+                          if (audioForMerge != null) {
+                              val al = headLen(audioForMerge)
+                              if (al > 0) total += al
+                          }
+                          val label = buildString {
+                              if (h > 0) append("MP4 ${h}p") else append("MP4")
+                              val mb = fmtMb(total)
+                              if (mb.isNotEmpty()) append(" · $mb")
+                          }
+                          opts.add(Opt(label, v.second, audioForMerge, false, total))
+                      }
+                      if (bestAudio != null) {
+                          val al = headLen(bestAudio)
+                          if (al > 0) {
+                              val mb = fmtMb(al)
+                              opts.add(Opt(if (mb.isNotEmpty()) "MP3 · $mb" else "MP3", null, bestAudio, true, al))
                           }
                       }
-                      btn.setTextColor(cText)
-                      btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                      btn.setPadding(dp(16), 0, dp(16), 0)
-                      btn.background = shape(cField, 14)
-                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
-                      lp.bottomMargin = dp(8)
-                      col.addView(btn, lp)
-                  }
-                  val cancel = textBtn("İptal") { d.dismiss() }
-                  cancel.setTextColor(cSub)
-                  cancel.gravity = Gravity.CENTER
-                  col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
-                  sheetWindow(d, col, false)
-                  d.show()
+                      // Küçükten büyüğe
+                      opts.sortBy { it.bytes }
+                      handler.post {
+                          if (opts.isEmpty()) {
+                              toast("Uygun indirme linki bulunamadı")
+                              return@post
+                          }
+                          val d = Dialog(this)
+                          val col = LinearLayout(this)
+                          col.orientation = LinearLayout.VERTICAL
+                          col.setPadding(dp(18), dp(18), dp(18), dp(22))
+                          val rr = dp(28).toFloat()
+                          val bgd = GradientDrawable()
+                          bgd.setColor(cSurface)
+                          bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
+                          col.background = bgd
+                          val title = TextView(this)
+                          title.text = "İndirme seçenekleri"
+                          title.textSize = 18f
+                          title.setTypeface(null, Typeface.BOLD)
+                          title.setTextColor(cText)
+                          title.setPadding(0, 0, 0, dp(12))
+                          col.addView(title)
+                          for (opt in opts) {
+                              val btn = textBtn(opt.label) {
+                                  d.dismiss()
+                                  val base = mediaFileBase()
+                                  when {
+                                      opt.audioOnly && opt.audioUrl != null ->
+                                          startDownload(opt.audioUrl, null, null, "audio/mpeg", "$base.mp3")
+                                      opt.videoUrl != null && opt.audioUrl != null ->
+                                          downloadAndMerge(opt.videoUrl, opt.audioUrl, "$base.mp4")
+                                      opt.videoUrl != null ->
+                                          startDownload(opt.videoUrl, null, null, "video/mp4", "$base.mp4")
+                                  }
+                              }
+                              btn.setTextColor(cText)
+                              btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                              btn.setPadding(dp(16), 0, dp(16), 0)
+                              btn.background = shape(cField, 14)
+                              val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
+                              lp.bottomMargin = dp(8)
+                              col.addView(btn, lp)
+                          }
+                          val cancel = textBtn("İptal") { d.dismiss() }
+                          cancel.setTextColor(cSub)
+                          cancel.gravity = Gravity.CENTER
+                          col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+                          sheetWindow(d, col, false)
+                          d.show()
+                      }
+                  }.start()
               }
 
               /** Video + ses ayrıysa indirip MediaMuxer ile birleştirir. */
               private fun downloadAndMerge(videoUrl: String, audioUrl: String, outName: String) {
-                  toast("Sesli video hazırlanıyor…")
+                  toast("MP4 indiriliyor: $outName")
                   Thread {
                       try {
                           val dir = cacheDir
@@ -2153,8 +2195,9 @@ jobs:
                           val ok = muxAv(vFile.absolutePath, aFile.absolutePath, oFile.absolutePath)
                           vFile.delete(); aFile.delete()
                           if (!ok || !oFile.exists()) {
-                              handler.post { toast("Birleştirme başarısız, sessiz video deneniyor…")
-                                  startDownload(videoUrl, null, null, "video/mp4", outName) }
+                              handler.post {
+                                  startDownload(videoUrl, null, null, "video/mp4", outName)
+                              }
                               return@Thread
                           }
                           // Public Downloads'a kopyala
@@ -2186,11 +2229,10 @@ jobs:
                           val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + outName
                           handler.post {
                               prefs.addDownload(outName, videoUrl, path, "video/mp4")
-                              toast("İndirildi: $outName")
+                              toast("MP4 indirildi: $outName")
                           }
                       } catch (_: Exception) {
                           handler.post {
-                              toast("Birleştirme hatası, düz indirme…")
                               startDownload(videoUrl, null, null, "video/mp4", outName)
                           }
                       }
@@ -3300,7 +3342,7 @@ jobs:
                   // duraklatmasın diye video.pause() küçük pencere süresince engellenir; yalnızca
                   // bizim oynat/duraklat düğmelerimiz (window.__userPause) duraklatabilir.
                   // PiP: sadece video katmanı — sayfayı bozmadan, çıkınca geri alınır
-                  // PiP — sohbet başındaki stabil mantık: sadece video katmanı, çıkınca temiz geri dönüş
+                  // PiP: body'yi gizlemeden sadece video üstte — çıkınca sayfa bozulmaz
                   const val PIP_ON_JS =
                       "(function(){try{" +
                       "if(document.getElementById('__pip'))return;" +
@@ -3310,17 +3352,19 @@ jobs:
                       "if(!window.__op){window.__op=HTMLMediaElement.prototype.pause;HTMLMediaElement.prototype.pause=function(){if(window.__pipBlock&&!window.__userPause)return;return window.__op.apply(this,arguments);};}" +
                       "var s=document.createElement('style');s.id='__pip';" +
                       "s.textContent='" +
-                      "html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:100%!important}" +
-                      "body>*{visibility:hidden!important}" +
-                      "video.__pipv,.html5-video-player{visibility:visible!important}" +
-                      ".html5-video-player{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483646!important;background:#000!important}" +
+                      ".html5-video-player.__rota_pip_p{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;" +
+                      "z-index:2147483646!important;background:#000!important;margin:0!important;padding:0!important}" +
+                      ".html5-video-player.__rota_pip_p .ytp-chrome-top," +
+                      ".html5-video-player.__rota_pip_p .ytp-chrome-bottom," +
+                      ".html5-video-player.__rota_pip_p .ytp-gradient-top," +
+                      ".html5-video-player.__rota_pip_p .ytp-gradient-bottom{display:none!important}" +
                       "video.__pipv{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;" +
                       "object-fit:cover!important;object-position:center!important;background:#000!important;" +
-                      "margin:0!important;padding:0!important;transform:scale(1.03)!important}" +
+                      "margin:0!important;padding:0!important;z-index:2147483647!important;transform:scale(1.03)!important}" +
                       "';" +
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
-                      "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e=e.parentElement;}" +
+                      "var p=document.querySelector('.html5-video-player');if(p)p.classList.add('__rota_pip_p');" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
@@ -3331,9 +3375,8 @@ jobs:
                       "clearInterval(window.__pipIv);" +
                       "var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
                       "document.querySelectorAll('video.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
-                      "document.querySelectorAll('*').forEach(function(x){try{" +
-                      "if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')" +
-                      "x.style.removeProperty('visibility');}catch(z){}});" +
+                      "var p=document.querySelector('.html5-video-player');" +
+                      "if(p){p.classList.remove('__rota_pip_p');}" +
                       "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
 
