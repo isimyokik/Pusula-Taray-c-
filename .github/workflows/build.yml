@@ -2074,23 +2074,29 @@ jobs:
               }
 
               private fun startSingleYtDownload(page: String) {
-                  showDlSearching()
                   val t = tabs.getOrNull(cur)
+                  // Önce açık sayfadan anında dene (liste kadar hızlı)
                   try {
                       t?.web?.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
                           val links = parseYtFormatLinks(raw)
                           if (links.isNotEmpty()) {
                               showFetchedDownloadOptions(links)
-                          } else {
-                              fetchViaInnertube(page) { innertubeLinks ->
-                                  if (innertubeLinks.isNotEmpty()) showFetchedDownloadOptions(innertubeLinks)
-                                  else fetchViaSavefrom(page)
-                              }
+                              return@evaluateJavascript
                           }
-                      } ?: fetchViaInnertube(page) { links ->
-                          if (links.isNotEmpty()) showFetchedDownloadOptions(links) else fetchViaSavefrom(page)
+                          // Sayfada yoksa o zaman bekleme kutusu + yedekler
+                          showDlSearching()
+                          fetchViaInnertube(page) { innertubeLinks ->
+                              if (innertubeLinks.isNotEmpty()) showFetchedDownloadOptions(innertubeLinks)
+                              else fetchViaSavefrom(page)
+                          }
+                      } ?: run {
+                          showDlSearching()
+                          fetchViaInnertube(page) { links ->
+                              if (links.isNotEmpty()) showFetchedDownloadOptions(links) else fetchViaSavefrom(page)
+                          }
                       }
                   } catch (_: Exception) {
+                      showDlSearching()
                       fetchViaInnertube(page) { links ->
                           if (links.isNotEmpty()) showFetchedDownloadOptions(links) else fetchViaSavefrom(page)
                       }
@@ -2359,8 +2365,6 @@ jobs:
                   listCol.setPadding(0, dp(8), 0, dp(12))
 
                   val checks = ArrayList<android.widget.CheckBox>()
-                  val sizeLabels = ArrayList<TextView>()
-
                   for (i in items.indices) {
                       val item = items[i]
                       val row = LinearLayout(this)
@@ -2411,14 +2415,6 @@ jobs:
                       mid.addView(name)
                       row.addView(mid, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-                      val sizeTv = TextView(this)
-                      sizeTv.text = item.duration.ifBlank { "…" }
-                      sizeTv.textSize = 12f
-                      sizeTv.setTextColor(cSub)
-                      sizeTv.setPadding(dp(4), 0, 0, 0)
-                      sizeLabels.add(sizeTv)
-                      row.addView(sizeTv)
-
                       row.setOnClickListener { cb.isChecked = !cb.isChecked }
                       val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                       lp.bottomMargin = dp(8)
@@ -2459,86 +2455,6 @@ jobs:
                   sheetWindow(d, rootV, true)
                   d.show()
 
-                  // Arka planda kabaca boyut (progressive/ses link content-length)
-                  Thread {
-                      val ytCookie = try {
-                          CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
-                      } catch (_: Exception) { "" }
-                      for (i in items.indices) {
-                          val id = items[i].id
-                          val watch = "https://www.youtube.com/watch?v=$id"
-                          var label = "—"
-                          try {
-                              // InnerTube tek istek
-                              val body = JSONObject()
-                                  .put("context", JSONObject().put("client", JSONObject()
-                                      .put("clientName", "ANDROID")
-                                      .put("clientVersion", "19.28.35")
-                                      .put("androidSdkVersion", 33)
-                                      .put("hl", "tr").put("gl", "TR")
-                                  ))
-                                  .put("videoId", id)
-                                  .put("contentCheckOk", true)
-                                  .put("racyCheckOk", true)
-                                  .toString()
-                              val c = (java.net.URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false").openConnection() as java.net.HttpURLConnection)
-                              c.requestMethod = "POST"
-                              c.connectTimeout = 5000
-                              c.readTimeout = 5000
-                              c.doOutput = true
-                              c.setRequestProperty("Content-Type", "application/json")
-                              c.setRequestProperty("User-Agent", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip")
-                              c.setRequestProperty("X-YouTube-Client-Name", "3")
-                              c.setRequestProperty("X-YouTube-Client-Version", "19.28.35")
-                              if (ytCookie.isNotEmpty()) c.setRequestProperty("Cookie", ytCookie)
-                              c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-                              val code = c.responseCode
-                              val stream = if (code in 200..299) c.inputStream else c.errorStream
-                              val resp = stream?.bufferedReader()?.readText() ?: ""
-                              c.disconnect()
-                              if (resp.isNotEmpty()) {
-                                  val sd = JSONObject(resp).optJSONObject("streamingData")
-                                  var best = 0L
-                                  fun scan(arr: JSONArray?, wantAudio: Boolean) {
-                                      if (arr == null) return
-                                      for (j in 0 until arr.length()) {
-                                          val f = arr.optJSONObject(j) ?: continue
-                                          val mime = f.optString("mimeType").lowercase()
-                                          val itag = f.optInt("itag")
-                                          val isAud = mime.contains("audio") || itag in listOf(139, 140, 141, 249, 250, 251)
-                                          if (wantAudio != isAud) continue
-                                          if (!wantAudio) {
-                                              val ok = itag in listOf(18, 22, 37) || f.optString("url").contains("ratebypass")
-                                              if (!ok) continue
-                                          }
-                                          val cl = f.optString("contentLength").toLongOrNull()
-                                              ?: f.optLong("contentLength", 0L)
-                                          if (cl > best) best = cl
-                                      }
-                                  }
-                                  if (audioOnly) scan(sd?.optJSONArray("adaptiveFormats"), true)
-                                  else {
-                                      scan(sd?.optJSONArray("formats"), false)
-                                      if (best <= 0) scan(sd?.optJSONArray("adaptiveFormats"), true)
-                                  }
-                                  if (best > 0) {
-                                      val mb = best / (1024.0 * 1024.0)
-                                      label = if (mb >= 10) "${mb.toInt()} MB" else String.format("%.1f MB", mb)
-                                  }
-                              }
-                          } catch (_: Exception) { }
-                          val idx = i
-                          val lab = label
-                          val fallbackDur = items[i].duration
-                          handler.post {
-                              if (idx < sizeLabels.size) {
-                                  if (lab != "—" && lab != "…") sizeLabels[idx].text = lab
-                                  else if (fallbackDur.isNotBlank()) sizeLabels[idx].text = fallbackDur
-                                  else sizeLabels[idx].text = "—"
-                              }
-                          }
-                      }
-                  }.start()
               }
 
               private fun safeFileName(title: String, id: String): String {
@@ -2932,137 +2848,63 @@ jobs:
                   val bestAudio = audioLinks.maxByOrNull { it.second.length }?.second
                   val progressive = links.filter { !isAudio(it.first, it.second) && looksProgressive(it.second) }
 
-                  val pick = ArrayList<Pair<String, String>>()
+                  data class Opt(val label: String, val url: String, val audioOnly: Boolean)
+                  val opts = ArrayList<Opt>()
                   val seenH = HashSet<Int>()
                   for (v in progressive.sortedBy {
                       heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 }
                   }) {
                       val h = heightOf(v.first + " " + v.second)
                       if (h > 0 && !seenH.add(h)) continue
-                      pick.add(v)
-                      if (pick.size >= 4) break
+                      val lab = if (h > 0) "MP4 ${h}p" else v.first.ifBlank { "MP4" }
+                      opts.add(Opt(lab, v.second, false))
+                      if (opts.size >= 4) break
                   }
+                  if (bestAudio != null) opts.add(Opt("MP3", bestAudio, true))
 
-                  if (pick.isEmpty() && bestAudio == null) {
-                      hideDlSearching()
+                  hideDlSearching()
+                  if (opts.isEmpty()) {
                       toast("İndirme linki alınamadı")
                       return
                   }
 
-                  Thread {
-                      val ytCookie = try {
-                          CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
-                      } catch (_: Exception) { "" }
-
-                      fun probe(u: String): Long {
-                          return try {
-                              val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                              c.instanceFollowRedirects = true
-                              c.connectTimeout = 2500
-                              c.readTimeout = 2500
-                              c.requestMethod = "GET"
-                              c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                              c.setRequestProperty("Referer", "https://www.youtube.com/")
-                              c.setRequestProperty("Origin", "https://www.youtube.com")
-                              if (ytCookie.isNotEmpty()) c.setRequestProperty("Cookie", ytCookie)
-                              c.setRequestProperty("Range", "bytes=0-0")
-                              c.connect()
-                              val code = c.responseCode
-                              var len = c.getHeaderField("Content-Range")?.substringAfter("/")?.toLongOrNull() ?: c.contentLengthLong
-                              if (len <= 0) len = c.contentLength.toLong()
-                              c.disconnect()
-                              when {
-                                  code in 200..299 || code == 206 -> if (len > 0) len else 0L
-                                  code == 403 || code == 429 -> 0L
-                                  else -> -1L
-                              }
-                          } catch (_: Exception) { 0L }
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(18), dp(18), dp(18), dp(22))
+                  val rr = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+                  val title = TextView(this)
+                  title.text = "İndirme seçenekleri"
+                  title.textSize = 18f
+                  title.setTypeface(null, Typeface.BOLD)
+                  title.setTextColor(cText)
+                  title.setPadding(0, 0, 0, dp(12))
+                  col.addView(title)
+                  for (opt in opts) {
+                      val btn = textBtn(opt.label) {
+                          d.dismiss()
+                          val base = mediaFileBase()
+                          if (opt.audioOnly) startDownload(opt.url, null, null, "audio/mpeg", "$base.mp3")
+                          else startDownload(opt.url, null, null, "video/mp4", "$base.mp4")
                       }
-
-                      fun mb(b: Long): String {
-                          if (b <= 0) return "?"
-                          val m = b / (1024.0 * 1024.0)
-                          return if (m >= 10) "${m.toInt()} MB" else String.format("%.1f MB", m)
-                      }
-
-                      data class Opt(val label: String, val url: String, val audioOnly: Boolean, val bytes: Long)
-                      val opts = java.util.Collections.synchronizedList(ArrayList<Opt>())
-                      val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
-                      val jobs = ArrayList<java.util.concurrent.Future<*>>()
-
-                      for (v in pick) {
-                          jobs.add(pool.submit {
-                              val h = heightOf(v.first + " " + v.second)
-                              val len = probe(v.second)
-                              if (len < 0) return@submit
-                              val lab = (if (h > 0) "MP4 ${h}p" else v.first.ifBlank { "MP4" }) +
-                                  if (len > 0) " · ${mb(len)}" else ""
-                              opts.add(Opt(lab, v.second, false, if (len > 0) len else 1L))
-                          })
-                      }
-                      if (bestAudio != null) {
-                          jobs.add(pool.submit {
-                              val al = probe(bestAudio)
-                              if (al >= 0) opts.add(Opt(if (al > 0) "MP3 · ${mb(al)}" else "MP3", bestAudio, true, if (al > 0) al else 1L))
-                          })
-                      }
-                      try { jobs.forEach { it.get(4, java.util.concurrent.TimeUnit.SECONDS) } } catch (_: Exception) {}
-                      pool.shutdownNow()
-
-                      var sorted = opts.sortedBy { it.bytes }
-                      if (sorted.isEmpty() && pick.isNotEmpty()) {
-                          sorted = pick.map { v ->
-                              val h = heightOf(v.first + " " + v.second)
-                              Opt(if (h > 0) "MP4 ${h}p" else "MP4", v.second, false, 1L)
-                          }
-                          if (bestAudio != null) sorted = sorted + Opt("MP3", bestAudio, true, 1L)
-                      }
-
-                      handler.post {
-                          hideDlSearching()
-                          if (sorted.isEmpty()) {
-                              toast("İndirme linki alınamadı")
-                              return@post
-                          }
-                          val d = Dialog(this)
-                          val col = LinearLayout(this)
-                          col.orientation = LinearLayout.VERTICAL
-                          col.setPadding(dp(18), dp(18), dp(18), dp(22))
-                          val rr = dp(28).toFloat()
-                          val bgd = GradientDrawable()
-                          bgd.setColor(cSurface)
-                          bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
-                          col.background = bgd
-                          val title = TextView(this)
-                          title.text = "İndirme seçenekleri"
-                          title.textSize = 18f
-                          title.setTypeface(null, Typeface.BOLD)
-                          title.setTextColor(cText)
-                          title.setPadding(0, 0, 0, dp(12))
-                          col.addView(title)
-                          for (opt in sorted) {
-                              val btn = textBtn(opt.label) {
-                                  d.dismiss()
-                                  val base = mediaFileBase()
-                                  if (opt.audioOnly) startDownload(opt.url, null, null, "audio/mpeg", "$base.mp3")
-                                  else startDownload(opt.url, null, null, "video/mp4", "$base.mp4")
-                              }
-                              btn.setTextColor(cText)
-                              btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                              btn.setPadding(dp(16), 0, dp(16), 0)
-                              btn.background = shape(cField, 14)
-                              val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
-                              lp.bottomMargin = dp(8)
-                              col.addView(btn, lp)
-                          }
-                          val cancel = textBtn("İptal") { d.dismiss() }
-                          cancel.setTextColor(cSub)
-                          cancel.gravity = Gravity.CENTER
-                          col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
-                          sheetWindow(d, col, false)
-                          d.show()
-                      }
-                  }.start()
+                      btn.setTextColor(cText)
+                      btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                      btn.setPadding(dp(16), 0, dp(16), 0)
+                      btn.background = shape(cField, 14)
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
+                      lp.bottomMargin = dp(8)
+                      col.addView(btn, lp)
+                  }
+                  val cancel = textBtn("İptal") { d.dismiss() }
+                  cancel.setTextColor(cSub)
+                  cancel.gravity = Gravity.CENTER
+                  col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+                  sheetWindow(d, col, false)
+                  d.show()
               }
 
               private fun downloadAndMerge(videoUrl: String, audioUrl: String, outName: String) {
