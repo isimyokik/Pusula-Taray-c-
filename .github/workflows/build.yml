@@ -1958,6 +1958,10 @@ jobs:
                */
               @SuppressLint("SetJavaScriptEnabled")
               private var dlSearchDialog: Dialog? = null
+              private var playlistQueue: ArrayList<String> = ArrayList()
+              private var playlistIndex: Int = 0
+              private var playlistRunning: Boolean = false
+              private var playlistAudioOnly: Boolean = false
 
               private fun showDlSearching() {
                   if (dlSearchDialog?.isShowing == true) return
@@ -2019,27 +2023,245 @@ jobs:
                       return
                   }
 
+                  val listId = try { Uri.parse(page).getQueryParameter("list") } catch (_: Exception) { null }
+                  if (!listId.isNullOrBlank()) {
+                      offerPlaylistOrSingle(page, listId)
+                  } else {
+                      startSingleYtDownload(page)
+                  }
+              }
+
+              /** Liste varsa: bu video veya tüm liste. */
+              private fun offerPlaylistOrSingle(page: String, listId: String) {
+                  val d = Dialog(this)
+                  val col = LinearLayout(this)
+                  col.orientation = LinearLayout.VERTICAL
+                  col.setPadding(dp(18), dp(18), dp(18), dp(22))
+                  val rr = dp(28).toFloat()
+                  val bgd = GradientDrawable()
+                  bgd.setColor(cSurface)
+                  bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
+                  col.background = bgd
+
+                  val title = TextView(this)
+                  title.text = "Ne indirilsin?"
+                  title.textSize = 18f
+                  title.setTypeface(null, Typeface.BOLD)
+                  title.setTextColor(cText)
+                  title.setPadding(0, 0, 0, dp(12))
+                  col.addView(title)
+
+                  fun addBtn(label: String, act: () -> Unit) {
+                      val btn = textBtn(label) { d.dismiss(); act() }
+                      btn.setTextColor(cText)
+                      btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                      btn.setPadding(dp(16), 0, dp(16), 0)
+                      btn.background = shape(cField, 14)
+                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
+                      lp.bottomMargin = dp(8)
+                      col.addView(btn, lp)
+                  }
+
+                  addBtn("Bu video") { startSingleYtDownload(page) }
+                  addBtn("Listedeki videolar (MP4)") { startPlaylistDownload(page, listId, audioOnly = false) }
+                  addBtn("Listedeki videolar (MP3)") { startPlaylistDownload(page, listId, audioOnly = true) }
+
+                  val cancel = textBtn("İptal") { d.dismiss() }
+                  cancel.setTextColor(cSub)
+                  cancel.gravity = Gravity.CENTER
+                  col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+                  sheetWindow(d, col, false)
+                  d.show()
+              }
+
+              private fun startSingleYtDownload(page: String) {
                   showDlSearching()
+                  val t = tabs.getOrNull(cur)
                   try {
-                      t.web.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
+                      t?.web?.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
                           val links = parseYtFormatLinks(raw)
                           if (links.isNotEmpty()) {
                               showFetchedDownloadOptions(links)
                           } else {
                               fetchViaInnertube(page) { innertubeLinks ->
-                                  if (innertubeLinks.isNotEmpty()) {
-                                      showFetchedDownloadOptions(innertubeLinks)
-                                  } else {
-                                      fetchViaSavefrom(page)
-                                  }
+                                  if (innertubeLinks.isNotEmpty()) showFetchedDownloadOptions(innertubeLinks)
+                                  else fetchViaSavefrom(page)
                               }
                           }
+                      } ?: fetchViaInnertube(page) { links ->
+                          if (links.isNotEmpty()) showFetchedDownloadOptions(links) else fetchViaSavefrom(page)
                       }
                   } catch (_: Exception) {
-                      fetchViaInnertube(page) { innertubeLinks ->
-                          if (innertubeLinks.isNotEmpty()) showFetchedDownloadOptions(innertubeLinks)
-                          else fetchViaSavefrom(page)
+                      fetchViaInnertube(page) { links ->
+                          if (links.isNotEmpty()) showFetchedDownloadOptions(links) else fetchViaSavefrom(page)
                       }
+                  }
+              }
+
+              private fun startPlaylistDownload(page: String, listId: String, audioOnly: Boolean) {
+                  if (playlistRunning) {
+                      toast("Liste indirmesi sürüyor")
+                      return
+                  }
+                  showDlSearching()
+                  val t = tabs.getOrNull(cur)
+                  // Önce açık sayfadan ID listesini çek
+                  val extractPl = """
+                      (function(){try{
+                        var ids=[],seen={};
+                        function add(id){if(!id||id.length<8||seen[id])return;seen[id]=1;ids.push(id);}
+                        var cur=new URLSearchParams(location.search).get('v');if(cur)add(cur);
+                        function walk(o){
+                          if(!o)return;
+                          if(Array.isArray(o)){o.forEach(walk);return;}
+                          if(typeof o!=='object')return;
+                          if(o.videoId&&typeof o.videoId==='string')add(o.videoId);
+                          if(o.playlistVideoId&&typeof o.playlistVideoId==='string')add(o.playlistVideoId);
+                          for(var k in o){try{walk(o[k]);}catch(e){}}
+                        }
+                        walk(window.ytInitialData);
+                        walk(window.ytInitialPlayerResponse);
+                        document.querySelectorAll('a[href*="watch"]').forEach(function(a){
+                          try{var u=new URL(a.href,location.href);var v=u.searchParams.get('v');if(v)add(v);}catch(e){}
+                        });
+                        return JSON.stringify(ids.slice(0,40));
+                      }catch(e){return '[]';}})();
+                  """.trimIndent()
+                  fun onIds(ids: List<String>) {
+                      if (ids.isEmpty()) {
+                          hideDlSearching()
+                          toast("Liste videoları bulunamadı")
+                          return
+                      }
+                      hideDlSearching()
+                      playlistQueue = ArrayList(ids)
+                      playlistIndex = 0
+                      playlistRunning = true
+                      playlistAudioOnly = audioOnly
+                      toast("Liste: ${ids.size} video kuyruğa alındı")
+                      processPlaylistQueue()
+                  }
+                  try {
+                      t?.web?.evaluateJavascript(extractPl) { raw ->
+                          val ids = parseIdList(raw)
+                          if (ids.isNotEmpty()) onIds(ids)
+                          else fetchPlaylistIdsInnertube(listId) { onIds(it) }
+                      } ?: fetchPlaylistIdsInnertube(listId) { onIds(it) }
+                  } catch (_: Exception) {
+                      fetchPlaylistIdsInnertube(listId) { onIds(it) }
+                  }
+              }
+
+              private fun parseIdList(raw: String?): List<String> {
+                  if (raw.isNullOrBlank() || raw == "null") return emptyList()
+                  return try {
+                      val inner = org.json.JSONArray("[$raw]").getString(0)
+                      val arr = org.json.JSONArray(inner)
+                      val out = ArrayList<String>()
+                      for (i in 0 until arr.length()) {
+                          val id = arr.optString(i)
+                          if (id.length >= 8) out.add(id)
+                      }
+                      out
+                  } catch (_: Exception) { emptyList() }
+              }
+
+              private fun fetchPlaylistIdsInnertube(listId: String, onDone: (List<String>) -> Unit) {
+                  Thread {
+                      val ids = ArrayList<String>()
+                      try {
+                          val cookie = try {
+                              CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
+                          } catch (_: Exception) { "" }
+                          // playlist browse
+                          val browseId = if (listId.startsWith("VL")) listId else "VL$listId"
+                          val body = JSONObject()
+                              .put("context", JSONObject().put("client", JSONObject()
+                                  .put("clientName", "ANDROID")
+                                  .put("clientVersion", "19.28.35")
+                                  .put("androidSdkVersion", 33)
+                                  .put("hl", "tr")
+                                  .put("gl", "TR")
+                              ))
+                              .put("browseId", browseId)
+                              .toString()
+                          val url = java.net.URL("https://www.youtube.com/youtubei/v1/browse?prettyPrint=false")
+                          val c = url.openConnection() as java.net.HttpURLConnection
+                          c.requestMethod = "POST"
+                          c.connectTimeout = 10000
+                          c.readTimeout = 10000
+                          c.doOutput = true
+                          c.setRequestProperty("Content-Type", "application/json")
+                          c.setRequestProperty("User-Agent", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip")
+                          c.setRequestProperty("X-YouTube-Client-Name", "3")
+                          c.setRequestProperty("X-YouTube-Client-Version", "19.28.35")
+                          if (cookie.isNotEmpty()) c.setRequestProperty("Cookie", cookie)
+                          c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                          val code = c.responseCode
+                          val stream = if (code in 200..299) c.inputStream else c.errorStream
+                          val resp = stream?.bufferedReader()?.readText() ?: ""
+                          c.disconnect()
+                          if (resp.isNotEmpty()) {
+                              val seen = HashSet<String>()
+                              fun walk(node: Any?) {
+                                  when (node) {
+                                      is JSONObject -> {
+                                          val vid = node.optString("videoId")
+                                          if (vid.length >= 8 && seen.add(vid)) ids.add(vid)
+                                          val keys = node.keys()
+                                          while (keys.hasNext()) walk(node.opt(keys.next()))
+                                      }
+                                      is JSONArray -> for (i in 0 until node.length()) walk(node.opt(i))
+                                  }
+                              }
+                              walk(JSONObject(resp))
+                          }
+                      } catch (_: Exception) { }
+                      val limited = ids.take(40)
+                      handler.post { onDone(limited) }
+                  }.start()
+              }
+
+              private fun processPlaylistQueue() {
+                  if (!playlistRunning) return
+                  if (playlistIndex >= playlistQueue.size) {
+                      playlistRunning = false
+                      toast("Liste indirmesi bitti")
+                      return
+                  }
+                  val id = playlistQueue[playlistIndex]
+                  val n = playlistIndex + 1
+                  val total = playlistQueue.size
+                  toast("İndiriliyor $n/$total")
+                  val watch = "https://www.youtube.com/watch?v=$id"
+                  fetchViaInnertube(watch) { links ->
+                      // Pick best progressive or audio
+                      fun isAudio(label: String, url: String): Boolean {
+                          val t = "$label $url".lowercase()
+                          return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
+                              t.contains("mime=audio") || t.contains("itag=140") || t.contains("itag=251")
+                      }
+                      fun looksProgressive(url: String): Boolean {
+                          val u = url.lowercase()
+                          return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
+                              (u.contains("mime=video") && u.contains("audio")) ||
+                              (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
+                      }
+                      val audio = links.firstOrNull { isAudio(it.first, it.second) }?.second
+                      val prog = links.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
+                      val base = "yt_${id}"
+                      when {
+                          playlistAudioOnly && audio != null ->
+                              startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
+                          !playlistAudioOnly && prog != null ->
+                              startDownload(prog, null, null, "video/mp4", "$base.mp4")
+                          audio != null ->
+                              startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
+                          else -> toast("Atlandı $n/$total")
+                      }
+                      playlistIndex++
+                      // Sıradakine biraz nefes: DM kuyruğu dolmasın
+                      handler.postDelayed({ processPlaylistQueue() }, 2500L)
                   }
               }
 
@@ -2086,7 +2308,7 @@ jobs:
               }
 
               private fun fetchViaInnertube(page: String, onDone: (List<Pair<String, String>>) -> Unit) {
-                  val id = videoIdOf(page)
+                  val id = videoIdOf(page) ?: page.substringAfter("v=", "").take(11).takeIf { it.length >= 8 }
                   if (id == null) { onDone(emptyList()); return }
                   Thread {
                       val links = ArrayList<Pair<String, String>>()
@@ -2261,7 +2483,6 @@ jobs:
                   handler.postDelayed({ if (!finished) finishWith(emptyList()) }, 18000)
               }
 
-              /** Yalnızca progressive sesli MP4 + MP3. */
               private fun showFetchedDownloadOptions(links: List<Pair<String, String>>) {
                   fun heightOf(s: String): Int {
                       val m = Regex("(\\d{3,4})\\s*p", RegexOption.IGNORE_CASE).find(s)
@@ -2314,20 +2535,14 @@ jobs:
                               c.connectTimeout = 2500
                               c.readTimeout = 2500
                               c.requestMethod = "GET"
-                              c.setRequestProperty(
-                                  "User-Agent",
-                                  "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                              )
+                              c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
                               c.setRequestProperty("Referer", "https://www.youtube.com/")
                               c.setRequestProperty("Origin", "https://www.youtube.com")
                               if (ytCookie.isNotEmpty()) c.setRequestProperty("Cookie", ytCookie)
                               c.setRequestProperty("Range", "bytes=0-0")
                               c.connect()
                               val code = c.responseCode
-                              var len = c.getHeaderField("Content-Range")
-                                  ?.substringAfter("/")
-                                  ?.toLongOrNull()
-                                  ?: c.contentLengthLong
+                              var len = c.getHeaderField("Content-Range")?.substringAfter("/")?.toLongOrNull() ?: c.contentLengthLong
                               if (len <= 0) len = c.contentLength.toLong()
                               c.disconnect()
                               when {
