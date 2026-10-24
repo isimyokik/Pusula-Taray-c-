@@ -1989,7 +1989,166 @@ jobs:
                       return
                   }
 
-                  toast("İndirme seçenekleri hazırlanıyor…")
+                  toast("YouTube'dan alınıyor…")
+                  // 1) Açık sekmeden player JSON
+                  try {
+                      t.web.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
+                          val links = parseYtFormatLinks(raw)
+                          if (links.isNotEmpty()) {
+                              showFetchedDownloadOptions(links)
+                          } else {
+                              // 2) InnerTube (çerezli) — arka plan
+                              fetchViaInnertube(page) { innertubeLinks ->
+                                  if (innertubeLinks.isNotEmpty()) {
+                                      showFetchedDownloadOptions(innertubeLinks)
+                                  } else {
+                                      // 3) SaveFrom yedek
+                                      fetchViaSavefrom(page)
+                                  }
+                              }
+                          }
+                      }
+                  } catch (_: Exception) {
+                      fetchViaInnertube(page) { innertubeLinks ->
+                          if (innertubeLinks.isNotEmpty()) showFetchedDownloadOptions(innertubeLinks)
+                          else fetchViaSavefrom(page)
+                      }
+                  }
+              }
+
+              private fun videoIdOf(page: String): String? {
+                  return try {
+                      val u = Uri.parse(page)
+                      val v = u.getQueryParameter("v")
+                      if (!v.isNullOrBlank()) return v
+                      val path = u.path ?: return null
+                      // youtu.be/ID veya /shorts/ID veya /embed/ID
+                      val parts = path.trim('/').split('/')
+                      when {
+                          page.contains("youtu.be") && parts.isNotEmpty() -> parts[0].takeWhile { it.isLetterOrDigit() || it == '_' || it == '-' }
+                          parts.size >= 2 && (parts[0] == "shorts" || parts[0] == "embed" || parts[0] == "live") -> parts[1]
+                          else -> null
+                      }?.takeIf { it.length >= 8 }
+                  } catch (_: Exception) { null }
+              }
+
+              /** Sayfadaki ytInitialPlayerResponse / streamingData'dan düz URL'leri çıkarır. */
+              private fun parseYtFormatLinks(raw: String?): List<Pair<String, String>> {
+                  if (raw.isNullOrBlank() || raw == "null" || raw == "\"\"") return emptyList()
+                  return try {
+                      val inner = org.json.JSONArray("[$raw]").getString(0)
+                      if (inner.isBlank() || inner == "null") return emptyList()
+                      val arr = org.json.JSONArray(inner)
+                      val out = ArrayList<Pair<String, String>>()
+                      for (i in 0 until arr.length()) {
+                          val o = arr.getJSONObject(i)
+                          val u = o.optString("u")
+                          if (!u.startsWith("http")) continue
+                          val kind = o.optString("k") // p | a
+                          val q = o.optString("q")
+                          val itag = o.optInt("itag", 0)
+                          val label = when {
+                              kind == "a" || o.optBoolean("audio") -> "MP3"
+                              q.isNotBlank() -> "MP4 $q"
+                              itag == 18 -> "MP4 360p"
+                              itag == 22 -> "MP4 720p"
+                              else -> "MP4"
+                          }
+                          out.add(label to u)
+                      }
+                      out
+                  } catch (_: Exception) { emptyList() }
+              }
+
+              private fun fetchViaInnertube(page: String, onDone: (List<Pair<String, String>>) -> Unit) {
+                  val id = videoIdOf(page)
+                  if (id == null) { onDone(emptyList()); return }
+                  Thread {
+                      val links = ArrayList<Pair<String, String>>()
+                      try {
+                          val cookie = try {
+                              CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
+                          } catch (_: Exception) { "" }
+                          val body = JSONObject()
+                              .put("context", JSONObject().put("client", JSONObject()
+                                  .put("clientName", "ANDROID")
+                                  .put("clientVersion", "19.28.35")
+                                  .put("androidSdkVersion", 33)
+                                  .put("hl", "tr")
+                                  .put("gl", "TR")
+                                  .put("userAgent", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip")
+                              ))
+                              .put("videoId", id)
+                              .put("contentCheckOk", true)
+                              .put("racyCheckOk", true)
+                              .toString()
+                          val url = java.net.URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
+                          val c = url.openConnection() as java.net.HttpURLConnection
+                          c.requestMethod = "POST"
+                          c.connectTimeout = 8000
+                          c.readTimeout = 8000
+                          c.doOutput = true
+                          c.setRequestProperty("Content-Type", "application/json")
+                          c.setRequestProperty("User-Agent", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip")
+                          c.setRequestProperty("X-YouTube-Client-Name", "3")
+                          c.setRequestProperty("X-YouTube-Client-Version", "19.28.35")
+                          if (cookie.isNotEmpty()) c.setRequestProperty("Cookie", cookie)
+                          c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                          val code = c.responseCode
+                          val stream = if (code in 200..299) c.inputStream else c.errorStream
+                          val text = stream?.bufferedReader()?.readText() ?: ""
+                          c.disconnect()
+                          if (text.isNotEmpty()) {
+                              val root = JSONObject(text)
+                              val sd = root.optJSONObject("streamingData") ?: JSONObject()
+                              fun eat(arr: JSONArray?, audioHint: Boolean) {
+                                  if (arr == null) return
+                                  for (i in 0 until arr.length()) {
+                                      val f = arr.optJSONObject(i) ?: continue
+                                      val u = f.optString("url")
+                                      if (!u.startsWith("http")) continue // cipher'lı olanları atla
+                                      val mime = f.optString("mimeType").lowercase()
+                                      val itag = f.optInt("itag")
+                                      val q = f.optString("qualityLabel")
+                                      val isAudio = audioHint || mime.contains("audio") ||
+                                          itag in listOf(139, 140, 141, 249, 250, 251)
+                                      if (isAudio) {
+                                          links.add("MP3" to u)
+                                      } else {
+                                          // progressive listesi veya ratebypass'lı
+                                          val progressive = mime.contains("audio") ||
+                                              itag in listOf(18, 22, 37) ||
+                                              u.contains("ratebypass")
+                                          if (progressive) {
+                                              val lab = if (q.isNotBlank()) "MP4 $q" else if (itag == 18) "MP4 360p" else if (itag == 22) "MP4 720p" else "MP4"
+                                              links.add(lab to u)
+                                          }
+                                      }
+                                  }
+                              }
+                              eat(sd.optJSONArray("formats"), false)
+                              // adaptive içinden sadece ses
+                              val ad = sd.optJSONArray("adaptiveFormats")
+                              if (ad != null) {
+                                  for (i in 0 until ad.length()) {
+                                      val f = ad.optJSONObject(i) ?: continue
+                                      val u = f.optString("url")
+                                      if (!u.startsWith("http")) continue
+                                      val mime = f.optString("mimeType").lowercase()
+                                      val itag = f.optInt("itag")
+                                      if (mime.contains("audio") || itag in listOf(139, 140, 141, 249, 250, 251)) {
+                                          links.add("MP3" to u)
+                                      }
+                                  }
+                              }
+                          }
+                      } catch (_: Exception) { }
+                      handler.post { onDone(links) }
+                  }.start()
+              }
+
+              private fun fetchViaSavefrom(page: String) {
+                  toast("Yedek kaynak deneniyor…")
                   val loader = WebView(this)
                   loader.settings.javaScriptEnabled = true
                   loader.settings.domStorageEnabled = true
@@ -2001,32 +2160,26 @@ jobs:
                       finished = true
                       try { loader.stopLoading(); loader.destroy() } catch (_: Exception) {}
                       try {
-                          val parent = loader.parent as? ViewGroup
-                          parent?.removeView(loader)
+                          (loader.parent as? ViewGroup)?.removeView(loader)
                       } catch (_: Exception) {}
-                      if (links.isEmpty()) {
-                          toast("İndirme linki alınamadı")
-                          return
-                      }
-                      showFetchedDownloadOptions(links)
+                      if (links.isEmpty()) toast("İndirme linki alınamadı")
+                      else showFetchedDownloadOptions(links)
                   }
                   val extractJs =
                       "(function(){try{" +
                       "var out=[];" +
                       "function ok(u){" +
                       "if(!u||u.indexOf('http')!==0)return false;" +
-                      "if(/savefrom\\.net|ssyoutube|facebook\\.com\\/?$|instagram\\.com|tiktok\\.com|reddit\\.com|pinterest|dailymotion|vimeo\\.com\\/?$|vk\\.com\\/?$|threads\\.net|play\\.google/i.test(u)&&!/googlevideo|videoplayback|sf-tools/i.test(u))return false;" +
-                      "return /googlevideo\\.com|videoplayback|\\/getfile|sf-tools\\.com|mime=video|mime=audio|itag=|\\.(mp4|m4a|webm|mp3)(\\?|$)/i.test(u);" +
+                      "if(/savefrom\\.net|ssyoutube|facebook|instagram|tiktok|reddit|pinterest|dailymotion|vimeo|vk\\.com|threads|play\\.google/i.test(u)&&!/googlevideo|videoplayback|sf-tools/i.test(u))return false;" +
+                      "return /googlevideo\\.com|videoplayback|sf-tools\\.com|mime=video|mime=audio|itag=/i.test(u);" +
                       "}" +
                       "function add(u,l){if(!ok(u))return;for(var i=0;i<out.length;i++)if(out[i].u===u)return;" +
-                      "var t=(l||'İndir').replace(/\\s+/g,' ').trim();if(t.length>40)t=t.slice(0,40);" +
-                      "if(/^(youtube|facebook|instagram|tiktok|reddit|pinterest|threads|vimeo|vk\\.com|dailymotion)$/i.test(t))return;" +
-                      "out.push({u:u,l:t||'İndir'});}" +
-                      "document.querySelectorAll('a[href]').forEach(function(a){add(a.href,a.textContent||a.getAttribute('download')||a.title);});" +
-                      "document.querySelectorAll('[data-link],[data-url],[data-download],[data-href],[href*=\"itag=\"],[href*=\"googlevideo\"],[href*=\"videoplayback\"]').forEach(function(el){" +
-                      "add(el.getAttribute('data-link')||el.getAttribute('data-url')||el.getAttribute('data-download')||el.getAttribute('data-href')||el.getAttribute('href')||'',el.textContent||el.getAttribute('download')||'');" +
+                      "out.push({u:u,l:(l||'İndir').replace(/\\s+/g,' ').trim().slice(0,40)});" +
+                      "}" +
+                      "document.querySelectorAll('a[href],[data-link],[data-url],[data-download],[data-href]').forEach(function(el){" +
+                      "add(el.href||el.getAttribute('data-link')||el.getAttribute('data-url')||el.getAttribute('data-download')||el.getAttribute('data-href')||'',el.textContent||'');" +
                       "});" +
-                      "return JSON.stringify(out.slice(0,20));" +
+                      "return JSON.stringify(out.slice(0,25));" +
                       "}catch(e){return '[]';}})();"
                   var tries = 0
                   fun poll() {
@@ -2051,9 +2204,9 @@ jobs:
                                       val o = arr.getJSONObject(i)
                                       val u = o.optString("u")
                                       val l = o.optString("l", "İndir")
-                                      if (u.contains("googlevideo.com") || u.contains("videoplayback") ||
-                                          u.contains("sf-tools.com") || u.contains("mime=video") ||
-                                          u.contains("mime=audio") || u.contains("itag=")) {
+                                      if (u.contains("googlevideo") || u.contains("videoplayback") ||
+                                          u.contains("sf-tools") || u.contains("itag=") ||
+                                          u.contains("mime=video") || u.contains("mime=audio")) {
                                           list.add(l to u)
                                       }
                                   }
@@ -2075,11 +2228,11 @@ jobs:
                   }
                   loader.layoutParams = ViewGroup.LayoutParams(1, 1)
                   try { (window.decorView as? ViewGroup)?.addView(loader) } catch (_: Exception) {}
-                  val sfUrl = "https://en.savefrom.net/" + page
-                  loader.loadUrl(sfUrl)
+                  loader.loadUrl("https://en.savefrom.net/" + page)
                   handler.postDelayed({ if (!finished) finishWith(emptyList()) }, 18000)
               }
 
+              /** Yalnızca progressive sesli MP4 + MP3. DASH birleştirme yok. */
               private fun showFetchedDownloadOptions(links: List<Pair<String, String>>) {
                   fun heightOf(s: String): Int {
                       val m = Regex("(\\d{3,4})\\s*p", RegexOption.IGNORE_CASE).find(s)
@@ -2101,19 +2254,17 @@ jobs:
 
                   val audioLinks = links.filter { isAudio(it.first, it.second) }
                   val bestAudio = audioLinks.maxByOrNull { it.second.length }?.second
-                  val videos = links.filter { !isAudio(it.first, it.second) }
-                  val progressive = videos.filter { looksProgressive(it.second) }
-                  val rest = videos.filter { !looksProgressive(it.second) }
+                  val progressive = links.filter { !isAudio(it.first, it.second) && looksProgressive(it.second) }
 
                   val pick = ArrayList<Pair<String, String>>()
                   val seenH = HashSet<Int>()
-                  for (v in (progressive + rest).sortedBy {
+                  for (v in progressive.sortedBy {
                       heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 }
                   }) {
                       val h = heightOf(v.first + " " + v.second)
                       if (h > 0 && !seenH.add(h)) continue
                       pick.add(v)
-                      if (pick.size >= 6) break
+                      if (pick.size >= 4) break
                   }
 
                   if (pick.isEmpty() && bestAudio == null) {
@@ -2155,9 +2306,7 @@ jobs:
                                   code == 403 || code == 429 -> 0L
                                   else -> -1L
                               }
-                          } catch (_: Exception) {
-                              0L
-                          }
+                          } catch (_: Exception) { 0L }
                       }
 
                       fun mb(b: Long): String {
@@ -2166,14 +2315,7 @@ jobs:
                           return if (m >= 10) "${m.toInt()} MB" else String.format("%.1f MB", m)
                       }
 
-                      data class Opt(
-                          val label: String,
-                          val videoUrl: String?,
-                          val audioUrl: String?,
-                          val audioOnly: Boolean,
-                          val bytes: Long
-                      )
-
+                      data class Opt(val label: String, val url: String, val audioOnly: Boolean, val bytes: Long)
                       val opts = java.util.Collections.synchronizedList(ArrayList<Opt>())
                       val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
                       val jobs = ArrayList<java.util.concurrent.Future<*>>()
@@ -2183,46 +2325,34 @@ jobs:
                               val h = heightOf(v.first + " " + v.second)
                               val len = probe(v.second)
                               if (len < 0) return@submit
-
-                              val prog = looksProgressive(v.second)
-                              if (prog) {
-                                  val lab = (if (h > 0) "MP4 ${h}p" else "MP4") +
-                                      if (len > 0) " · ${mb(len)}" else ""
-                                  opts.add(Opt(lab, v.second, null, false, if (len > 0) len else 1L))
-                              } else {
-                                  if (bestAudio == null) return@submit
-                                  val al = probe(bestAudio)
-                                  if (al < 0) return@submit
-                                  val total = (if (len > 0) len else 0) + (if (al > 0) al else 0)
-                                  val lab = (if (h > 0) "MP4 ${h}p" else "MP4") +
-                                      if (total > 0) " · ${mb(total)}" else " (birleştirilecek)"
-                                  opts.add(Opt(lab, v.second, bestAudio, false, if (total > 0) total else 1L))
-                              }
+                              val lab = (if (h > 0) "MP4 ${h}p" else v.first.ifBlank { "MP4" }) +
+                                  if (len > 0) " · ${mb(len)}" else ""
+                              opts.add(Opt(lab, v.second, false, if (len > 0) len else 1L))
                           })
                       }
-
                       if (bestAudio != null) {
                           jobs.add(pool.submit {
                               val al = probe(bestAudio)
-                              if (al >= 0) {
-                                  opts.add(
-                                      Opt(
-                                          if (al > 0) "MP3 · ${mb(al)}" else "MP3",
-                                          null, bestAudio, true, if (al > 0) al else 1L
-                                      )
-                                  )
-                              }
+                              if (al >= 0) opts.add(Opt(if (al > 0) "MP3 · ${mb(al)}" else "MP3", bestAudio, true, if (al > 0) al else 1L))
                           })
                       }
-
-                      try {
-                          jobs.forEach { it.get(4, java.util.concurrent.TimeUnit.SECONDS) }
-                      } catch (_: Exception) { }
+                      try { jobs.forEach { it.get(4, java.util.concurrent.TimeUnit.SECONDS) } } catch (_: Exception) {}
                       pool.shutdownNow()
 
-                      val sorted = opts.sortedBy { it.bytes }
+                      var sorted = opts.sortedBy { it.bytes }
+                      if (sorted.isEmpty() && pick.isNotEmpty()) {
+                          sorted = pick.map { v ->
+                              val h = heightOf(v.first + " " + v.second)
+                              Opt(if (h > 0) "MP4 ${h}p" else "MP4", v.second, false, 1L)
+                          }
+                          if (bestAudio != null) sorted = sorted + Opt("MP3", bestAudio, true, 1L)
+                      }
 
-                      fun showOptionsDialog(items: List<Opt>) {
+                      handler.post {
+                          if (sorted.isEmpty()) {
+                              toast("Çalışan indirme linki bulunamadı")
+                              return@post
+                          }
                           val d = Dialog(this)
                           val col = LinearLayout(this)
                           col.orientation = LinearLayout.VERTICAL
@@ -2232,7 +2362,6 @@ jobs:
                           bgd.setColor(cSurface)
                           bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
                           col.background = bgd
-
                           val title = TextView(this)
                           title.text = "İndirme seçenekleri"
                           title.textSize = 18f
@@ -2240,60 +2369,27 @@ jobs:
                           title.setTextColor(cText)
                           title.setPadding(0, 0, 0, dp(12))
                           col.addView(title)
-
-                          for (opt in items) {
+                          for (opt in sorted) {
                               val btn = textBtn(opt.label) {
                                   d.dismiss()
                                   val base = mediaFileBase()
-                                  when {
-                                      opt.audioOnly && opt.audioUrl != null ->
-                                          startDownload(opt.audioUrl, null, null, "audio/mpeg", "$base.mp3")
-                                      opt.videoUrl != null && opt.audioUrl != null ->
-                                          downloadAndMerge(opt.videoUrl, opt.audioUrl, "$base.mp4")
-                                      opt.videoUrl != null ->
-                                          startDownload(opt.videoUrl, null, null, "video/mp4", "$base.mp4")
-                                  }
+                                  if (opt.audioOnly) startDownload(opt.url, null, null, "audio/mpeg", "$base.mp3")
+                                  else startDownload(opt.url, null, null, "video/mp4", "$base.mp4")
                               }
                               btn.setTextColor(cText)
                               btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
                               btn.setPadding(dp(16), 0, dp(16), 0)
                               btn.background = shape(cField, 14)
-                              val lp = LinearLayout.LayoutParams(
-                                  ViewGroup.LayoutParams.MATCH_PARENT, dp(50)
-                              )
+                              val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
                               lp.bottomMargin = dp(8)
                               col.addView(btn, lp)
                           }
-
                           val cancel = textBtn("İptal") { d.dismiss() }
                           cancel.setTextColor(cSub)
                           cancel.gravity = Gravity.CENTER
-                          col.addView(
-                              cancel,
-                              LinearLayout.LayoutParams(
-                                  ViewGroup.LayoutParams.MATCH_PARENT, dp(44)
-                              )
-                          )
+                          col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
                           sheetWindow(d, col, false)
                           d.show()
-                      }
-
-                      handler.post {
-                          if (sorted.isNotEmpty()) {
-                              showOptionsDialog(sorted)
-                              return@post
-                          }
-                          val fallback = progressive.take(4)
-                          if (fallback.isEmpty()) {
-                              toast("Çalışan indirme linki bulunamadı")
-                              return@post
-                          }
-                          val fbOpts = fallback.map { v ->
-                              val h = heightOf(v.first + " " + v.second)
-                              val lab = if (h > 0) "MP4 ${h}p" else (v.first.ifBlank { "MP4" })
-                              Opt(lab, v.second, null, false, 1L)
-                          }
-                          showOptionsDialog(fbOpts)
                       }
                   }.start()
               }
@@ -3178,6 +3274,31 @@ jobs:
                   const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
                   const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
                   const val MAX_TABS = 20
+
+
+                  // YouTube sayfasından progressive + ses URL'lerini çıkar (cipher'sız olanlar)
+                  const val YT_EXTRACT_FORMATS_JS =
+                      "(function(){try{" +
+                      "function collect(p){if(!p||!p.streamingData)return[];var out=[];" +
+                      "function push(f,k){if(!f)return;var u=f.url||'';if(!u&&f.signatureCipher){var m=/url=([^&]+)/.exec(f.signatureCipher);if(m)u=decodeURIComponent(m[1]);}" +
+                      "if(!u||u.indexOf('http')!==0)return;" +
+                      // cipher imzası yoksa URL işe yaramaz; sadece düz url alanları al
+                      "if(f.signatureCipher&&!f.url)return;" +
+                      "out.push({u:u,itag:f.itag||0,q:f.qualityLabel||'',k:k,audio:!!((f.mimeType||'').indexOf('audio')>=0)});} " +
+                      "(p.streamingData.formats||[]).forEach(function(f){push(f,'p');});" +
+                      "(p.streamingData.adaptiveFormats||[]).forEach(function(f){" +
+                      "var m=(f.mimeType||'');if(m.indexOf('audio')>=0)push(f,'a');" +
+                      "});return out;}" +
+                      "var p=window.ytInitialPlayerResponse||window.playerResponse||null;" +
+                      "if(!p){try{var s=document.getElementById('player-response')||document.getElementById('ytInitialPlayerResponse');" +
+                      "if(s&&s.textContent)p=JSON.parse(s.textContent);}catch(e){}}" +
+                      "if(!p){try{for(var k in window){if(k&&k.indexOf('ytInitialPlayerResponse')>=0&&window[k]&&window[k].streamingData){p=window[k];break;}}}catch(e){}}" +
+                      "var out=collect(p);" +
+                      "if(!out.length){var v=document.querySelector('video');if(v&&v.currentSrc&&v.currentSrc.indexOf('http')===0)" +
+                      "out.push({u:v.currentSrc,itag:0,q:'playing',k:'p',audio:false});}" +
+                      "return JSON.stringify(out.slice(0,20));" +
+                      "}catch(e){return '[]';}})();"
+
 
                   const val KEEP_PLAYING_JS =
                       "(function(){try{" +
