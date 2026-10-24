@@ -1158,7 +1158,8 @@ jobs:
                           promptDownload(url, userAgent, contentDisposition, mimeType)
                       }
                   }
-                  // Videoya / görsele uzun basınca indirme seçeneği
+                  // Görsel / belge: uzun basınca indir veya aç
+                  // Video: uzun basınca yalnızca "İndir" düğmesi göster (sardırma ile çakışmasın)
                   web.setOnLongClickListener {
                       val hr = web.hitTestResult
                       when (hr.type) {
@@ -1178,37 +1179,22 @@ jobs:
                               } else false
                           }
                           else -> {
-                              // YouTube / sayfa videosu: medya indirmeyi dene
                               val u = tab.url
-                              if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
-                                  downloadCurrentMedia()
+                              if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com") ||
+                                  u.contains("video") || u.contains("watch")) {
+                                  showVideoDownloadChip(web)
                                   true
-                              } else {
-                                  // Genel video uzun basma
-                                  try {
-                                      web.evaluateJavascript(
-                                          "(function(){try{var v=document.querySelector('video');" +
-                                          "if(v&&(v.currentSrc||v.src)&&String(v.currentSrc||v.src).indexOf('http')===0)" +
-                                          "return JSON.stringify({u:v.currentSrc||v.src});return '';}catch(e){return '';}})();"
-                                      ) { raw ->
-                                          try {
-                                              if (raw != null && raw != "null" && raw != "\"\"") {
-                                                  val inner = org.json.JSONArray("[$raw]").getString(0)
-                                                  if (inner.isNotBlank()) {
-                                                      val o = org.json.JSONObject(inner)
-                                                      val mu = o.optString("u")
-                                                      if (mu.startsWith("http")) promptDownload(mu, null, null, "video/mp4")
-                                                      else downloadCurrentMedia()
-                                                  } else downloadCurrentMedia()
-                                              } else downloadCurrentMedia()
-                                          } catch (_: Exception) { downloadCurrentMedia() }
-                                      }
-                                      true
-                                  } catch (_: Exception) { false }
-                              }
+                              } else false
                           }
                       }
                   }
+                  // JS köprüsü: "İndir" chip'ine basılınca native indirmeyi başlat
+                  web.addJavascriptInterface(object {
+                      @android.webkit.JavascriptInterface
+                      fun startVideoDownload() {
+                          handler.post { downloadCurrentMedia() }
+                      }
+                  }, "RotaDl")
                   web.webViewClient = makeClient(tab)
                   web.webChromeClient = makeChrome(tab)
                   tabs.add(tab)
@@ -1716,7 +1702,8 @@ jobs:
                       if (cookie != null) req.addRequestHeader("Cookie", cookie)
                       if (ua != null) req.addRequestHeader("User-Agent", ua)
                       req.setTitle(name)
-                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                      // Sadece tamamlanınca bildirim; sürekli yenileme / uyarı sesi yok
+                      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_ONLY_COMPLETION)
                       val destPath: String
                       if (Build.VERSION.SDK_INT >= 29) {
                           req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
@@ -1868,6 +1855,30 @@ jobs:
                   d.show()
               }
 
+              /** Videoya uzun basınca sağda/solda kısa ömürlü "İndir" chip'i gösterir. */
+              private fun showVideoDownloadChip(web: WebView) {
+                  try {
+                      web.evaluateJavascript(
+                          """
+                          (function(){
+                            try{
+                              var old=document.getElementById('__rota_dl_chip');
+                              if(old)old.remove();
+                              var b=document.createElement('div');
+                              b.id='__rota_dl_chip';
+                              b.textContent='⬇️ İndir';
+                              b.style.cssText='position:fixed;right:12px;top:42%;z-index:2147483647;padding:14px 18px;border-radius:28px;background:linear-gradient(135deg,#4c8dff,#8a5cff);color:#fff;font:700 15px/1 sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.4);cursor:pointer;-webkit-user-select:none;user-select:none;';
+                              b.onclick=function(e){e.preventDefault();e.stopPropagation();b.remove();try{if(window.RotaDl)RotaDl.startVideoDownload();}catch(x){}};
+                              document.documentElement.appendChild(b);
+                              setTimeout(function(){try{b.remove();}catch(z){}},5000);
+                            }catch(e){}
+                          })();
+                          """.trimIndent(), null)
+                  } catch (_: Exception) {
+                      downloadCurrentMedia()
+                  }
+              }
+
               /**
                * YouTube: SaveFrom arayüzüne yönlendirmeden arka planda link çeker,
                * kendi kalite menümüzde "İndir" sunar.
@@ -2001,6 +2012,45 @@ jobs:
 
               /** Arka planda bulunan indirme linklerini kendi menümüzde göster. */
               private fun showFetchedDownloadOptions(links: List<Pair<String, String>>) {
+                  fun heightOf(s: String): Int {
+                      val m = Regex("(\\d{3,4})\\s*p", RegexOption.IGNORE_CASE).find(s)
+                      return m?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+                  }
+                  fun isAudio(label: String, url: String): Boolean {
+                      val t = "$label $url".lowercase()
+                      return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
+                          t.contains("mime=audio") || (t.contains("itag=140") || t.contains("itag=251"))
+                  }
+                  fun isVideoOnly(url: String): Boolean {
+                      // Adaptive sadece-video (ses yok) — bunları listede geri plana at / çıkar
+                      val u = url.lowercase()
+                      return u.contains("mime=video") && !u.contains("audio") &&
+                          (u.contains("itag=137") || u.contains("itag=136") || u.contains("itag=135") ||
+                              u.contains("itag=298") || u.contains("itag=299") || u.contains("itag=248") || u.contains("itag=247"))
+                  }
+                  // Sadece MP4 / MP3 benzeri; sesli video tercih, küçükten büyüğe
+                  val video = links.filter { !isAudio(it.first, it.second) && !isVideoOnly(it.second) }
+                      .sortedBy { heightOf(it.first + " " + it.second) }
+                  val audio = links.filter { isAudio(it.first, it.second) }
+                  val ordered = ArrayList<Pair<String, String>>()
+                  for (v in video) {
+                      val h = heightOf(v.first + " " + v.second)
+                      val label = when {
+                          h > 0 -> "MP4 ${h}p"
+                          v.first.contains("mp4", true) -> v.first
+                          else -> "MP4 — ${v.first}"
+                      }
+                      ordered.add(label to v.second)
+                  }
+                  if (audio.isNotEmpty()) {
+                      ordered.add("MP3 / Ses" to audio.first().second)
+                  } else {
+                      // Ses linki yoksa yine de MP3 satırı gösterme; kullanıcıya bilgi
+                  }
+                  if (ordered.isEmpty()) {
+                      toast("Uygun MP4/MP3 linki bulunamadı")
+                      return
+                  }
                   val d = Dialog(this)
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
@@ -2017,13 +2067,10 @@ jobs:
                   title.setTextColor(cText)
                   title.setPadding(0, 0, 0, dp(12))
                   col.addView(title)
-                  for ((label, url) in links) {
+                  for ((label, url) in ordered) {
                       val btn = textBtn(label) {
                           d.dismiss()
-                          val mime = when {
-                              label.contains("mp3", true) || label.contains("audio", true) || url.contains("audio") -> "audio/mpeg"
-                              else -> "video/mp4"
-                          }
+                          val mime = if (label.contains("MP3") || label.contains("Ses")) "audio/mpeg" else "video/mp4"
                           startDownload(url, null, null, mime)
                       }
                       btn.setTextColor(cText)
@@ -2842,14 +2889,12 @@ jobs:
                       "if(!vd)return;" +
                       "vd.style.visibility='';" +
                       "vd.playbackRate=1;" +
+                      // Reklam bitince asla muted bırakma — ses her zaman geri açılır
+                      "vd.muted=false;" +
                       "var tv=parseFloat(vd.dataset.pv||'1')||1;" +
-                      "if(vd.dataset.pm!=='1'){" +
-                      "vd.volume=0;vd.muted=false;" +
+                      "vd.volume=0;" +
                       "var k=0;" +
-                      "var iv=setInterval(function(){k++;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;}},30);" +
-                      "}else{" +
-                      "vd.volume=tv;vd.muted=true;" +
-                      "}" +
+                      "var iv=setInterval(function(){k++;vd.muted=false;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;vd.muted=false;}},30);" +
                       "}" +
                       "function check(){" +
                       "try{" +
@@ -2864,8 +2909,8 @@ jobs:
                       "tick++;" +
                       "if(tick%5===1)hideAdUi(true);" +
                       "if(vd){" +
-                      "if(!fast){fast=true;vd.dataset.pm=vd.muted?'1':'0';vd.dataset.pv=String(vd.volume||1);}" +
-                      "vd.muted=true;" +
+                      "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
+                      // muted kullanma — sadece volume=0 (reklam sesi); içerik muted kalmasın
                       "try{vd.volume=0;}catch(x){}" +
                       "vd.style.visibility='hidden';" +
                       "if(vd.playbackRate<8)vd.playbackRate=16;" +
@@ -3101,13 +3146,6 @@ jobs:
                       "document.documentElement.appendChild(s);" +
                       "v.classList.add('__pipv');" +
                       "var e=v.parentElement;while(e&&e!==document.documentElement){e.style.setProperty('visibility','visible','important');e=e.parentElement;}" +
-                      // İlerleme çubuğu ÜSTTE — siyah şerit alanında, görünür renk
-                      "(function(){var bar=document.createElement('div');bar.id='__pipbar';" +
-                      "bar.style.cssText='position:fixed;left:0;right:0;top:0;height:5px;z-index:2147483648;background:rgba(255,255,255,.2);pointer-events:none;visibility:visible';" +
-                      "var fill=document.createElement('div');fill.style.cssText='height:100%;width:0;background:#4C8DFF';" +
-                      "bar.appendChild(fill);document.documentElement.appendChild(bar);" +
-                      "function tick(){var d=v.duration;if(!isFinite(d)||d<=0){bar.style.display='none';return;}bar.style.display='block';fill.style.width=(v.currentTime/d*100)+'%';}" +
-                      "tick();window.__pipIv=setInterval(tick,400);})();" +
                       "}catch(e){}})();"
 
                   const val PIP_OFF_JS =
@@ -3374,7 +3412,7 @@ jobs:
                   try {
                       val req = android.app.DownloadManager.Request(Uri.parse(fileUrl))
                       req.setTitle(fileName)
-                      req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                      req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_ONLY_COMPLETION)
                       if (mime != null) req.setMimeType(mime)
                       val cookie = CookieManager.getInstance().getCookie(fileUrl)
                       if (cookie != null) req.addRequestHeader("Cookie", cookie)
