@@ -3131,10 +3131,7 @@ jobs:
                   frame.keepScreenOn = true
 
                   val vv = android.widget.VideoView(this)
-                  val vlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER)
-                  vlp.topMargin = dp(76)
-                  vlp.bottomMargin = dp(96)
-                  frame.addView(vv, vlp)
+                  frame.addView(vv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
 
                   if (audio) {
                       val box = LinearLayout(this)
@@ -3151,8 +3148,8 @@ jobs:
                   val top = LinearLayout(this)
                   top.orientation = LinearLayout.HORIZONTAL
                   top.gravity = Gravity.CENTER_VERTICAL
-                  top.setBackgroundColor(0x66000000.toInt())
-                  top.setPadding(dp(14), dp(4), dp(6), dp(4))
+                  top.setBackgroundColor(0x99000000.toInt())
+                  top.setPadding(dp(14), dp(28), dp(6), dp(8))
                   val ttv = TextView(this)
                   ttv.text = title
                   ttv.textSize = 15f
@@ -3164,34 +3161,11 @@ jobs:
                   x.setTextColor(Color.WHITE)
                   x.textSize = 20f
                   top.addView(x, LinearLayout.LayoutParams(dp(48), dp(44)))
-                  val tlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP)
-                  tlp.topMargin = dp(40)
-                  frame.addView(top, tlp)
-
-                  // Çubuklar yatayda ekranı kısaltmasın diye boşluklar yöne göre ayarlanır
-                  frame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
-                      val land = (r - l) > (b - t)
-                      val wantTop = if (land) dp(44) else dp(76)
-                      val wantBottom = if (land) dp(48) else dp(96)
-                      val wantTopBar = if (land) 0 else dp(40)
-                      if (vlp.topMargin != wantTop || vlp.bottomMargin != wantBottom || tlp.topMargin != wantTopBar) {
-                          vlp.topMargin = wantTop
-                          vlp.bottomMargin = wantBottom
-                          tlp.topMargin = wantTopBar
-                          vv.layoutParams = vlp
-                          top.layoutParams = tlp
-                      }
-                  }
+                  frame.addView(top, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
 
                   val mc = android.widget.MediaController(this)
                   mc.setAnchorView(vv)
                   vv.setMediaController(mc)
-                  // Alttaki oynatma çubuğunu dikeyde yaklaşık 2 cm yukarı almak için çubuğun altına boşluk eklenir (yatayda 0)
-                  mc.setPadding(0, 0, 0, if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 0 else dp(126))
-                  frame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
-                      val wantPad = if ((r - l) > (b - t)) 0 else dp(126)
-                      if (mc.paddingBottom != wantPad) mc.setPadding(0, 0, 0, wantPad)
-                  }
                   vv.setOnPreparedListener {
                       vv.start()
                       mc.show(3000)
@@ -4900,7 +4874,7 @@ jobs:
                           if (pct != lastPct) {
                               lastPct = pct
                               val b = NotificationCompat.Builder(ctx, CH_PROGRESS)
-                                  .setSmallIcon(R.drawable.ic_stat_download)
+                                  .setSmallIcon(android.R.drawable.stat_sys_download)
                                   .setContentTitle(name)
                                   .setContentText(if (pct >= 0) "İndiriliyor… %" + pct else "İndiriliyor…")
                                   .setContentIntent(open)
@@ -5172,9 +5146,6 @@ jobs:
           EOF
           cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z"/></vector>
-          EOF
-          cat > app/src/main/res/drawable/ic_stat_download.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z"/></vector>
