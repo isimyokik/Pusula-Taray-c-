@@ -3131,7 +3131,16 @@ jobs:
                   frame.keepScreenOn = true
 
                   val vv = android.widget.VideoView(this)
-                  frame.addView(vv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+                  val vlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+                  vlp.topMargin = dp(76)
+                  vlp.bottomMargin = dp(96)
+                  frame.addView(vv, vlp)
+
+                  // Alttaki oynatma çubuğunu (ileri/geri, oynat-duraklat, kaydırma) dikeyde yaklaşık 2 cm yukarı almak için görünmez dayanak
+                  val anchor = View(this)
+                  val alp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                  alp.bottomMargin = dp(126)
+                  frame.addView(anchor, 0, alp)
 
                   if (audio) {
                       val box = LinearLayout(this)
@@ -3162,23 +3171,26 @@ jobs:
                   x.textSize = 20f
                   top.addView(x, LinearLayout.LayoutParams(dp(48), dp(44)))
                   val tlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP)
-                  tlp.topMargin = dp(71)
+                  tlp.topMargin = dp(40)
                   frame.addView(top, tlp)
 
-                  // Alttaki oynatma çubuğunu dikeyde yaklaşık 2 cm yukarı almak için görünmez bir dayanak satırı
-                  val anchor = View(this)
-                  val alp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                  alp.bottomMargin = dp(126)
-                  frame.addView(anchor, 0, alp)
+                  // Çubuklar yatayda ekranı kısaltmasın diye boşluklar yöne göre ayarlanır
                   frame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
                       val land = (r - l) > (b - t)
-                      val wantTopBar = if (land) 0 else dp(71)
+                      val wantTop = if (land) dp(44) else dp(76)
+                      val wantBottom = if (land) dp(48) else dp(96)
+                      val wantTopBar = if (land) 0 else dp(40)
                       val wantAnchor = if (land) 0 else dp(126)
-                      if (tlp.topMargin != wantTopBar || alp.bottomMargin != wantAnchor) {
-                          tlp.topMargin = wantTopBar
+                      if (alp.bottomMargin != wantAnchor) {
                           alp.bottomMargin = wantAnchor
-                          top.layoutParams = tlp
                           anchor.layoutParams = alp
+                      }
+                      if (vlp.topMargin != wantTop || vlp.bottomMargin != wantBottom || tlp.topMargin != wantTopBar) {
+                          vlp.topMargin = wantTop
+                          vlp.bottomMargin = wantBottom
+                          tlp.topMargin = wantTopBar
+                          vv.layoutParams = vlp
+                          top.layoutParams = tlp
                       }
                   }
 
