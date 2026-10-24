@@ -2981,10 +2981,11 @@ jobs:
                   root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
                   progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-                      max = 100; progress = 0; visibility = View.VISIBLE
+                      max = 100; this.progress = 0; visibility = View.VISIBLE
                   }
                   root.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)))
 
+                  val progressBar = progress
                   web = WebView(this).apply {
                       setBackgroundColor(cBg)
                       settings.apply {
@@ -3001,12 +3002,12 @@ jobs:
                       }
                       webViewClient = object : WebViewClient() {
                           override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
-                          override fun onPageFinished(view: WebView?, url: String?) { progress.visibility = View.GONE }
+                          override fun onPageFinished(view: WebView?, url: String?) { progressBar.visibility = View.GONE }
                       }
                       webChromeClient = object : WebChromeClient() {
                           override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                              progress.progress = newProgress
-                              progress.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
+                              progressBar.progress = newProgress
+                              progressBar.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
                           }
                       }
                   }
