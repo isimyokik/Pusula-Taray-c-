@@ -3136,12 +3136,6 @@ jobs:
                   vlp.bottomMargin = dp(96)
                   frame.addView(vv, vlp)
 
-                  // Alttaki oynatma çubuğunu (ileri/geri, oynat-duraklat, kaydırma) dikeyde yaklaşık 2 cm yukarı almak için görünmez dayanak
-                  val anchor = View(this)
-                  val alp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                  alp.bottomMargin = dp(126)
-                  frame.addView(anchor, 0, alp)
-
                   if (audio) {
                       val box = LinearLayout(this)
                       box.orientation = LinearLayout.VERTICAL
@@ -3180,11 +3174,6 @@ jobs:
                       val wantTop = if (land) dp(44) else dp(76)
                       val wantBottom = if (land) dp(48) else dp(96)
                       val wantTopBar = if (land) 0 else dp(40)
-                      val wantAnchor = if (land) 0 else dp(126)
-                      if (alp.bottomMargin != wantAnchor) {
-                          alp.bottomMargin = wantAnchor
-                          anchor.layoutParams = alp
-                      }
                       if (vlp.topMargin != wantTop || vlp.bottomMargin != wantBottom || tlp.topMargin != wantTopBar) {
                           vlp.topMargin = wantTop
                           vlp.bottomMargin = wantBottom
@@ -3197,9 +3186,14 @@ jobs:
                   val mc = android.widget.MediaController(this)
                   mc.setAnchorView(vv)
                   vv.setMediaController(mc)
+                  // Alttaki oynatma çubuğunu dikeyde yaklaşık 2 cm yukarı almak için çubuğun altına boşluk eklenir (yatayda 0)
+                  mc.setPadding(0, 0, 0, if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 0 else dp(126))
+                  frame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
+                      val wantPad = if ((r - l) > (b - t)) 0 else dp(126)
+                      if (mc.paddingBottom != wantPad) mc.setPadding(0, 0, 0, wantPad)
+                  }
                   vv.setOnPreparedListener {
                       vv.start()
-                      mc.setAnchorView(anchor)
                       mc.show(3000)
                   }
                   vv.setOnErrorListener { _, _, _ ->
@@ -4906,7 +4900,7 @@ jobs:
                           if (pct != lastPct) {
                               lastPct = pct
                               val b = NotificationCompat.Builder(ctx, CH_PROGRESS)
-                                  .setSmallIcon(android.R.drawable.stat_sys_download)
+                                  .setSmallIcon(R.drawable.ic_stat_download)
                                   .setContentTitle(name)
                                   .setContentText(if (pct >= 0) "İndiriliyor… %" + pct else "İndiriliyor…")
                                   .setContentIntent(open)
@@ -5178,6 +5172,9 @@ jobs:
           EOF
           cat > app/src/main/res/drawable/ic_menu.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z"/></vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_stat_download.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z"/></vector>
           EOF
           cat > app/src/main/res/drawable/ic_notif.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFFFF" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM14.5,14.5L6,18l3.5,-8.5L18,6l-3.5,8.5z"/></vector>
