@@ -2073,67 +2073,116 @@ jobs:
                   val videos = links.filter { !isAudio(it.first, it.second) }
                       .sortedWith(compareBy<Pair<String, String>> { if (looksProgressive(it.second)) 0 else 1 }
                           .thenBy { heightOf(it.first + " " + it.second) })
-                  data class Opt(val label: String, val videoUrl: String?, val audioUrl: String?, val audioOnly: Boolean, val rank: Int)
-                  val opts = ArrayList<Opt>()
-                  val seenH = HashSet<Int>()
-                  for (v in videos.sortedBy { heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 } }) {
-                      val h = heightOf(v.first + " " + v.second)
-                      if (h > 0) {
-                          if (!seenH.add(h)) continue
+                  data class Opt(val label: String, val videoUrl: String?, val audioUrl: String?, val audioOnly: Boolean, val bytes: Long)
+                  // Hızlı paralel boyut/erişim kontrolü (max ~2 sn) — sadece çalışanlar
+                  toast("Kontrol ediliyor…")
+                  Thread {
+                      fun probe(u: String): Long {
+                          return try {
+                              val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                              c.instanceFollowRedirects = true
+                              c.connectTimeout = 2500
+                              c.readTimeout = 2500
+                              c.setRequestProperty("User-Agent", "Mozilla/5.0")
+                              c.setRequestProperty("Range", "bytes=0-0")
+                              val cookie = CookieManager.getInstance().getCookie(u)
+                              if (cookie != null) c.setRequestProperty("Cookie", cookie)
+                              c.connect()
+                              val code = c.responseCode
+                              var len = c.getHeaderField("Content-Range")?.substringAfter("/")?.toLongOrNull()
+                                  ?: c.contentLengthLong
+                              if (len <= 0) len = c.contentLength.toLong()
+                              c.disconnect()
+                              if (code in 200..399 && len > 2048) len else -1L
+                          } catch (_: Exception) { -1L }
                       }
-                      val label = if (h > 0) "MP4 ${h}p" else "MP4"
-                      val audioForMerge = if (looksProgressive(v.second)) null else bestAudio
-                      opts.add(Opt(label, v.second, audioForMerge, false, if (h > 0) h else 9999))
-                  }
-                  if (bestAudio != null) opts.add(Opt("MP3", null, bestAudio, true, 100000))
-                  opts.sortBy { it.rank }
-                  if (opts.isEmpty()) {
-                      toast("Uygun indirme linki bulunamadı")
-                      return
-                  }
-                  val d = Dialog(this)
-                  val col = LinearLayout(this)
-                  col.orientation = LinearLayout.VERTICAL
-                  col.setPadding(dp(18), dp(18), dp(18), dp(22))
-                  val rr = dp(28).toFloat()
-                  val bgd = GradientDrawable()
-                  bgd.setColor(cSurface)
-                  bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
-                  col.background = bgd
-                  val title = TextView(this)
-                  title.text = "İndirme seçenekleri"
-                  title.textSize = 18f
-                  title.setTypeface(null, Typeface.BOLD)
-                  title.setTextColor(cText)
-                  title.setPadding(0, 0, 0, dp(12))
-                  col.addView(title)
-                  for (opt in opts) {
-                      val btn = textBtn(opt.label) {
-                          d.dismiss()
-                          val base = mediaFileBase()
-                          when {
-                              opt.audioOnly && opt.audioUrl != null ->
-                                  startDownload(opt.audioUrl, null, null, "audio/mpeg", "$base.mp3")
-                              opt.videoUrl != null && opt.audioUrl != null ->
-                                  downloadAndMerge(opt.videoUrl, opt.audioUrl, "$base.mp4")
-                              opt.videoUrl != null ->
-                                  startDownload(opt.videoUrl, null, null, "video/mp4", "$base.mp4")
+                      fun mb(b: Long): String {
+                          val m = b / (1024.0 * 1024.0)
+                          return if (m >= 10) "${m.toInt()} MB" else String.format("%.1f MB", m)
+                      }
+                      val candidates = ArrayList<Triple<String, String, String?>>() // label, videoUrl, audioUrl?
+                      val seenH = HashSet<Int>()
+                      for (v in videos.sortedBy { heightOf(it.first + " " + it.second).let { h -> if (h > 0) h else 9999 } }) {
+                          val h = heightOf(v.first + " " + v.second)
+                          if (h > 0 && !seenH.add(h)) continue
+                          val label = if (h > 0) "MP4 ${h}p" else "MP4"
+                          val audioForMerge = if (looksProgressive(v.second)) null else bestAudio
+                          candidates.add(Triple(label, v.second, audioForMerge))
+                      }
+                      if (bestAudio != null) candidates.add(Triple("MP3", bestAudio, null))
+
+                      val opts = java.util.Collections.synchronizedList(ArrayList<Opt>())
+                      val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
+                      val jobs = candidates.map { cand ->
+                          pool.submit<Unit> {
+                              val isMp3 = cand.first == "MP3"
+                              val mainUrl = if (isMp3) cand.second else cand.second
+                              val len = probe(mainUrl)
+                              if (len < 0) return@submit
+                              var total = len
+                              var audioUrl: String? = null
+                              if (!isMp3 && cand.third != null) {
+                                  val al = probe(cand.third!!)
+                                  if (al > 0) { total += al; audioUrl = cand.third }
+                              }
+                              val label = "${cand.first} · ${mb(total)}"
+                              if (isMp3) opts.add(Opt(label, null, mainUrl, true, total))
+                              else opts.add(Opt(label, mainUrl, audioUrl, false, total))
                           }
                       }
-                      btn.setTextColor(cText)
-                      btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                      btn.setPadding(dp(16), 0, dp(16), 0)
-                      btn.background = shape(cField, 14)
-                      val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
-                      lp.bottomMargin = dp(8)
-                      col.addView(btn, lp)
-                  }
-                  val cancel = textBtn("İptal") { d.dismiss() }
-                  cancel.setTextColor(cSub)
-                  cancel.gravity = Gravity.CENTER
-                  col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
-                  sheetWindow(d, col, false)
-                  d.show()
+                      try { jobs.forEach { it.get(4, java.util.concurrent.TimeUnit.SECONDS) } } catch (_: Exception) {}
+                      pool.shutdownNow()
+                      val sorted = opts.sortedBy { it.bytes }
+                      handler.post {
+                          if (sorted.isEmpty()) {
+                              toast("Çalışan indirme linki bulunamadı")
+                              return@post
+                          }
+                          val d = Dialog(this)
+                          val col = LinearLayout(this)
+                          col.orientation = LinearLayout.VERTICAL
+                          col.setPadding(dp(18), dp(18), dp(18), dp(22))
+                          val rr = dp(28).toFloat()
+                          val bgd = GradientDrawable()
+                          bgd.setColor(cSurface)
+                          bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
+                          col.background = bgd
+                          val title = TextView(this)
+                          title.text = "İndirme seçenekleri"
+                          title.textSize = 18f
+                          title.setTypeface(null, Typeface.BOLD)
+                          title.setTextColor(cText)
+                          title.setPadding(0, 0, 0, dp(12))
+                          col.addView(title)
+                          for (opt in sorted) {
+                              val btn = textBtn(opt.label) {
+                                  d.dismiss()
+                                  val base = mediaFileBase()
+                                  when {
+                                      opt.audioOnly && opt.audioUrl != null ->
+                                          startDownload(opt.audioUrl, null, null, "audio/mpeg", "$base.mp3")
+                                      opt.videoUrl != null && opt.audioUrl != null ->
+                                          downloadAndMerge(opt.videoUrl, opt.audioUrl, "$base.mp4")
+                                      opt.videoUrl != null ->
+                                          startDownload(opt.videoUrl, null, null, "video/mp4", "$base.mp4")
+                                  }
+                              }
+                              btn.setTextColor(cText)
+                              btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                              btn.setPadding(dp(16), 0, dp(16), 0)
+                              btn.background = shape(cField, 14)
+                              val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50))
+                              lp.bottomMargin = dp(8)
+                              col.addView(btn, lp)
+                          }
+                          val cancel = textBtn("İptal") { d.dismiss() }
+                          cancel.setTextColor(cSub)
+                          cancel.gravity = Gravity.CENTER
+                          col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+                          sheetWindow(d, col, false)
+                          d.show()
+                      }
+                  }.start()
               }
 
               /** Video + ses ayrıysa indirip MediaMuxer ile birleştirir. */
@@ -3331,8 +3380,14 @@ jobs:
                       "if(window.__op){HTMLMediaElement.prototype.pause=window.__op;window.__op=null;}" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "clearInterval(window.__pipIv);document.removeEventListener('pointerdown',window.__pipDoc,true);window.__pipFlash=null;var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
-                      "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
-                      "document.querySelectorAll('*').forEach(function(x){try{if(x.style&&x.style.getPropertyValue('visibility')==='visible'&&x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');}catch(z){}});" +
+                      "document.querySelectorAll('video.__pipv,.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
+                      // PiP sırasında yazılan visibility/transform/overflow hepsini geri al
+                      "document.querySelectorAll('*').forEach(function(x){try{if(!x.style)return;" +
+                      "if(x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');" +
+                      "if(x.style.getPropertyPriority('transform')==='important')x.style.removeProperty('transform');" +
+                      "if(x.style.getPropertyPriority('overflow')==='important')x.style.removeProperty('overflow');" +
+                      "}catch(z){}});" +
+                      "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
 
                   const val LANDSCAPE_VIDEO_JS =
