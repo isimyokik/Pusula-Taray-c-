@@ -3132,9 +3132,15 @@ jobs:
 
                   val vv = android.widget.VideoView(this)
                   val vlp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER)
-                  vlp.topMargin = dp(107)
-                  vlp.bottomMargin = dp(222)
+                  vlp.topMargin = 0
+                  vlp.bottomMargin = 0
                   frame.addView(vv, vlp)
+
+                  // Alttaki oynatma çubuğu bu görünmez satırın alt kenarına oturur (dikeyde 2 cm yukarıda).
+                  val anchor = View(this)
+                  val alp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                  alp.bottomMargin = dp(126)
+                  frame.addView(anchor, alp)
 
                   if (audio) {
                       val box = LinearLayout(this)
@@ -3171,21 +3177,27 @@ jobs:
                   // Çubuklar yatayda ekranı kısaltmasın diye boşluklar yöne göre ayarlanır
                   frame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
                       val land = (r - l) > (b - t)
-                      val wantTop = if (land) dp(44) else dp(107)
-                      val wantBottom = if (land) dp(48) else dp(222)
+                      val wantTop = if (land) dp(44) else 0
+                      val wantBottom = if (land) dp(48) else 0
                       val wantTopBar = if (land) 0 else dp(71)
-                      if (vlp.topMargin != wantTop || vlp.bottomMargin != wantBottom || tlp.topMargin != wantTopBar) {
+                      val wantAnchor = if (land) 0 else dp(126)
+                      if (vlp.topMargin != wantTop || vlp.bottomMargin != wantBottom || tlp.topMargin != wantTopBar || alp.bottomMargin != wantAnchor) {
                           vlp.topMargin = wantTop
                           vlp.bottomMargin = wantBottom
                           tlp.topMargin = wantTopBar
+                          alp.bottomMargin = wantAnchor
                           vv.layoutParams = vlp
                           top.layoutParams = tlp
+                          anchor.layoutParams = alp
                       }
                   }
 
                   val mc = android.widget.MediaController(this)
-                  mc.setAnchorView(vv)
-                  vv.setMediaController(mc)
+                  mc.setMediaPlayer(vv)
+                  mc.setAnchorView(anchor)
+                  vv.setOnClickListener {
+                      if (mc.isShowing) mc.hide() else mc.show(3000)
+                  }
                   vv.setOnPreparedListener {
                       vv.start()
                       mc.show(3000)
