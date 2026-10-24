@@ -2108,19 +2108,21 @@ jobs:
                   val extractPl = """
                       (function(){try{
                         var items=[],seen={};
+                        function isDuration(t){return /^\d{1,2}:\d{2}(:\d{2})?$/.test((t||'').trim());}
+                        function badTitle(t){
+                          t=(t||'').replace(/\s+/g,' ').trim().toLowerCase();
+                          if(!t)return true;
+                          if(isDuration(t))return true;
+                          if(t.length<2)return true;
+                          if(/^(uygulamada\s*a[cç]|open\s*(in\s*)?(the\s*)?app|share|payla[sş]|izle|watch|menu|menü|more|daha fazla|download|indir)/i.test(t))return true;
+                          if(/^[a-z0-9_-]{6,14}$/i.test(t) && !/\s/.test(t))return true; // çıplak id benzeri
+                          return false;
+                        }
                         function cleanTitle(t){
                           t=(t||'').replace(/\s+/g,' ').trim();
-                          if(!t)return '';
-                          // süre gibi görünenleri ele (3:45, 1:02:11)
-                          if(/^\d{1,2}:\d{2}(:\d{2})?$/.test(t))return '';
+                          if(badTitle(t))return '';
                           if(t.length>90)t=t.slice(0,90);
                           return t;
-                        }
-                        function add(id,title,thumb){
-                          if(!id||id.length<8||seen[id])return;seen[id]=1;
-                          title=cleanTitle(title)||id;
-                          thumb=thumb||('https://i.ytimg.com/vi/'+id+'/hqdefault.jpg');
-                          items.push({id:id,t:title,th:thumb});
                         }
                         function textOf(node){
                           if(!node)return '';
@@ -2129,52 +2131,72 @@ jobs:
                           if(node.runs&&node.runs.length)return node.runs.map(function(r){return r.text||'';}).join('');
                           return '';
                         }
-                        function thumbOf(node,id){
+                        function thumbOf(r,id){
                           try{
-                            var th=node.thumbnail||node.thumbnails;
+                            var th=r.thumbnail||r.thumbnails;
                             if(th&&th.thumbnails&&th.thumbnails.length){
-                              var u=th.thumbnails[th.thumbnails.length-1].url||th.thumbnails[0].url;
-                              if(u)return u;
+                              var arr=th.thumbnails;return arr[arr.length-1].url||arr[0].url;
                             }
-                            if(Array.isArray(th)&&th.length&&th[0].url)return th[0].url;
                           }catch(e){}
                           return 'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg';
                         }
-                        // Öncelik: playlist satırları
+                        function durationOf(r){
+                          var d=textOf(r.lengthText)||textOf(r.length)||textOf(r.thumbnailOverlays&&r.thumbnailOverlays[0]&&r.thumbnailOverlays[0].thumbnailOverlayTimeStatusRenderer&&r.thumbnailOverlays[0].thumbnailOverlayTimeStatusRenderer.text)||'';
+                          d=(d||'').trim();
+                          return isDuration(d)?d:'';
+                        }
+                        function add(id,title,thumb,dur){
+                          if(!id||id.length<8||seen[id])return;
+                          title=cleanTitle(title);
+                          if(!title)title='Video';
+                          seen[id]=1;
+                          items.push({id:id,t:title,th:thumb||('https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'),d:dur||''});
+                        }
+                        // Sadece playlist satır bileşenleri — rastgele videoId yürüme yok
                         function walk(o,depth){
-                          if(!o||depth>14)return;
-                          if(Array.isArray(o)){o.forEach(function(x){walk(x,depth+1);});return;}
+                          if(!o||depth>16)return;
+                          if(Array.isArray(o)){for(var i=0;i<o.length;i++)walk(o[i],depth+1);return;}
                           if(typeof o!=='object')return;
-                          var r=o.playlistVideoRenderer||o.playlistPanelVideoRenderer||o.videoRenderer||null;
+                          var r=o.playlistVideoRenderer||o.playlistPanelVideoRenderer||null;
                           if(r&&r.videoId){
-                            add(r.videoId,textOf(r.title)||textOf(r.headline),thumbOf(r,r.videoId));
+                            add(r.videoId,textOf(r.title),thumbOf(r,r.videoId),durationOf(r));
                           }
-                          if(o.videoId&&typeof o.videoId==='string'&&o.videoId.length>=8){
-                            var t=textOf(o.title)||textOf(o.headline)||textOf(o.lengthText);
-                            // lengthText'i başlık sanma
-                            if(o.lengthText&&t===textOf(o.lengthText))t='';
-                            add(o.videoId,t,thumbOf(o,o.videoId));
+                          // compact video in playlist panels
+                          if(o.compactVideoRenderer&&o.compactVideoRenderer.videoId){
+                            var c=o.compactVideoRenderer;
+                            add(c.videoId,textOf(c.title),thumbOf(c,c.videoId),durationOf(c));
                           }
-                          for(var k in o){try{walk(o[k],depth+1);}catch(e){}}
+                          for(var k in o){
+                            if(k==='playlistVideoRenderer'||k==='playlistPanelVideoRenderer'||k==='compactVideoRenderer')continue;
+                            try{walk(o[k],depth+1);}catch(e){}
+                          }
                         }
                         walk(window.ytInitialData,0);
-                        walk(window.ytInitialPlayerResponse,0);
-                        document.querySelectorAll('a[href*="watch"]').forEach(function(a){
-                          try{
-                            var u=new URL(a.href,location.href);var v=u.searchParams.get('v');
-                            if(!v)return;
-                            var t=cleanTitle(a.getAttribute('title')||'');
-                            if(!t){
-                              var label=a.getAttribute('aria-label')||'';
-                              // aria-label genelde "Başlık, 3:45, ..." — süreden öncesini al
-                              t=cleanTitle(label.split(',')[0]||'');
-                            }
-                            if(!t)t=cleanTitle((a.textContent||'').split('\\n')[0]);
-                            var img=a.querySelector('img');
-                            var th=img&&(img.src||img.getAttribute('data-thumb')||'');
-                            add(v,t,th);
-                          }catch(e){}
-                        });
+                        // DOM yedek: playlist satırları
+                        if(items.length<2){
+                          document.querySelectorAll('ytm-playlist-video-renderer,ytd-playlist-video-renderer,ytm-playlist-panel-video-renderer').forEach(function(el){
+                            try{
+                              var a=el.querySelector('a[href*="watch"]');
+                              if(!a)return;
+                              var u=new URL(a.href,location.href);var id=u.searchParams.get('v');
+                              if(!id)return;
+                              var title='';
+                              var tEl=el.querySelector('#video-title,h4,.title,.playlist-video-title');
+                              if(tEl)title=tEl.getAttribute('title')||tEl.textContent||'';
+                              if(!title)title=a.getAttribute('title')||'';
+                              var dur='';
+                              var dEl=el.querySelector('.badge-shape-wiz__text,.yt-core-attributed-string,span.ytm-badge-and-byline-item-badge,.thumbnail-overlay-time-status-renderer');
+                              // süre genelde küçük badge
+                              var badges=el.querySelectorAll('span');
+                              for(var i=0;i<badges.length;i++){
+                                var bt=(badges[i].textContent||'').trim();
+                                if(isDuration(bt)){dur=bt;break;}
+                              }
+                              var img=el.querySelector('img');
+                              add(id,title,img&&(img.src||img.getAttribute('data-thumb')),dur);
+                            }catch(e){}
+                          });
+                        }
                         return JSON.stringify(items.slice(0,50));
                       }catch(e){return '[]';}})();
                   """.trimIndent()
@@ -2197,7 +2219,7 @@ jobs:
                   }
               }
 
-              data class PlItem(val id: String, val title: String, val thumb: String)
+              data class PlItem(val id: String, val title: String, val thumb: String, val duration: String = "")
 
               private fun parsePlaylistItems(raw: String?): List<PlItem> {
                   if (raw.isNullOrBlank() || raw == "null") return emptyList()
@@ -2206,14 +2228,19 @@ jobs:
                       val arr = org.json.JSONArray(inner)
                       val out = ArrayList<PlItem>()
                       val seen = HashSet<String>()
+                      val durRe = Regex("^\\d{1,2}:\\d{2}(:\\d{2})?$")
+                      val bad = Regex("^(uygulamada\\s*a[cç]|open\\s*(in\\s*)?(the\\s*)?app|share|payla[sş]|izle|watch)$", RegexOption.IGNORE_CASE)
                       for (i in 0 until arr.length()) {
                           val o = arr.optJSONObject(i) ?: continue
                           val id = o.optString("id")
                           if (id.length < 8 || !seen.add(id)) continue
-                          var title = o.optString("t").ifBlank { id }
-                          if (title.matches(Regex("^\\d{1,2}:\\d{2}(:\\d{2})?$"))) title = id
+                          var title = o.optString("t").trim()
+                          if (title.isBlank() || durRe.matches(title) || bad.containsMatchIn(title) || title == id) {
+                              title = "Video"
+                          }
                           val thumb = o.optString("th").ifBlank { "https://i.ytimg.com/vi/$id/hqdefault.jpg" }
-                          out.add(PlItem(id, title, thumb))
+                          val dur = o.optString("d").trim().let { if (durRe.matches(it)) it else "" }
+                          out.add(PlItem(id, title, thumb, dur))
                       }
                       out
                   } catch (_: Exception) { emptyList() }
@@ -2279,10 +2306,11 @@ jobs:
                                       is JSONObject -> {
                                           val vid = node.optString("videoId")
                                           if (vid.length >= 8 && seen.add(vid)) {
-                                              var title = titleOf(node).ifBlank { vid }
-                                              if (title.matches(Regex("^\\d{1,2}:\\d{2}(:\\d{2})?$"))) title = vid
+                                              var title = titleOf(node).ifBlank { "Video" }
+                                              if (title.matches(Regex("^\\d{1,2}:\\d{2}(:\\d{2})?$"))) title = "Video"
+                                              if (title.contains("Uygulamada", true) || title.contains("Open app", true)) title = "Video"
                                               val thumb = "https://i.ytimg.com/vi/$vid/hqdefault.jpg"
-                                              items.add(PlItem(vid, title, thumb))
+                                              items.add(PlItem(vid, title, thumb, ""))
                                           }
                                           val keys = node.keys()
                                           while (keys.hasNext()) walk(node.opt(keys.next()), depth + 1)
@@ -2384,7 +2412,7 @@ jobs:
                       row.addView(mid, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
                       val sizeTv = TextView(this)
-                      sizeTv.text = "…"
+                      sizeTv.text = item.duration.ifBlank { "…" }
                       sizeTv.textSize = 12f
                       sizeTv.setTextColor(cSub)
                       sizeTv.setPadding(dp(4), 0, 0, 0)
@@ -2501,8 +2529,13 @@ jobs:
                           } catch (_: Exception) { }
                           val idx = i
                           val lab = label
+                          val fallbackDur = items[i].duration
                           handler.post {
-                              if (idx < sizeLabels.size) sizeLabels[idx].text = lab
+                              if (idx < sizeLabels.size) {
+                                  if (lab != "—" && lab != "…") sizeLabels[idx].text = lab
+                                  else if (fallbackDur.isNotBlank()) sizeLabels[idx].text = fallbackDur
+                                  else sizeLabels[idx].text = "—"
+                              }
                           }
                       }
                   }.start()
