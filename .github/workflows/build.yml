@@ -4216,9 +4216,9 @@ jobs:
                       "try{" +
                       // Uygulamada aç / uygulamayı yükle bannerları
                       "document.querySelectorAll('ytm-open-app-button-renderer,ytm-open-app-banner-renderer,ytd-open-app-button-renderer,ytmusic-open-app-button,ytm-promo-banner,ytmusic-pivot-bar-renderer ytm-promo-banner,ytm-app-promo,ytd-app-promo,ytmusic-mealbar-promo-renderer').forEach(hideEl);" +
-                      "var reApp=/uygulama(y[ıi]\s*)?(a[cç]|yükle|indir)|open\s*(the\s*)?app|install\s*(the\s*)?app|get\s*(the\s*)?app|open\s*in\s*app|try\s*the\s*app/i;" +
+                      "var reApp=/uygulama(y[ıi]\\s*)?(a[cç]|yükle|indir)|open\\s*(the\\s*)?app|install\\s*(the\\s*)?app|get\\s*(the\\s*)?app|open\\s*in\\s*app|try\\s*the\\s*app/i;" +
                       "document.querySelectorAll('button,a,ytm-button-renderer,yt-button-renderer,ytmusic-button-renderer,[role=button]').forEach(function(e){" +
-                      "var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\s+/g,' ').trim();" +
+                      "var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\\s+/g,' ').trim();" +
                       "if(t.length>0&&t.length<80&&reApp.test(t))hideEl(e);" +
                       "});" +
                       // Premium upsell / mealtime / offer banners
