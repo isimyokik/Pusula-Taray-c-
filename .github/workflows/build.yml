@@ -648,7 +648,7 @@ jobs:
                   try {
                       // Android PiP oran sınırları (yaklaşık 1:2.39 … 2.39:1)
                       val safe = try {
-                          val f = ratio.floatValue()
+                          val f = ratio.numerator.toFloat() / ratio.denominator.toFloat()
                           when {
                               f < 0.42f -> android.util.Rational(100, 239)
                               f > 2.39f -> android.util.Rational(239, 100)
