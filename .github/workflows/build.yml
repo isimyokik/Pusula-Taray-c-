@@ -685,7 +685,7 @@ jobs:
                           try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
                       }
                       updatePipActions()
-                      if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true)
+                      if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
                   } else {
                       for (t in tabs) {
                           try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
@@ -696,7 +696,7 @@ jobs:
                               currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null)
                           } catch (_: Exception) { }
                       }, 150)
-                      if (hasMedia && (lastPlaying || PlaybackService.running)) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false)
+                      if (hasMedia && (lastPlaying || PlaybackService.running)) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                   }
               }
 
@@ -886,7 +886,7 @@ jobs:
                       appInBackground = true
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
-                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist)
+                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                   } else {
                       appInBackground = true
                       shown?.onPause()
@@ -4497,9 +4497,10 @@ jobs:
                       "function fx(u){try{u=new URL(u,location.href).href;}catch(x){return '';}var m=u.match(/\\/\\/(?:i|img)\\.ytimg\\.com\\/vi(?:_webp)?\\/([\\w-]{11})\\//);if(m)return 'https://i.ytimg.com/vi/'+m[1]+'/mqdefault.jpg';return u.replace(/=w\\d+-h\\d+/,'=w512-h512');}" +
                       "try{if(md&&md.artwork&&md.artwork.length){var bs=-1;for(var k=0;k<md.artwork.length;k++){var w=parseInt(String(md.artwork[k].sizes||'0').split('x')[0],10)||0;var sr=md.artwork[k].src;if(ok(sr)&&w>=bs){bs=w;art=sr;}}}}catch(x){}" +
                       "if(!art&&ytm){try{var im=document.querySelector('ytmusic-player-bar img.image,ytmusic-player-bar img,#song-image img');var s2=im&&(im.currentSrc||im.src);if(ok(s2))art=s2;}catch(x){}}" +
-                      "if(!art&&yt){try{var vid=new URLSearchParams(location.search).get('v');if(!vid){var mm=location.pathname.match(/\\/(?:shorts|embed|live)\\/([\\w-]{11})/);if(mm)vid=mm[1];}if(vid&&/^[\\w-]{11}$/.test(vid))art='https://i.ytimg.com/vi/'+vid+'/mqdefault.jpg';}catch(x){}}" +
+                      "if(!art&&yt){try{var vid=new URLSearchParams(location.search).get('v');if(!vid){try{var pl=document.getElementById('movie_player');var vd=pl&&pl.getVideoData&&pl.getVideoData();if(vd&&vd.video_id)vid=vd.video_id;}catch(x){}}if(!vid){try{var cu=document.querySelector('link[rel=canonical],meta[property=\"og:url\"]');var cs=cu?(cu.href||cu.getAttribute('content')||''):'';var m3=cs.match(/[?&]v=([\\w-]{11})/);if(m3)vid=m3[1];}catch(x){}}if(!vid){var mm=location.pathname.match(/\\/(?:shorts|embed|live)\\/([\\w-]{11})/);if(mm)vid=mm[1];}if(vid&&/^[\\w-]{11}$/.test(vid))art='https://i.ytimg.com/vi/'+vid+'/mqdefault.jpg';}catch(x){}}" +
                       "if(!art&&!yt){try{var mt=document.getElementsByTagName('meta');for(var q=0;q<mt.length;q++){var pp=mt[q].getAttribute('property')||mt[q].getAttribute('name')||'';if(pp==='og:image'||pp==='twitter:image'){var cc=mt[q].getAttribute('content')||'';if(ok(cc)){art=cc;break;}}}}catch(x){}}" +
                       "if(art)art=fx(art);" +
+                      "try{if(art){window.__rart={t:t,a:art};}else if(window.__rart&&window.__rart.t===t){art=window.__rart.a;}}catch(x){}" +
                       "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a,d:(isFinite(v.duration)?Math.round(v.duration*1000):-1),c:Math.round((v.currentTime||0)*1000),art:art||''});" +
                       "}catch(e){return '';}})();"
                   const val KEEP_MEDIA_PLAYING_JS =
@@ -5715,7 +5716,9 @@ jobs:
                   when (intent?.action) {
                       ACTION_UPDATE -> {
                           playing = intent.getBooleanExtra("playing", false)
-                          title = intent.getStringExtra("title") ?: ""
+                          val newTitle = intent.getStringExtra("title") ?: ""
+                          val titleChanged = newTitle != title
+                          title = newTitle
                           artist = intent.getStringExtra("artist") ?: ""
                           quiet = intent.getBooleanExtra("pip", false)
                           val np = intent.getLongExtra("pos", -1L)
@@ -5723,9 +5726,12 @@ jobs:
                           val nd = intent.getLongExtra("dur", -2L)
                           if (nd != -2L) duration = nd
                           val nu = intent.getStringExtra("art") ?: ""
-                          if (nu != artUrl) {
+                          if (nu.isBlank()) {
+                              // Boş gelirse (arka plana atınca olabiliyor) eski kapağı koru; yalnızca parça değiştiyse temizle
+                              if (titleChanged) { artUrl = ""; artBmp = null }
+                          } else if (nu != artUrl) {
                               artUrl = nu
-                              if (nu.isBlank()) artBmp = null else loadArt(nu)
+                              loadArt(nu)
                           }
                       }
                       ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
@@ -5746,6 +5752,7 @@ jobs:
 
               private fun loadArt(url: String) {
                   Thread {
+                      for (attempt in 0..1) {
                       try {
                           val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                           c.connectTimeout = 5000
@@ -5766,7 +5773,11 @@ jobs:
                               // Ana thread'de bildirimi yenile
                               android.os.Handler(android.os.Looper.getMainLooper()).post { refresh() }
                           }
+                          if (bmp != null) break
                       } catch (_: Exception) { }
+                      try { Thread.sleep(3000) } catch (_: Exception) { }
+                      if (artUrl != url) break
+                      }
                   }.start()
               }
 
