@@ -586,7 +586,6 @@ jobs:
               private var sentPlaying = false
               private var lastDur = -1L
               private lateinit var dockBar: LinearLayout
-              private lateinit var pipFab: ImageButton
               private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
               private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -636,7 +635,7 @@ jobs:
                   } catch (_: Exception) { return }
                   title = cleanMeta(title); artist = cleanMeta(artist)
                   if (!has) {
-                      if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); hidePipFab() }
+                      if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
                       return
                   }
                   val now = android.os.SystemClock.elapsedRealtime()
@@ -644,9 +643,7 @@ jobs:
                   val jumped = hasMedia && Math.abs(pos - expected) > 2500L
                   val playChanged = playing != lastPlaying
                   val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
-                  val fabTrigger = (playChanged && playing) || title != lastTitle
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
-                  if (fabTrigger) showPipFab()
                   if (changed && (playing || PlaybackService.running)) {
                       sentPos = pos; sentAt = now; sentPlaying = playing
                       PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
@@ -706,7 +703,6 @@ jobs:
                   content.setBackgroundColor(if (pip) Color.BLACK else cBg)
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
                   if (pip) {
-                      hidePipFab()
                       closeFind()
                       appInBackground = false
                       handler.removeCallbacks(backgroundMediaPump)
@@ -953,28 +949,6 @@ jobs:
                   return yt && (u.contains("/watch") || u.contains("youtu.be/") || u.contains("/shorts"))
               }
 
-              private val pipFabHide = Runnable { hidePipFab() }
-
-              private fun hidePipFab() {
-                  handler.removeCallbacks(pipFabHide)
-                  if (!::pipFab.isInitialized || pipFab.visibility == View.GONE) return
-                  pipFab.animate().alpha(0f).setDuration(200).withEndAction {
-                      if (pipFab.alpha == 0f) pipFab.visibility = View.GONE
-                  }.start()
-              }
-
-              /** Videonun köşesindeki "küçült" düğmesi: birkaç saniye görünür, sonra solar; dokununca geri gelir. */
-              private fun showPipFab() {
-                  if (!::pipFab.isInitialized) return
-                  if (Build.VERSION.SDK_INT < 26 || isInPictureInPictureMode || customView != null || !hasMedia || !youtubeVideoTab()) {
-                      hidePipFab(); return
-                  }
-                  pipFab.animate().cancel()
-                  if (pipFab.visibility != View.VISIBLE) { pipFab.alpha = 0f; pipFab.visibility = View.VISIBLE }
-                  pipFab.animate().alpha(0.9f).setDuration(150).start()
-                  handler.removeCallbacks(pipFabHide)
-                  handler.postDelayed(pipFabHide, 3500L)
-              }
 
               override fun onResume() {
                   super.onResume()
@@ -1174,17 +1148,6 @@ jobs:
 
                   content = FrameLayout(this)
                   content.setBackgroundColor(cBg)
-                  pipFab = ImageButton(this)
-                  pipFab.setImageResource(R.drawable.ic_pip_enter)
-                  pipFab.background = shape(0x99000000.toInt(), 21)
-                  pipFab.contentDescription = "Küçült"
-                  pipFab.setPadding(dp(10), dp(10), dp(10), dp(10))
-                  pipFab.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-                  pipFab.visibility = View.GONE
-                  pipFab.setOnClickListener { hidePipFab(); enterPip() }
-                  content.addView(pipFab, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.END).apply {
-                      topMargin = dp(10); marginEnd = dp(10)
-                  })
                   if (!prefs.barBottom) {
                       root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
                       root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
@@ -1281,10 +1244,6 @@ jobs:
               @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
               private fun createTab(incognito: Boolean = false): BTab {
                   val web = BgWebView(this)
-                  web.setOnTouchListener { _, ev ->
-                      if (ev.actionMasked == MotionEvent.ACTION_DOWN && tabs.getOrNull(cur)?.web === web) showPipFab()
-                      false
-                  }
                   val bridge = PusulaBridge(prefs)
                   val tab = BTab(web, bridge, incognito)
                   val s = web.settings
