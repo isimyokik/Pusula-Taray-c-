@@ -7824,7 +7824,7 @@ jobs:
                           .put("m", e.mime)
                           .put("ts", e.time))
                   }
-                  sp.edit().putString("downloaerrorarr.toString()).apply()
+                  sp.edit().putString("downloads", arr.toString()).apply()
               }
 
               fun clearDownloads() { sp.edit().putString("downloads", "[]").apply() }
@@ -8013,6 +8013,12 @@ jobs:
           cat > app/src/main/res/values/colors.xml <<'EOF'
           <resources><color name="bg">#0F1115</color></resources>
           EOF
+          echo "=== TEŞHİS: derlenecek Prefs.kt ==="
+          wc -l app/src/main/java/com/pusula/browser/Prefs.kt
+          sed -n '140,148p' app/src/main/java/com/pusula/browser/Prefs.kt | cat -A
+          grep -n '[$]' app/src/main/java/com/pusula/browser/Prefs.kt || true
+          ls -la app/src/main/java/com/pusula/browser/
+          echo "=== TEŞHİS SONU ==="
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 8.9 }
