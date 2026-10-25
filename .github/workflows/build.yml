@@ -887,7 +887,9 @@ jobs:
                           return
                       }
                       val js = when (act) {
-                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> if (isInPictureInPictureMode) MEDIA_TOGGLE_FAST_JS else MEDIA_TOGGLE_JS
+                          // PLAY = zorla oynat (toggle değil — focus/bildirim play deyince stop oluyordu)
+                          PlaybackService.ACTION_PLAY -> MEDIA_FORCE_PLAY_JS
+                          PlaybackService.ACTION_TOGGLE -> if (isInPictureInPictureMode) MEDIA_TOGGLE_FAST_JS else MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> if (isInPictureInPictureMode) MEDIA_PAUSE_FAST_JS else MEDIA_PAUSE_JS
                           PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
                           PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
@@ -898,9 +900,12 @@ jobs:
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
                       }
-                      // Durum hemen güncellenir (yoklama 1,5 sn gecikmeli): PiP düğmesi ve büyütünce gelen davranış doğru olsun
                       if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
-                          lastPlaying = if (act == PlaybackService.ACTION_PAUSE) false else !lastPlaying
+                          lastPlaying = when (act) {
+                              PlaybackService.ACTION_PAUSE -> false
+                              PlaybackService.ACTION_PLAY -> true
+                              else -> !lastPlaying
+                          }
                           if (isInPictureInPictureMode) updatePipActions()
                           handler.postDelayed({ pollMedia() }, 250L)
                       }
@@ -5493,6 +5498,20 @@ jobs:
                       "if(b)b.click();" +
                       "}catch(e){}})();"
 
+                  // Zorla oynat (toggle yok)
+                  const val MEDIA_FORCE_PLAY_JS =
+                      "(function(){try{" +
+                      "window.__userPause=false;" +
+                      "document.querySelectorAll('video,audio').forEach(function(m){" +
+                      "m.dataset.pusulaWasPlaying='1';try{m.muted=false;}catch(z){}" +
+                      "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                      "});" +
+                      "var v=document.querySelector('video,audio');" +
+                      "if(!v||(v.paused&&v.readyState<2)){" +
+                      "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
+                      "if(b)b.click();}" +
+                      "}catch(e){}})();"
+
                   // PiP'ten dönünce video düzeni bozuk mu? (oynatıcı sayfa genişliğinden dar ya da PiP stili kalmış)
                   const val PIP_LAYOUT_CHECK_JS =
                       "(function(){try{" +
@@ -6773,31 +6792,9 @@ jobs:
               private var resumeAfterFocus = false
               private var heldFocus = false
 
-              private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
-                  when (change) {
-                      // Telefon / başka uygulama gerçekten sesi alınca
-                      AudioManager.AUDIOFOCUS_LOSS,
-                      AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                          if (playing) {
-                              resumeAfterFocus = true
-                              playing = false
-                              send(ACTION_PAUSE)
-                              refresh()
-                          }
-                          if (change == AudioManager.AUDIOFOCUS_LOSS) abandonFocus()
-                      }
-                      // Bildirim vb. — durdurma (önceki sürüm medyayı kesiyordu)
-                      AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> { }
-                      AudioManager.AUDIOFOCUS_GAIN -> {
-                          if (resumeAfterFocus) {
-                              resumeAfterFocus = false
-                              playing = true
-                              send(ACTION_PLAY)
-                              refresh()
-                          }
-                      }
-                  }
-              }
+              // Not: Otomatik pause/play kapalı — WebView medyası ile focus dinleyicisi
+              // birbirini kesiyordu (play deyince stop). Telefon araması için ileride yumuşak eklenir.
+              private val focusListener = AudioManager.OnAudioFocusChangeListener { _ -> }
 
               private fun requestFocus(): Boolean {
                   val am = audioManager ?: return true
