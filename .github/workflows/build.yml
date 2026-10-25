@@ -1839,10 +1839,18 @@ jobs:
                   mt.web.clipBounds = null
                   roundMini(mt, false)
                   try { tabs.getOrNull(cur)?.let { capturePreview(it) } } catch (_: Exception) { }
+                  val fg = tabs.getOrNull(cur)
                   shown?.let { try { content.removeView(it) } catch (_: Exception) { } }
-                  val at = (cur + 1).coerceIn(0, tabs.size)
-                  tabs.add(at, mt)
-                  cur = at
+                  removeMiniBlur(0L)
+                  var at = (cur + 1).coerceIn(0, tabs.size)
+                  // Arkada duran YouTube gezinme sekmesi videonun yerine geçer: sekme sayısı artmaz, hep tek video sekmesi olur
+                  if (fg != null && fg !== mt && !fg.incognito && (fg.url.isEmpty() || fg.url.contains("youtube.com") || fg.url.contains("youtu.be"))) {
+                      at = cur.coerceAtLeast(0)
+                      tabs.remove(fg)
+                      try { fg.web.stopLoading(); fg.web.destroy() } catch (_: Exception) { }
+                  }
+                  tabs.add(at.coerceIn(0, tabs.size), mt)
+                  cur = tabs.indexOf(mt)
                   shown = mt.web
                   updateTabCount()
                   for (t in tabs) {
