@@ -584,6 +584,10 @@ jobs:
               private var mdLastDy = 0f
               private var mdLastT = 0L
               private var mdVel = 0f
+              private var miniCy = 0f
+              private var miniTyT = 0f
+              private var mdBlur: android.widget.ImageView? = null
+              private var mdBack = "https://m.youtube.com/"
 
               private lateinit var prefs: Prefs
               private lateinit var loader: WebViewAssetLoader
@@ -684,6 +688,7 @@ jobs:
               /** YouTube küçült (PiP) — yalnızca menüden. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
+                  if (miniTab != null) expandMiniNow()
                   enterPipWith(android.util.Rational(16, 9))
               }
 
@@ -979,7 +984,7 @@ jobs:
               /** Ana ekrana basınca YouTube videosu çalıyorsa kendiliğinden küçük pencereye geçer. */
               override fun onUserLeaveHint() {
                   super.onUserLeaveHint()
-                  if (Build.VERSION.SDK_INT >= 26 && !isInPictureInPictureMode && hasMedia && lastPlaying && youtubeVideoTab()) {
+                  if (Build.VERSION.SDK_INT >= 26 && !isInPictureInPictureMode && hasMedia && lastPlaying && (miniTab != null || youtubeVideoTab())) {
                       enterPip()
                   }
               }
@@ -1368,9 +1373,9 @@ jobs:
                       @android.webkit.JavascriptInterface
                       fun start(bottom: Double) { handler.post { if (tabs.getOrNull(cur) === tab) miniDragStart(bottom) } }
                       @android.webkit.JavascriptInterface
-                      fun move(dy: Double, x: Double) { handler.post { miniDragMove(dy, x) } }
+                      fun move(dy: Double, x: Double) { handler.post { miniDragMove(dy) } }
                       @android.webkit.JavascriptInterface
-                      fun end(dy: Double, x: Double, cancel: Boolean) { handler.post { miniDragEnd(dy, x, cancel) } }
+                      fun end(dy: Double, x: Double, cancel: Boolean) { handler.post { miniDragEnd(dy, cancel) } }
                   }, "RotaMini")
                   web.webViewClient = makeClient(tab)
                   web.webChromeClient = makeChrome(tab)
@@ -1467,7 +1472,7 @@ jobs:
 
               private fun miniPx(cssPx: Double): Float = (cssPx * resources.displayMetrics.density).toFloat()
 
-              /** p=0: tam ekran konumu, p=1: sağ alttaki küçük konum. Video parmakla birlikte bu aralıkta hareket eder. */
+              /** p=0: tam ekran konumu, p=1: seçili köşedeki küçük konum. */
               private fun applyMini(p: Float) {
                   val t = (miniTab ?: mdOld) ?: return
                   val q = p.coerceIn(0f, 1f)
@@ -1475,7 +1480,7 @@ jobs:
                   t.web.scaleX = sc
                   t.web.scaleY = sc
                   t.web.translationX = miniTx * q
-                  t.web.translationY = miniTy * q
+                  t.web.translationY = miniCy * q
               }
 
               private fun resumeMini(t: BTab) {
@@ -1499,22 +1504,25 @@ jobs:
                   }
               }
 
-              private fun animMini(from: Float, to: Float, ms: Long, txTo: Float? = null, end: () -> Unit) {
+              private fun animMini(from: Float, to: Float, ms: Long, end: () -> Unit) {
                   val a = android.animation.ValueAnimator.ofFloat(from, to)
-                  val tx0 = miniTx
                   a.duration = ms
                   a.interpolator = android.view.animation.DecelerateInterpolator(1.4f)
-                  a.addUpdateListener {
-                      if (txTo != null) miniTx = tx0 + (txTo - tx0) * it.animatedFraction
-                      applyMini(it.animatedValue as Float)
-                  }
+                  a.addUpdateListener { applyMini(it.animatedValue as Float) }
                   a.addListener(object : android.animation.AnimatorListenerAdapter() {
                       override fun onAnimationEnd(animation: android.animation.Animator) { end() }
                   })
                   a.start()
               }
 
-              /** Video aşağı çekilmeye başladı: arkada önceki sayfa hazırlanır, video yalnızca oynatıcı kısmı olarak ayrılır. */
+              private fun removeMiniBlur(fadeMs: Long) {
+                  val b = mdBlur ?: return
+                  mdBlur = null
+                  if (fadeMs <= 0L) { try { content.removeView(b) } catch (_: Exception) { }; return }
+                  b.animate().alpha(0f).setDuration(fadeMs).withEndAction { try { content.removeView(b) } catch (_: Exception) { } }.start()
+              }
+
+              /** Video aşağı çekilmeye başladı: video yalnızca oynatıcı kısmı olarak ayrılır, arka sayfa flulaştırılmış görüntüye döner (kasmasın). */
               private fun miniDragStart(bottomCss: Double) {
                   if (mdOld != null) return
                   val old = tabs.getOrNull(cur) ?: return
@@ -1533,15 +1541,25 @@ jobs:
                           i--
                       }
                   } catch (_: Exception) { }
+                  mdBack = back
                   val clipH = miniPx(bottomCss).toInt().coerceIn(dp(120), h)
-                  val nt = createTab(false)
-                  tabs.remove(nt)
-                  updateTabCount()
-                  applyHostUa(nt, back)
-                  content.addView(nt.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                  nt.web.loadUrl(back)
+                  // Arka plan: küçültülüp büyütülmüş (flu) anlık görüntü; sayfa çizilmediği için sürükleme akıcı kalır
+                  val blur = android.widget.ImageView(this)
+                  try {
+                      val sc = 48f / w
+                      val bmp = Bitmap.createBitmap(48, (h * sc).toInt().coerceAtLeast(1), Bitmap.Config.RGB_565)
+                      val cv = Canvas(bmp)
+                      cv.scale(sc, sc)
+                      old.web.draw(cv)
+                      blur.setImageBitmap(bmp)
+                      blur.scaleType = android.widget.ImageView.ScaleType.FIT_XY
+                      blur.setColorFilter(0xFF8C8C8C.toInt(), android.graphics.PorterDuff.Mode.MULTIPLY)
+                  } catch (_: Exception) {
+                      blur.setBackgroundColor(0xFF202020.toInt())
+                  }
+                  content.addView(blur, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  mdBlur = blur
                   mdOld = old
-                  mdPeek = nt
                   mdClipH = clipH
                   val mw = dp(210)
                   miniS = mw.toFloat() / w
@@ -1550,6 +1568,8 @@ jobs:
                   miniTxL = dp(12).toFloat()
                   miniTx = miniTxR
                   miniTy = (h - dp(16) - miniH).toFloat().coerceAtLeast(1f)
+                  miniTyT = dp(12).toFloat()
+                  miniCy = miniTy
                   old.web.pivotX = 0f
                   old.web.pivotY = 0f
                   old.web.clipBounds = android.graphics.Rect(0, 0, w, clipH)
@@ -1559,11 +1579,9 @@ jobs:
                   mdVel = 0f
               }
 
-              private fun miniDragMove(dyCss: Double, xCss: Double) {
+              private fun miniDragMove(dyCss: Double) {
                   if (mdOld == null) return
                   val dy = miniPx(dyCss)
-                  val f = (miniPx(xCss) / content.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                  miniTx = miniTxL + (miniTxR - miniTxL) * f
                   applyMini(dy / miniTy)
                   val now = android.os.SystemClock.uptimeMillis()
                   if (now > mdLastT) mdVel = (dy - mdLastDy) / (now - mdLastT) * 1000f
@@ -1571,35 +1589,31 @@ jobs:
                   mdLastT = now
               }
 
-              private fun miniDragEnd(dyCss: Double, xCss: Double, cancel: Boolean) {
+              private fun miniDragEnd(dyCss: Double, cancel: Boolean) {
                   val old = mdOld ?: return
                   val dy = miniPx(dyCss)
-                  val f = (miniPx(xCss) / content.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                  val sideTx = if (f < 0.5f) miniTxL else miniTxR
                   val p = (dy / miniTy).coerceIn(0f, 1f)
                   val commit = !cancel && (p > 0.3f || (mdVel > 900f && dy > dp(40)))
-                  if (commit) animMini(p, 1f, 200, sideTx) { commitMini() }
-                  else animMini(p, 0f, 180, null) { abortMini(old) }
+                  if (commit) animMini(p, 1f, 200) { commitMini() }
+                  else animMini(p, 0f, 180) { abortMini(old) }
               }
 
               private fun abortMini(old: BTab) {
-                  val nt = mdPeek
                   mdOld = null
-                  mdPeek = null
                   old.web.clipBounds = null
                   roundMini(old, false)
-                  if (nt != null) {
-                      try { content.removeView(nt.web) } catch (_: Exception) { }
-                      try { nt.web.stopLoading(); nt.web.destroy() } catch (_: Exception) { }
-                  }
+                  removeMiniBlur(120)
                   resumeMini(old)
               }
 
               private fun commitMini() {
                   val old = mdOld ?: return
-                  val nt = mdPeek ?: return
                   mdOld = null
-                  mdPeek = null
+                  val nt = createTab(false)
+                  tabs.remove(nt)
+                  applyHostUa(nt, mdBack)
+                  content.addView(nt.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  nt.web.loadUrl(mdBack)
                   var idx = tabs.indexOf(old)
                   if (idx < 0) idx = cur.coerceAtLeast(0)
                   tabs.remove(old)
@@ -1617,134 +1631,174 @@ jobs:
                   privateBadge.visibility = View.GONE
                   topBar.setBackgroundColor(cBg)
                   syncUi()
+                  // Flu görüntü, yeni sayfa yüklenince kaybolur
+                  val b = mdBlur
+                  handler.postDelayed({ if (mdBlur === b) removeMiniBlur(300) }, 1400)
+                  // Küçük pencerede YouTube yazıları / kontroller gizlenir, video pencereyi doldurur
+                  try { old.web.evaluateJavascript(YT_MINI_CSS_ON_JS, null) } catch (_: Exception) { }
 
                   val mw = dp(210)
                   val ov = FrameLayout(this)
                   val tap = View(this)
                   var downX = 0f
                   var downY = 0f
-                  var mode = 0
-                  var t0 = 0L
+                  var baseTx = 0f
+                  var baseTy = 0f
+                  var moved = false
                   val slop = dp(8).toFloat()
                   tap.setOnTouchListener { _, e ->
                       when (e.actionMasked) {
-                          MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; mode = 0; t0 = e.eventTime }
+                          MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; baseTx = miniTx; baseTy = miniCy; moved = false }
                           MotionEvent.ACTION_MOVE -> {
-                              val dy = e.rawY - downY
                               val dx = e.rawX - downX
-                              if (mode == 0) {
-                                  if (kotlin.math.abs(dx) > slop && kotlin.math.abs(dx) > kotlin.math.abs(dy)) mode = 3
-                                  else if (kotlin.math.abs(dy) > slop) mode = if (dy < 0) 1 else 2
-                              }
-                              if (mode == 3) {
-                                  val tx = (miniTx + dx).coerceIn(-dp(20).toFloat(), content.width - miniH * 16f / 9f + dp(20))
+                              val dy = e.rawY - downY
+                              if (!moved && (kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop)) moved = true
+                              if (moved) {
+                                  val tx = (baseTx + dx).coerceIn(0f, (content.width - mw).toFloat())
+                                  val ty = (baseTy + dy).coerceIn(0f, (content.height - miniH).toFloat())
                                   miniTab?.web?.translationX = tx
+                                  miniTab?.web?.translationY = ty
                                   ov.translationX = tx - miniTxR
-                              } else if (mode == 1) {
-                                  val p = (1f + dy / miniTy).coerceIn(0f, 1f)
-                                  applyMini(p)
-                                  ov.alpha = p * p
-                              } else if (mode == 2) {
-                                  miniTab?.web?.translationY = miniTy + dy
-                                  ov.translationY = dy
+                                  ov.translationY = ty - miniTy
                               }
                           }
                           MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                              val dy = e.rawY - downY
-                              val quick = e.eventTime - t0 < 300
-                              when {
-                                  mode == 3 -> {
-                                      val cx = miniTx + (e.rawX - downX) + dp(210) / 2f
-                                      val to = if (cx < content.width / 2f) miniTxL else miniTxR
-                                      val from = (miniTab?.web?.translationX ?: miniTx)
-                                      val a = android.animation.ValueAnimator.ofFloat(from, to)
-                                      a.duration = 180
+                              if (!moved) {
+                                  if (e.actionMasked == MotionEvent.ACTION_UP) expandMini(1f)
+                              } else {
+                                  val web = miniTab?.web
+                                  if (web != null) {
+                                      val cx = web.translationX + mw / 2f
+                                      val cy = web.translationY + miniH / 2f
+                                      val toX = if (cx < content.width / 2f) miniTxL else miniTxR
+                                      val toY = if (cy < content.height / 2f) miniTyT else miniTy
+                                      val fx = web.translationX
+                                      val fy = web.translationY
+                                      val a = android.animation.ValueAnimator.ofFloat(0f, 1f)
+                                      a.duration = 200
                                       a.interpolator = android.view.animation.DecelerateInterpolator(1.4f)
                                       a.addUpdateListener {
-                                          val v = it.animatedValue as Float
-                                          miniTab?.web?.translationX = v
-                                          ov.translationX = v - miniTxR
+                                          val f = it.animatedValue as Float
+                                          val vx = fx + (toX - fx) * f
+                                          val vy = fy + (toY - fy) * f
+                                          miniTab?.web?.translationX = vx
+                                          miniTab?.web?.translationY = vy
+                                          ov.translationX = vx - miniTxR
+                                          ov.translationY = vy - miniTy
                                       }
                                       a.addListener(object : android.animation.AnimatorListenerAdapter() {
-                                          override fun onAnimationEnd(animation: android.animation.Animator) { miniTx = to }
+                                          override fun onAnimationEnd(animation: android.animation.Animator) { miniTx = toX; miniCy = toY }
                                       })
                                       a.start()
                                   }
-                                  e.actionMasked == MotionEvent.ACTION_UP && mode == 0 -> expandMini(1f)
-                                  mode == 1 -> {
-                                      val p = (1f + dy / miniTy).coerceIn(0f, 1f)
-                                      if (e.actionMasked == MotionEvent.ACTION_UP && (p < 0.7f || (quick && dy < -dp(40)))) expandMini(p)
-                                      else { applyMini(1f); ov.alpha = 1f }
-                                  }
-                                  mode == 2 -> {
-                                      if (e.actionMasked == MotionEvent.ACTION_UP && dy > dp(50)) dismissMini()
-                                      else { applyMini(1f); ov.translationY = 0f }
-                                  }
                               }
-                              mode = 0
+                              moved = false
                           }
                       }
                       true
                   }
                   ov.addView(tap, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                   fun pill(txt: String, g: Int, act: () -> Unit) {
-                      val b = TextView(this)
-                      b.text = txt
-                      b.textSize = 15f
-                      b.setTextColor(Color.WHITE)
-                      b.gravity = Gravity.CENTER
-                      b.background = shape(0x99000000.toInt(), 16)
-                      b.setOnClickListener { act() }
-                      ov.addView(b, FrameLayout.LayoutParams(dp(34), dp(34), g).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+                      val b2 = TextView(this)
+                      b2.text = txt
+                      b2.textSize = 15f
+                      b2.setTextColor(Color.WHITE)
+                      b2.gravity = Gravity.CENTER
+                      b2.background = shape(0x99000000.toInt(), 16)
+                      b2.setOnClickListener { act() }
+                      ov.addView(b2, FrameLayout.LayoutParams(dp(34), dp(34), g).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
                   }
-                  pill("✕", Gravity.TOP or Gravity.END) { dismissMini() }
-                  pill("⏯", Gravity.BOTTOM or Gravity.START) {
+                  pill("⏯", Gravity.TOP or Gravity.START) {
                       try {
                           miniTab?.web?.evaluateJavascript("(function(){window.__rotaWas=false;var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();", null)
                       } catch (_: Exception) { }
                   }
+                  pill("✕", Gravity.TOP or Gravity.END) { dismissMini() }
                   miniOverlay = ov
-                  ov.translationX = miniTx - miniTxR
                   content.addView(ov, FrameLayout.LayoutParams(mw, miniH, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(12), dp(16)) })
+                  // Arkadaki gezinme sayfasında video ön izlemeleri kapalı: iki video aynı anda oynayıp kasmasın
+                  try { nt.web.evaluateJavascript(YT_NO_PREVIEW_JS, null) } catch (_: Exception) { }
+                  handler.removeCallbacks(miniPoll)
+                  handler.postDelayed(miniPoll, 500)
                   resumeMini(old)
               }
 
-              /** Küçük oynatıcı parmakla yukarı çekilir ya da dokunulursa video tam ekran olur (yeni sekme olarak). */
-              private fun expandMini(fromP: Float) {
-                  val mt = miniTab ?: return
-                  val ov = miniOverlay
-                  miniOverlay = null
-                  try { content.removeView(ov) } catch (_: Exception) { }
-                  animMini(fromP, 0f, 200, null) {
-                      miniTab = null
-                      mt.web.clipBounds = null
-                      roundMini(mt, false)
-                      try { tabs.getOrNull(cur)?.let { capturePreview(it) } } catch (_: Exception) { }
-                      shown?.let { try { content.removeView(it) } catch (_: Exception) { } }
-                      val at = (cur + 1).coerceIn(0, tabs.size)
-                      tabs.add(at, mt)
-                      cur = at
-                      shown = mt.web
-                      updateTabCount()
-                      for (t in tabs) {
-                          if (t !== mt) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
-                      }
-                      mt.web.onResume()
-                      closeFind()
-                      setBarShown(true)
-                      privateBadge.visibility = View.GONE
-                      topBar.setBackgroundColor(cBg)
-                      syncUi()
-                      resumeMini(mt)
+              /** Küçük pencerede video oynuyorsa arkadaki ön izlemeler durur; video duraklıysa ön izlemeler serbest. */
+              private val miniPoll = object : Runnable {
+                  override fun run() {
+                      val mt = miniTab ?: return
+                      try {
+                          mt.web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})();") { r ->
+                              if (miniTab === mt) {
+                                  val fg = tabs.getOrNull(cur)
+                                  if (fg != null && fg !== mt) {
+                                      try { fg.web.evaluateJavascript("window.__rotaNoPreview=" + (r == "true") + ";", null) } catch (_: Exception) { }
+                                  }
+                              }
+                          }
+                      } catch (_: Exception) { }
+                      handler.postDelayed(this, 700)
                   }
               }
 
-              /** Küçük oynatıcıyı kapatır (✕, aşağı kaydırma ya da ön planda başka video açılınca). */
+              private fun previewsOff() {
+                  handler.removeCallbacks(miniPoll)
+                  for (t in tabs) { try { t.web.evaluateJavascript("window.__rotaNoPreview=false;", null) } catch (_: Exception) { } }
+              }
+
+              /** Küçük oynatıcıya dokununca video tam ekran olur (yeni sekme olarak). */
+              private fun expandMini(fromP: Float) {
+                  val mt = miniTab ?: return
+                  prepExpand(mt)
+                  animMini(fromP, 0f, 200) { finishExpand(mt) }
+              }
+
+              /** Animasyonsuz: küçük pencereyi hemen tam ekran video sekmesine çevirir (PiP'e girmeden önce kullanılır). */
+              private fun expandMiniNow() {
+                  val mt = miniTab ?: return
+                  prepExpand(mt)
+                  applyMini(0f)
+                  finishExpand(mt)
+              }
+
+              private fun prepExpand(mt: BTab) {
+                  val ov = miniOverlay
+                  miniOverlay = null
+                  try { content.removeView(ov) } catch (_: Exception) { }
+                  try { mt.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
+              }
+
+              private fun finishExpand(mt: BTab) {
+                  miniTab = null
+                  mt.web.clipBounds = null
+                  roundMini(mt, false)
+                  try { tabs.getOrNull(cur)?.let { capturePreview(it) } } catch (_: Exception) { }
+                  shown?.let { try { content.removeView(it) } catch (_: Exception) { } }
+                  val at = (cur + 1).coerceIn(0, tabs.size)
+                  tabs.add(at, mt)
+                  cur = at
+                  shown = mt.web
+                  updateTabCount()
+                  for (t in tabs) {
+                      if (t !== mt) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
+                  }
+                  previewsOff()
+                  mt.web.onResume()
+                  closeFind()
+                  setBarShown(true)
+                  privateBadge.visibility = View.GONE
+                  topBar.setBackgroundColor(cBg)
+                  syncUi()
+                  resumeMini(mt)
+              }
+
+              /** Küçük oynatıcıyı kapatır (✕ ya da ön planda başka video açılınca). */
               private fun dismissMini() {
                   val mt = miniTab ?: return
                   val ov = miniOverlay
                   miniTab = null
                   miniOverlay = null
+                  previewsOff()
                   try { mt.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { }
                   val done = {
                       try { content.removeView(ov) } catch (_: Exception) { }
@@ -1755,7 +1809,8 @@ jobs:
                   ov?.animate()?.alpha(0f)?.setDuration(150)?.start()
               }
 
-                  private fun updateTabCount() { tabCount.text = tabs.size.toString() }
+    
+              private fun updateTabCount() { tabCount.text = tabs.size.toString() }
 
               private fun stateFile(i: Int) = java.io.File(filesDir, "tabstate_$i.bin")
 
@@ -1960,6 +2015,7 @@ jobs:
                           try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
                           try { view?.evaluateJavascript(YT_PROMO_JS, null) } catch (_: Exception) { }
                           try { view?.evaluateJavascript(YT_MINI_PLAYER_JS, null) } catch (_: Exception) { }
+                          if (miniTab != null && tab !== miniTab) { try { view?.evaluateJavascript(YT_NO_PREVIEW_JS, null) } catch (_: Exception) { } }
                       }
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
@@ -5008,6 +5064,44 @@ jobs:
                   if(!drag)return;drag=false;
                   if(started){started=false;try{window.RotaMini.end(dy,lx,true);}catch(z){}}
                   },{passive:true,capture:true});
+                  }catch(e){}})();
+                  """
+
+
+                  // Küçük pencerede: oynatıcının üstündeki YouTube yazıları/kontroller gizlenir, video pencereyi doldurur
+                  const val YT_MINI_CSS_ON_JS = """
+                  (function(){try{
+                  var s=document.getElementById('__rota_mini_css');
+                  if(!s){s=document.createElement('style');s.id='__rota_mini_css';document.documentElement.appendChild(s);}
+                  s.textContent='.html5-video-player>*:not(.html5-video-container){visibility:hidden!important}'+
+                  '.html5-video-player video{object-fit:cover!important}'+
+                  '.ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-youtube-button,.ytp-pause-overlay,.ytp-ce-element,.ytp-endscreen-content,.ytp-cards-teaser,.ytp-paid-content-overlay,.ytp-spinner,.annotation,[class*="player-controls"]{display:none!important}';
+                  }catch(e){}})();
+                  """
+
+                  const val YT_MINI_CSS_OFF_JS = """
+                  (function(){try{var s=document.getElementById('__rota_mini_css');if(s)s.remove();}catch(e){}})();
+                  """
+
+                  // Küçük pencere açıkken gezinme sayfasında video ön izlemeleri oynamaz
+                  const val YT_NO_PREVIEW_JS = """
+                  (function(){try{
+                  if(location.hostname.indexOf('youtube.com')<0)return;
+                  if(window.__rotaNoPreview===undefined)window.__rotaNoPreview=false;
+                  if(!window.__rotaPlayHooked){
+                  window.__rotaPlayHooked=true;
+                  var op=HTMLMediaElement.prototype.play;
+                  HTMLMediaElement.prototype.play=function(){
+                  if(window.__rotaNoPreview&&location.pathname.indexOf('/watch')!==0){try{this.pause();}catch(e){}return Promise.resolve();}
+                  return op.apply(this,arguments);
+                  };
+                  }
+                  function stop(){
+                  if(!window.__rotaNoPreview||location.pathname.indexOf('/watch')===0)return;
+                  document.querySelectorAll('video,audio').forEach(function(v){try{if(!v.paused)v.pause();}catch(e){}});
+                  }
+                  if(!window.__rotaNpTimer)window.__rotaNpTimer=setInterval(stop,600);
+                  stop();
                   }catch(e){}})();
                   """
 
