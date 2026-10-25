@@ -628,7 +628,8 @@ jobs:
               private val mediaStatePoll = object : Runnable {
                   override fun run() {
                       pollMedia()
-                      handler.postDelayed(this, 1500L)
+                      // Auto kaydırma çubuğu için konum daha sık güncellenir
+                      handler.postDelayed(this, 1000L)
                   }
               }
 
@@ -680,7 +681,8 @@ jobs:
                   val playChanged = playing != lastPlaying
                   val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
-                  if (changed && (playing || PlaybackService.running)) {
+                  // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
+                  if ((changed || playing) && (playing || PlaybackService.running)) {
                       sentPos = pos; sentAt = now; sentPlaying = playing
                       PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
                   }
@@ -6851,7 +6853,6 @@ jobs:
                   val s = MediaSession(this, "Rota")
                   s.setCallback(object : MediaSession.Callback() {
                       override fun onPlay() {
-                          requestFocus()
                           send(ACTION_PLAY)
                       }
                       override fun onPause() {
@@ -6904,11 +6905,8 @@ jobs:
                   when (intent?.action) {
                       ACTION_UPDATE -> {
                           playing = intent.getBooleanExtra("playing", false)
-                          // Odak iste; alınamazsa bile çalmayı kesme (WebView ile çakışıyordu)
-                          if (playing) {
-                              requestFocus()
-                              resumeAfterFocus = false
-                          }
+                          // requestAudioFocus WebView (özellikle YT Music) ilk çalmayı kesiyordu — kapalı
+                          resumeAfterFocus = false
                           val newTitle = intent.getStringExtra("title") ?: ""
                           val titleChanged = newTitle != title
                           title = newTitle
@@ -6992,15 +6990,20 @@ jobs:
                             idleHandler.removeCallbacks(idleStop)
                             if (!playing) idleHandler.postDelayed(idleStop, 90000L)
                             s.setMetadata(mb.build())
-                  val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
-                      PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or
-                      (if (duration > 0) PlaybackState.ACTION_SEEK_TO else 0L)
+                  // SEEK_TO: Auto ve bildirimde kaydırma çubuğu (süre biliniyorsa)
+                  var actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
+                      PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                  if (duration > 0) {
+                      actions = actions or PlaybackState.ACTION_SEEK_TO or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
+                  }
+                  val posSafe = if (position >= 0) position else 0L
                   s.setPlaybackState(PlaybackState.Builder()
                       .setActions(actions)
                       .addCustomAction(PlaybackState.CustomAction.Builder("like", "Beğen", android.R.drawable.btn_star_big_on).build())
                       .addCustomAction(PlaybackState.CustomAction.Builder("home", "Ana sayfa", android.R.drawable.ic_menu_compass).build())
                       .addCustomAction(PlaybackState.CustomAction.Builder("close", "Kapat", R.drawable.ic_close).build())
-                      .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, position, 1f)
+                      .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, posSafe, if (playing) 1f else 0f)
+                      .setBufferedPosition(posSafe)
                       .build())
 
                   val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
