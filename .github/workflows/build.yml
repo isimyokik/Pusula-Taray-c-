@@ -713,16 +713,42 @@ jobs:
                       updatePipActions()
                       if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
                   } else {
+                      // PiP kapandı — ✕ mi yoksa tam ekrana büyütme mi biraz sonra ayırt edilir
                       for (t in tabs) {
                           try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
                       }
-                      // Çıkıştan sonra YouTube kontrollerini ve spinner'ı toparla
-                      handler.postDelayed({
-                          try {
-                              currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null)
-                          } catch (_: Exception) { }
-                      }, 150)
-                      if (hasMedia && (lastPlaying || PlaybackService.running)) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      pipExitPending = true
+                      handler.removeCallbacks(pipExitDecide)
+                      handler.postDelayed(pipExitDecide, 350)
+                  }
+              }
+
+              /** PiP çıkışı: ✕ → arka plan; dokunup büyütme → tam ekran + medya bağlı kalsın. */
+              private var pipExitPending = false
+              private val pipExitDecide = Runnable {
+                  if (!pipExitPending) return@Runnable
+                  pipExitPending = false
+                  val expanded = hasWindowFocus() && !isFinishing
+                  if (expanded) {
+                      appInBackground = false
+                      handler.removeCallbacks(backgroundMediaPump)
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
+                      if (hasMedia && (lastPlaying || PlaybackService.running)) {
+                          PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      }
+                  } else if (prefs.bgPlay && hasMedia && lastPlaying) {
+                      appInBackground = true
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try {
+                          currentWeb()?.evaluateJavascript(
+                              "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){" +
+                              "m.dataset.pusulaWasPlaying='1';if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                              "});}catch(e){}})();", null)
+                      } catch (_: Exception) { }
+                      handler.removeCallbacks(backgroundMediaPump)
+                      handler.post(backgroundMediaPump)
+                      PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                   }
               }
 
@@ -926,9 +952,18 @@ jobs:
                   super.onStop()
                   if (isInPictureInPictureMode) {
                       try { shown?.onResume() } catch (_: Exception) { }
-                  } else if (!appInBackground && prefs.bgPlay && hasMedia && lastPlaying) {
-                      // Küçük pencere ✕ ile kapatıldı: görüntü gider, ses ve bildirim arka planda sürer
+                      return
+                  }
+                  // PiP ✕ veya ana ekran: arka planda çalmaya devam
+                  if (prefs.bgPlay && hasMedia && lastPlaying) {
                       appInBackground = true
+                      try { shown?.onResume() } catch (_: Exception) { }
+                      try {
+                          currentWeb()?.evaluateJavascript(
+                              "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){" +
+                              "m.dataset.pusulaWasPlaying='1';if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                              "});}catch(e){}})();", null)
+                      } catch (_: Exception) { }
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
                       PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
@@ -952,6 +987,15 @@ jobs:
 
               override fun onResume() {
                   super.onResume()
+                  // PiP'ten büyütülerek geldiyse hemen tam ekran toparla
+                  if (pipExitPending) {
+                      pipExitPending = false
+                      handler.removeCallbacks(pipExitDecide)
+                      try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
+                      if (hasMedia && (lastPlaying || PlaybackService.running)) {
+                          PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      }
+                  }
                   appInBackground = false
                   handler.removeCallbacks(backgroundMediaPump)
                   shown?.onResume()
@@ -1614,10 +1658,11 @@ jobs:
                       if (!dark && (u.contains("youtube.com") || u.contains("youtu.be"))) {
                           try { view?.evaluateJavascript(FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
                       }
-                      // YouTube ortadaki logo / büyük oynat katmanı
+                      // YouTube ortadaki logo / büyük oynat katmanı + sayfa içi mini player
                       if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
                           try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
                           try { view?.evaluateJavascript(YT_PROMO_JS, null) } catch (_: Exception) { }
+                          try { view?.evaluateJavascript(YT_MINI_PLAYER_JS, null) } catch (_: Exception) { }
                       }
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
@@ -4620,6 +4665,55 @@ jobs:
                       ".ytp-cued-thumbnail-overlay-image{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important}" +
                       "';" +
                       "document.documentElement.appendChild(s);" +
+                      "}catch(e){}})();"
+
+                  // YouTube sayfa içi mini player: videoyu aşağı çek → sağ alt; yukarı çek → tam ekran
+                  // Önerilen videolar görünür kalır (body gizlenmez)
+                  const val YT_MINI_PLAYER_JS =
+                      "(function(){try{" +
+                      "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
+                      "if(window.__rotaMini)return;window.__rotaMini=1;" +
+                      "var st=document.createElement('style');st.id='__rota_mini_css';" +
+                      "st.textContent='" +
+                      "html.__rmini .html5-video-player{" +
+                      "position:fixed!important;right:8px!important;bottom:72px!important;" +
+                      "width:42vw!important;max-width:220px!important;height:auto!important;" +
+                      "aspect-ratio:16/9!important;z-index:2147483000!important;" +
+                      "border-radius:12px!important;overflow:hidden!important;" +
+                      "box-shadow:0 8px 28px rgba(0,0,0,.45)!important;inset:auto!important;left:auto!important;top:auto!important}" +
+                      "html.__rmini .html5-video-player video{width:100%!important;height:100%!important;object-fit:cover!important}" +
+                      "html.__rmini .ytp-chrome-top,html.__rmini .ytp-chrome-bottom," +
+                      "html.__rmini .ytp-gradient-top,html.__rmini .ytp-gradient-bottom{display:none!important}" +
+                      "html.__rmini ytm-player-container,html.__rmini #player{min-height:0!important}" +
+                      "';" +
+                      "document.documentElement.appendChild(st);" +
+                      "var on=false,sx=0,sy=0,dragging=false;" +
+                      "function player(){return document.querySelector('.html5-video-player');}" +
+                      "function enter(){if(on)return;on=true;document.documentElement.classList.add('__rmini');}" +
+                      "function exit(){if(!on)return;on=false;document.documentElement.classList.remove('__rmini');}" +
+                      "function onStart(e){" +
+                      "var t=e.touches&&e.touches[0];if(!t)return;" +
+                      "var p=player();if(!p)return;" +
+                      "var r=p.getBoundingClientRect();" +
+                      "if(t.clientX<r.left||t.clientX>r.right||t.clientY<r.top||t.clientY>r.bottom)return;" +
+                      "sx=t.clientX;sy=t.clientY;dragging=true;" +
+                      "}" +
+                      "function onMove(e){" +
+                      "if(!dragging)return;" +
+                      "var t=e.touches&&e.touches[0];if(!t)return;" +
+                      "var dy=t.clientY-sy;" +
+                      "if(!on&&dy>70){enter();try{e.preventDefault();}catch(z){}}" +
+                      "if(on&&dy<-70){exit();try{e.preventDefault();}catch(z){}}" +
+                      "}" +
+                      "function onEnd(){dragging=false;}" +
+                      "document.addEventListener('touchstart',onStart,{passive:true,capture:true});" +
+                      "document.addEventListener('touchmove',onMove,{passive:false,capture:true});" +
+                      "document.addEventListener('touchend',onEnd,{passive:true,capture:true});" +
+                      // Mini iken dokununca da büyüt
+                      "document.addEventListener('click',function(e){" +
+                      "if(!on)return;var p=player();if(!p)return;" +
+                      "if(p.contains(e.target)){exit();}" +
+                      "},true);" +
                       "}catch(e){}})();"
 
                   // Uygulama açık temadayken YouTube / YT Music arayüzünü de açık tona zorlar
