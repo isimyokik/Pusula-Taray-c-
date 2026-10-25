@@ -611,6 +611,7 @@ jobs:
               }
 
               private fun pollMedia() {
+                  val t = miniTab ?: tabs.getOrNull(cur) ?: return
                   try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
               }
 
