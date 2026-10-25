@@ -5356,6 +5356,43 @@ jobs:
                       "var R=window.innerHeight*1.1;\n" +
                       "return R*(1-Math.exp(-d/R));\n" +
                       "}\n" +
+                      "var peekEl=[];\n" +
+                      "function peekOn(){\n" +
+                      "try{\n" +
+                      "if(!document.getElementById('__rota_peek')){\n" +
+                      "var s=document.createElement('style');s.id='__rota_peek';\n" +
+                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
+                      "document.documentElement.appendChild(s);\n" +
+                      "}\n" +
+                      "document.documentElement.classList.add('rota-peek');\n" +
+                      "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
+                      "if(l){\n" +
+                      "var q=[l],n=0;\n" +
+                      "while(q.length&&n<120){\n" +
+                      "var e=q.shift();n++;\n" +
+                      "if(e.nodeType===1&&e!==pg&&!(pg&&pg.contains(e))){\n" +
+                      "var cs=getComputedStyle(e);\n" +
+                      "var bf=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n" +
+                      "var fl=cs.filter||'none';\n" +
+                      "if(bf!=='none'||fl.indexOf('blur')>=0){\n" +
+                      "peekEl.push([e,e.style.cssText]);\n" +
+                      "e.style.setProperty('backdrop-filter','none','important');\n" +
+                      "e.style.setProperty('-webkit-backdrop-filter','none','important');\n" +
+                      "if(fl.indexOf('blur')>=0)e.style.setProperty('filter','none','important');\n" +
+                      "}\n" +
+                      "}\n" +
+                      "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n" +
+                      "}\n" +
+                      "}\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "function peekOff(){\n" +
+                      "try{\n" +
+                      "document.documentElement.classList.remove('rota-peek');\n" +
+                      "peekEl.forEach(function(a){a[0].style.cssText=a[1];});\n" +
+                      "peekEl=[];\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
                       "function setOff(v){\n" +
                       "if(!pg)return;\n" +
                       "pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');\n" +
@@ -5363,6 +5400,7 @@ jobs:
                       "}\n" +
                       "function clean(){\n" +
                       "if(!pg)return;\n" +
+                      "peekOff();\n" +
                       "['transform','transition','border-radius','will-change','overflow','opacity'].forEach(function(k){pg.style.removeProperty(k);});\n" +
                       "busy=false;\n" +
                       "}\n" +
@@ -5434,6 +5472,7 @@ jobs:
                       "if(dy>8&&dy>Math.abs(dx)*1.3){\n" +
                       "locked=true;sy=t.clientY;dy=0;\n" +
                       "pg.style.setProperty('will-change','transform','important');\n" +
+                      "peekOn();\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
                       "}else return;\n" +
                       "}\n" +
