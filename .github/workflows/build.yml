@@ -2292,6 +2292,9 @@ jobs:
                           try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
                           try { view?.evaluateJavascript(YT_PROMO_JS, null) } catch (_: Exception) { }
                           try { view?.evaluateJavascript(YT_MINI_PLAYER_JS, null) } catch (_: Exception) { }
+                          if (u.contains("music.youtube.com")) {
+                              try { view?.evaluateJavascript(YT_MUSIC_UX_JS, null) } catch (_: Exception) { }
+                          }
                           if (miniTab != null && tab !== miniTab) { try { view?.evaluateJavascript(YT_NO_PREVIEW_JS, null) } catch (_: Exception) { } }
                       }
                       if (tabs.getOrNull(cur) === tab) syncUi()
@@ -5155,6 +5158,98 @@ jobs:
                             try{mo.observe(document.documentElement,{childList:true,subtree:true});}catch(x){}
                             }catch(e){}})();
                             """
+
+                  // YouTube Music: play/pause ripple + oynatıcıyı parmakla yumuşak kaydırarak küçült
+                  const val YT_MUSIC_UX_JS =
+                      "(function(){try{" +
+                      "if(location.hostname.indexOf('music.youtube.com')<0)return;" +
+                      "if(window.__rotaMusicUx)return;window.__rotaMusicUx=1;" +
+                      // 1) Oynat/duraklat için ileri-geri gibi yuvarlak şeffaf ripple
+                      "var st=document.createElement('style');st.id='__rota_ytm_ux';" +
+                      "st.textContent='" +
+                      "#play-pause-button,ytmusic-play-button-renderer,tp-yt-paper-icon-button.play-pause-button," +
+                      ".play-pause-button,ytmusic-player-bar #play-pause-button{" +
+                      "position:relative!important;overflow:visible!important;border-radius:50%!important;}" +
+                      "#play-pause-button::after,ytmusic-play-button-renderer::after{" +
+                      "content:\\'\\';position:absolute;left:50%;top:50%;width:0;height:0;" +
+                      "border-radius:50%;background:rgba(255,255,255,.28);transform:translate(-50%,-50%);" +
+                      "pointer-events:none;opacity:0;transition:width .35s ease,height .35s ease,opacity .4s ease;}" +
+                      "#play-pause-button.__rotaRipple::after,ytmusic-play-button-renderer.__rotaRipple::after{" +
+                      "width:72px;height:72px;opacity:1;transition:width .2s ease,height .2s ease,opacity .15s ease;}" +
+                      "ytmusic-player-page#player-page{transition:transform .38s cubic-bezier(.22,.9,.3,1),opacity .3s ease!important;" +
+                      "will-change:transform;}" +
+                      "ytmusic-player-page#player-page.__rotaDrag{transition:none!important;}" +
+                      "';document.documentElement.appendChild(st);" +
+                      "function rippleTarget(el){" +
+                      "if(!el||!el.closest)return null;" +
+                      "return el.closest('#play-pause-button,ytmusic-play-button-renderer,.play-pause-button')||" +
+                      "(el.id==='play-pause-button'?el:null);" +
+                      "}" +
+                      "function flashRipple(btn){" +
+                      "if(!btn)return;btn.classList.add('__rotaRipple');" +
+                      "setTimeout(function(){try{btn.classList.remove('__rotaRipple');}catch(z){}},320);" +
+                      "}" +
+                      "document.addEventListener('pointerdown',function(e){var b=rippleTarget(e.target);if(b)flashRipple(b);},true);" +
+                      // 2) Tam oynatıcıyı aşağı kaydırarak kapat (lastik hissi)
+                      "var drag=false,sy=0,dy=0,page=null;" +
+                      "function playerPage(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}" +
+                      "function isOpen(p){" +
+                      "if(!p)return false;" +
+                      "var s=window.getComputedStyle(p);" +
+                      "if(s.display==='none'||s.visibility==='hidden')return false;" +
+                      "var r=p.getBoundingClientRect();return r.height>window.innerHeight*0.45;" +
+                      "}" +
+                      "function collapse(){" +
+                      "var p=playerPage();if(!p)return;" +
+                      "p.classList.remove('__rotaDrag');" +
+                      "p.style.transform='';" +
+                      // Önce tırnak / geri / kapat düğmesi
+                      "var btn=document.querySelector('ytmusic-player-page [aria-label*=\"Aşağı\"],ytmusic-player-page [aria-label*=\"Down\"]," +
+                      "ytmusic-player-page [aria-label*=\"Küçült\"],ytmusic-player-page [aria-label*=\"Minimize\"]," +
+                      "ytmusic-player-page .previous-button,tp-yt-paper-icon-button.toggle-player," +
+                      "#movie-bg,#layout ytmusic-player-page .close-button');" +
+                      "var tab=document.querySelector('ytmusic-app-layout #player-bar-background,ytmusic-player-bar');" +
+                      "try{" +
+                      "var tgl=document.querySelector('ytmusic-app-layout');" +
+                      "if(tgl){tgl.setAttribute('player-page-open_',false);tgl.removeAttribute('player-page-open_');}" +
+                      "}catch(z){}" +
+                      "try{var b2=document.querySelector('ytmusic-player-page .toggle-player,ytmusic-player-page #toggle-player');if(b2)b2.click();}" +
+                      "catch(z){}" +
+                      "try{if(tab)tab.click();}catch(z){}" +
+                      "}" +
+                      "document.addEventListener('touchstart',function(e){" +
+                      "page=playerPage();if(!page||!isOpen(page))return;" +
+                      "var t=e.touches&&e.touches[0];if(!t)return;" +
+                      // Üst bölgeden veya genel sayfadan dikey sürükleme
+                      "var r=page.getBoundingClientRect();" +
+                      "if(t.clientY>r.top+Math.min(180,r.height*0.35))return;" +
+                      "sy=t.clientY;dy=0;drag=true;page.classList.add('__rotaDrag');" +
+                      "}, {passive:true,capture:true});" +
+                      "document.addEventListener('touchmove',function(e){" +
+                      "if(!drag||!page)return;" +
+                      "var t=e.touches&&e.touches[0];if(!t)return;" +
+                      "dy=Math.max(0,t.clientY-sy);" +
+                      // Lastik: dirençli kayma
+                      "var resist=dy<0?0:(dy*0.85);" +
+                      "page.style.transform='translate3d(0,'+resist+'px,0)';" +
+                      "page.style.opacity=String(Math.max(0.35,1-resist/window.innerHeight));" +
+                      "try{e.preventDefault();}catch(z){}" +
+                      "},{passive:false,capture:true});" +
+                      "document.addEventListener('touchend',function(){" +
+                      "if(!drag||!page)return;drag=false;" +
+                      "page.classList.remove('__rotaDrag');" +
+                      "if(dy>110){" +
+                      "page.style.transition='transform .4s cubic-bezier(.22,.9,.3,1),opacity .35s ease';" +
+                      "page.style.transform='translate3d(0,100%,0)';page.style.opacity='0';" +
+                      "var p=page;setTimeout(function(){try{p.style.transform='';p.style.opacity='';collapse();}catch(z){}},380);" +
+                      "}else{" +
+                      "page.style.transition='transform .4s cubic-bezier(.22,.9,.3,1),opacity .3s ease';" +
+                      "page.style.transform='translate3d(0,0,0)';page.style.opacity='1';" +
+                      "var p2=page;setTimeout(function(){try{p2.style.transform='';p2.style.opacity='';p2.style.transition='';}catch(z){}},420);" +
+                      "}" +
+                      "page=null;dy=0;" +
+                      "},{passive:true,capture:true});" +
+                      "}catch(e){}})();"
 
                   const val KEEP_PLAYING_JS =
                       "(function(){try{" +
