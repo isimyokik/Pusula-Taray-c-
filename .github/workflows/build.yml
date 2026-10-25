@@ -795,6 +795,15 @@ jobs:
                           } catch (_: Exception) { }
                           return
                       }
+                      if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
+                          // GEÇİCİ TEŞHİS: tuşa basınca hangi sekmeye ne gittiğini ve videonun durumunu ekranda gösterir
+                          val dt = miniTab ?: tabs.getOrNull(cur)
+                          val lab = act.substringAfterLast('_') + " mini=" + (miniTab != null) + " cur=" + cur + "/" + tabs.size + " pip=" + isInPictureInPictureMode + " bg=" + appInBackground + " | "
+                          try { dt?.web?.evaluateJavascript(DIAG_JS) { r -> toast(lab + (r ?: "null")) } } catch (_: Exception) { }
+                          handler.postDelayed({
+                              try { dt?.web?.evaluateJavascript(DIAG_JS) { r -> toast("SONRA | " + (r ?: "null")) } } catch (_: Exception) { }
+                          }, 1500L)
+                      }
                       val js = when (act) {
                           PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
@@ -5249,6 +5258,10 @@ jobs:
                           "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                           "});" +
                           "}catch(e){}})();"
+
+                  const val DIAG_JS =
+                      "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
+                      "return location.hostname.replace('www.','')+location.pathname+' v='+l.length+' ['+l.map(function(m){return (m.paused?'DURUK':'ÇALIYOR')+' vol'+Math.round(m.volume*100)+(m.muted?' muted':'')+' t'+Math.round(m.currentTime)+' rs'+m.readyState;}).join(', ')+'] blk='+!!window.__pipBlock+' up='+!!window.__userPause+' op='+!!window.__op+' rw='+!!window.__rotaWas;}catch(e){return 'hata '+e;}})();"
 
                   const val MEDIA_TOGGLE_JS =
                       "(function(){try{" +
