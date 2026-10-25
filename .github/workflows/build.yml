@@ -572,24 +572,10 @@ jobs:
               private var shown: WebView? = null
               private var miniTab: BTab? = null
               private var miniOverlay: FrameLayout? = null
-              private var mdOld: BTab? = null
-              private var mdPeek: BTab? = null
-              private var mdClipH = 0
-              private var miniH = 0
-              private var miniS = 1f
               private var miniTx = 0f
-              private var miniTxR = 0f
-              private var miniTxL = 0f
-              private var miniTy = 1f
-              private var mdLastDy = 0f
-              private var mdLastT = 0L
-              private var mdVel = 0f
-              private var pipFromMini = false
-              private var miniCy = 0f
-              private var miniTyT = 0f
-              private var mdBlur: android.widget.ImageView? = null
-              private var mdBack = "https://m.youtube.com/"
-
+              private var miniTy = 0f
+              private var miniW = 0
+              private var miniH = 0
               private lateinit var prefs: Prefs
               private lateinit var loader: WebViewAssetLoader
               private val handler = Handler(Looper.getMainLooper())
@@ -625,7 +611,6 @@ jobs:
               }
 
               private fun pollMedia() {
-                  val t = miniTab ?: tabs.getOrNull(cur) ?: return
                   try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
               }
 
@@ -689,20 +674,7 @@ jobs:
               /** YouTube küçült (PiP) — yalnızca menüden. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
-                  if (miniTab != null) {
-                      expandMiniNow()
-                      pipFromMini = true
-                  }
-                  // PiP öncesi tüm WebView katmanları temiz (video yüzeyi bozulmasın)
-                  for (t in tabs) {
-                      try {
-                          t.web.setLayerType(View.LAYER_TYPE_NONE, null)
-                          t.web.scaleX = 1f; t.web.scaleY = 1f
-                          t.web.translationX = 0f; t.web.translationY = 0f
-                          t.web.clipBounds = null
-                          t.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null)
-                      } catch (_: Exception) { }
-                  }
+                  if (miniTab != null) expandYtMini()
                   enterPipWith(android.util.Rational(16, 9))
               }
 
@@ -771,10 +743,6 @@ jobs:
                       if (hasMedia) {
                           PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                       }
-                      if (pipFromMini) {
-                          pipFromMini = false
-                          handler.postDelayed({ reopenAfterMiniPip() }, 300)
-                      }
                   }
               }
 
@@ -793,13 +761,11 @@ jobs:
                       val act = intent?.action ?: return
                       if (act == PlaybackService.ACTION_BACK10 || act == PlaybackService.ACTION_FWD10) {
                           val d = if (act == PlaybackService.ACTION_BACK10) -10 else 10
-                          try { (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
                           return
                       }
                       if (act == PlaybackService.ACTION_SEEK) {
                           val sec = intent.getLongExtra("pos", 0L) / 1000.0
                           try {
-                              (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(
                                   "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
                                   "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(v)v.currentTime=" + sec + ";}catch(e){}})();", null)
                           } catch (_: Exception) { }
@@ -812,8 +778,6 @@ jobs:
                           PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
                           else -> return
                       }
-                      val targets = if (act == PlaybackService.ACTION_PAUSE) (tabs.toList() + listOfNotNull(miniTab))
-                                    else listOfNotNull(miniTab ?: tabs.getOrNull(cur))
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
                       }
@@ -1034,7 +998,12 @@ jobs:
                           clearTabStates()
                       } catch (_: Exception) { }
                   }
-                  try { miniTab?.web?.destroy() } catch (_: Exception) { }
+                  try {
+                      miniOverlay?.let { content.removeView(it) }
+                      miniTab?.web?.let { try { content.removeView(it) } catch (_: Exception) { }; it.destroy() }
+                  } catch (_: Exception) { }
+                  miniTab = null
+                  miniOverlay = null
                   for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
                   super.onDestroy()
               }
@@ -1389,11 +1358,7 @@ jobs:
                   }, "RotaDl")
                   web.addJavascriptInterface(object {
                       @android.webkit.JavascriptInterface
-                      fun start(bottom: Double) { handler.post { if (tabs.getOrNull(cur) === tab) miniDragStart(bottom) } }
-                      @android.webkit.JavascriptInterface
-                      fun move(dy: Double, x: Double) { handler.post { miniDragMove(dy) } }
-                      @android.webkit.JavascriptInterface
-                      fun end(dy: Double, x: Double, cancel: Boolean) { handler.post { miniDragEnd(dy, cancel) } }
+                      fun shrink() { handler.post { if (tabs.getOrNull(cur) === tab) enterYtMini() } }
                   }, "RotaMini")
                   web.webViewClient = makeClient(tab)
                   web.webChromeClient = makeChrome(tab)
@@ -1488,408 +1453,213 @@ jobs:
                   updateTabCount()
               }
 
-              private fun miniPx(cssPx: Double): Float = (cssPx * resources.displayMetrics.density).toFloat()
 
-              /** p=0: tam ekran konumu, p=1: seçili köşedeki küçük konum. */
-              private fun applyMini(p: Float) {
-                  val t = (miniTab ?: mdOld) ?: return
-                  val q = p.coerceIn(0f, 1f)
-                  val sc = 1f + (miniS - 1f) * q
-                  // GPU katmanı — sürüklerken daha az kasma
-                  if (t.web.layerType != View.LAYER_TYPE_HARDWARE) {
-                      try { t.web.setLayerType(View.LAYER_TYPE_HARDWARE, null) } catch (_: Exception) { }
-                  }
-                  t.web.scaleX = sc
-                  t.web.scaleY = sc
-                  t.web.translationX = miniTx * q
-                  t.web.translationY = miniCy * q
-              }
-
-              private fun resumeMini(t: BTab) {
-                  val js = "(function(){try{var v=document.querySelector('video');if(v&&v.paused&&window.__rotaWas)v.play();}catch(e){}})();"
-                  for (d in longArrayOf(0L, 350L, 900L, 1800L)) {
-                      handler.postDelayed({ try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { } }, d)
-                  }
-              }
-
-              private fun roundMini(t: BTab, on: Boolean) {
-                  if (on) {
-                      t.web.outlineProvider = object : android.view.ViewOutlineProvider() {
-                          override fun getOutline(v: View, o: android.graphics.Outline) {
-                              o.setRoundRect(0, 0, v.width, mdClipH.coerceAtLeast(1), dp(18).toFloat())
-                          }
-                      }
-                      t.web.clipToOutline = true
-                  } else {
-                      t.web.clipToOutline = false
-                      t.web.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
-                  }
-              }
-
-              private fun animMini(from: Float, to: Float, ms: Long, end: () -> Unit) {
-                  val a = android.animation.ValueAnimator.ofFloat(from, to)
-                  a.duration = ms
-                  a.interpolator = android.view.animation.DecelerateInterpolator(1.4f)
-                  a.addUpdateListener { applyMini(it.animatedValue as Float) }
-                  a.addListener(object : android.animation.AnimatorListenerAdapter() {
-                      override fun onAnimationEnd(animation: android.animation.Animator) { end() }
-                  })
-                  a.start()
-              }
-
-              private fun removeMiniBlur(fadeMs: Long) {
-                  val b = mdBlur ?: return
-                  mdBlur = null
-                  if (fadeMs <= 0L) { try { content.removeView(b) } catch (_: Exception) { }; return }
-                  b.animate().alpha(0f).setDuration(fadeMs).withEndAction { try { content.removeView(b) } catch (_: Exception) { } }.start()
-              }
-
-              /** Video aşağı çekilmeye başladı: video yalnızca oynatıcı kısmı olarak ayrılır, arka sayfa flulaştırılmış görüntüye döner (kasmasın). */
-              private fun miniDragStart(bottomCss: Double) {
-                  if (mdOld != null) return
+              /** YouTube gibi: video köşede devam, arkada gezinme. */
+              private fun enterYtMini() {
+                  if (miniTab != null) return
+                  if (isInPictureInPictureMode) return
                   val old = tabs.getOrNull(cur) ?: return
-                  if (old.incognito || !old.url.contains("youtube.com/watch")) return
+                  if (old.incognito) return
+                  val u = old.url
+                  if (!u.contains("youtube.com/watch") && !u.contains("youtu.be/")) return
                   val w = content.width
                   val h = content.height
                   if (w <= 0 || h <= 0) return
-                  if (miniTab != null) dismissMini()
+
                   var back = "https://m.youtube.com/"
                   try {
-                      val l = old.web.copyBackForwardList()
-                      var i = l.currentIndex - 1
-                      while (i >= 0) {
-                          val u = l.getItemAtIndex(i).url
-                          if (u != null && u.startsWith("http") && !u.contains("youtube.com/watch")) { back = u; break }
-                          i--
+                      val list = old.web.copyBackForwardList()
+                      for (i in list.currentIndex - 1 downTo 0) {
+                          val pu = list.getItemAtIndex(i)?.url ?: continue
+                          if (pu.startsWith("http") && !pu.contains("/watch")) {
+                              back = pu
+                              break
+                          }
                       }
                   } catch (_: Exception) { }
-                  mdBack = back
-                  val clipH = miniPx(bottomCss).toInt().coerceIn(dp(120), h)
-                  // Arka plan: küçültülüp büyütülmüş (flu) anlık görüntü; sayfa çizilmediği için sürükleme akıcı kalır
-                  val blur = android.widget.ImageView(this)
-                  try {
-                      val sc = 48f / w
-                      val bmp = Bitmap.createBitmap(48, (h * sc).toInt().coerceAtLeast(1), Bitmap.Config.RGB_565)
-                      val cv = Canvas(bmp)
-                      cv.scale(sc, sc)
-                      old.web.draw(cv)
-                      blur.setImageBitmap(bmp)
-                      blur.scaleType = android.widget.ImageView.ScaleType.FIT_XY
-                      blur.setColorFilter(0xFF8C8C8C.toInt(), android.graphics.PorterDuff.Mode.MULTIPLY)
-                  } catch (_: Exception) {
-                      blur.setBackgroundColor(0xFF202020.toInt())
-                  }
-                  content.addView(blur, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                  mdBlur = blur
-                  mdOld = old
-                  mdClipH = clipH
-                  val mw = dp(210)
-                  miniS = mw.toFloat() / w
-                  miniH = (clipH * miniS).toInt()
-                  miniTxR = (w - dp(12) - mw).toFloat()
-                  miniTxL = dp(12).toFloat()
-                  miniTx = miniTxR
-                  miniTy = (h - dp(16) - miniH).toFloat().coerceAtLeast(1f)
-                  miniTyT = dp(12).toFloat()
-                  miniCy = miniTy
-                  old.web.pivotX = 0f
-                  old.web.pivotY = 0f
-                  old.web.clipBounds = android.graphics.Rect(0, 0, w, clipH)
-                  roundMini(old, true)
-                  mdLastDy = 0f
-                  mdLastT = android.os.SystemClock.uptimeMillis()
-                  mdVel = 0f
-              }
 
-              private fun miniDragMove(dyCss: Double) {
-                  if (mdOld == null) return
-                  val dy = miniPx(dyCss)
-                  applyMini(dy / miniTy)
-                  val now = android.os.SystemClock.uptimeMillis()
-                  if (now > mdLastT) mdVel = (dy - mdLastDy) / (now - mdLastT) * 1000f
-                  mdLastDy = dy
-                  mdLastT = now
-              }
+                  val mw = dp(168)
+                  val mh = dp(94)
+                  miniW = mw
+                  miniH = mh
+                  miniTx = (w - dp(10) - mw).toFloat()
+                  miniTy = (h - dp(10) - mh).toFloat().coerceAtLeast(dp(48).toFloat())
 
-              private fun miniDragEnd(dyCss: Double, cancel: Boolean) {
-                  val old = mdOld ?: return
-                  val dy = miniPx(dyCss)
-                  val p = (dy / miniTy).coerceIn(0f, 1f)
-                  val commit = !cancel && (p > 0.3f || (mdVel > 900f && dy > dp(40)))
-                  if (commit) animMini(p, 1f, 200) { commitMini() }
-                  else animMini(p, 0f, 180) { abortMini(old) }
-              }
-
-              private fun abortMini(old: BTab) {
-                  mdOld = null
-                  old.web.clipBounds = null
-                  roundMini(old, false)
-                  removeMiniBlur(120)
-                  resumeMini(old)
-              }
-
-              private fun commitMini() {
-                  val old = mdOld ?: return
-                  mdOld = null
-                  val nt = createTab(false)
-                  tabs.remove(nt)
-                  applyHostUa(nt, mdBack)
-                  content.addView(nt.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                  // Önceki sayfayı yeniden indirme — önbellekten aç (kasma / yenileme hissi azalır)
-                  try {
-                      nt.web.settings.cacheMode = android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK
-                  } catch (_: Exception) { }
-                  // Animasyon bitsin diye bir kare ertele
-                  val backUrl = mdBack
-                  handler.post {
-                      try {
-                          if (tabs.contains(nt)) nt.web.loadUrl(backUrl)
-                      } catch (_: Exception) { }
-                      // Normal moda geri dön
-                      try { nt.web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT } catch (_: Exception) { }
-                  }
-                  var idx = tabs.indexOf(old)
-                  if (idx < 0) idx = cur.coerceAtLeast(0)
-                  tabs.remove(old)
-                  tabs.add(idx.coerceIn(0, tabs.size), nt)
-                  cur = tabs.indexOf(nt)
-                  shown = nt.web
                   miniTab = old
-                  updateTabCount()
-                  // Arka plan yüklenirken mini videoyu DURDURMA — sadece diğer sekmeleri
-                  for (t in tabs) {
-                      if (t !== nt && t !== old) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
-                  }
-                  nt.web.onResume()
-                  closeFind()
-                  setBarShown(true)
-                  privateBadge.visibility = View.GONE
-                  topBar.setBackgroundColor(cBg)
-                  syncUi()
-                  // Flu görüntü kısa süre; sayfa önbellekten gelirse hızlı kaybolur
-                  val b = mdBlur
-                  handler.postDelayed({ if (mdBlur === b) removeMiniBlur(200) }, 500)
-                  // Küçük pencerede YouTube yazıları / kontroller gizlenir, video pencereyi doldurur
+                  try { content.removeView(old.web) } catch (_: Exception) { }
+                  old.web.layoutParams = FrameLayout.LayoutParams(mw, mh)
+                  old.web.translationX = miniTx
+                  old.web.translationY = miniTy
+                  old.web.scaleX = 1f
+                  old.web.scaleY = 1f
+                  try {
+                      old.web.outlineProvider = object : android.view.ViewOutlineProvider() {
+                          override fun getOutline(v: View, o: android.graphics.Outline) {
+                              o.setRoundRect(0, 0, v.width, v.height, dp(12).toFloat())
+                          }
+                      }
+                      old.web.clipToOutline = true
+                      old.web.elevation = dp(8).toFloat()
+                  } catch (_: Exception) { }
+                  content.addView(old.web)
                   try { old.web.evaluateJavascript(YT_MINI_CSS_ON_JS, null) } catch (_: Exception) { }
+                  try {
+                      old.web.evaluateJavascript(
+                          "(function(){try{var v=document.querySelector('video');if(v&&v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}catch(e){}})();",
+                          null
+                      )
+                  } catch (_: Exception) { }
 
-                  val mw = dp(210)
                   val ov = FrameLayout(this)
-                  val tap = View(this)
+                  val pad = View(this)
                   var downX = 0f
                   var downY = 0f
-                  var baseTx = 0f
-                  var baseTy = 0f
+                  var baseX = 0f
+                  var baseY = 0f
                   var moved = false
-                  val slop = dp(8).toFloat()
-                  tap.setOnTouchListener { _, e ->
+                  val slop = dp(10).toFloat()
+                  pad.setOnTouchListener { _, e ->
                       when (e.actionMasked) {
-                          MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; baseTx = miniTx; baseTy = miniCy; moved = false }
+                          MotionEvent.ACTION_DOWN -> {
+                              downX = e.rawX; downY = e.rawY
+                              baseX = miniTx; baseY = miniTy
+                              moved = false
+                          }
                           MotionEvent.ACTION_MOVE -> {
                               val dx = e.rawX - downX
                               val dy = e.rawY - downY
                               if (!moved && (kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop)) moved = true
                               if (moved) {
-                                  val tx = (baseTx + dx).coerceIn(0f, (content.width - mw).toFloat())
-                                  val ty = (baseTy + dy).coerceIn(0f, (content.height - miniH).toFloat())
-                                  miniTab?.web?.translationX = tx
-                                  miniTab?.web?.translationY = ty
-                                  ov.translationX = tx - miniTxR
-                                  ov.translationY = ty - miniTy
+                                  miniTx = (baseX + dx).coerceIn(0f, (content.width - mw).toFloat())
+                                  miniTy = (baseY + dy).coerceIn(0f, (content.height - mh).toFloat())
+                                  old.web.translationX = miniTx
+                                  old.web.translationY = miniTy
+                                  ov.translationX = miniTx
+                                  ov.translationY = miniTy
                               }
                           }
                           MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                              if (!moved) {
-                                  // Tek dokunuş: oynat / duraklat (başlık/expand yok)
-                                  if (e.actionMasked == MotionEvent.ACTION_UP) {
-                                      try {
-                                          miniTab?.web?.evaluateJavascript(
-                                              "(function(){window.__rotaWas=false;var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();",
-                                              null
-                                          )
-                                      } catch (_: Exception) { }
-                                  }
-                              } else {
-                                  val web = miniTab?.web
-                                  if (web != null) {
-                                      val cx = web.translationX + mw / 2f
-                                      val cy = web.translationY + miniH / 2f
-                                      val toX = if (cx < content.width / 2f) miniTxL else miniTxR
-                                      val toY = if (cy < content.height / 2f) miniTyT else miniTy
-                                      val fx = web.translationX
-                                      val fy = web.translationY
-                                      val a = android.animation.ValueAnimator.ofFloat(0f, 1f)
-                                      a.duration = 200
-                                      a.interpolator = android.view.animation.DecelerateInterpolator(1.4f)
-                                      a.addUpdateListener {
-                                          val f = it.animatedValue as Float
-                                          val vx = fx + (toX - fx) * f
-                                          val vy = fy + (toY - fy) * f
-                                          miniTab?.web?.translationX = vx
-                                          miniTab?.web?.translationY = vy
-                                          ov.translationX = vx - miniTxR
-                                          ov.translationY = vy - miniTy
-                                      }
-                                      a.addListener(object : android.animation.AnimatorListenerAdapter() {
-                                          override fun onAnimationEnd(animation: android.animation.Animator) { miniTx = toX; miniCy = toY }
-                                      })
-                                      a.start()
-                                  }
+                              if (!moved && e.actionMasked == MotionEvent.ACTION_UP) {
+                                  expandYtMini()
+                              } else if (moved) {
+                                  val cx = miniTx + mw / 2f
+                                  val cy = miniTy + mh / 2f
+                                  val toX = if (cx < content.width / 2f) dp(10).toFloat() else (content.width - dp(10) - mw).toFloat()
+                                  val toY = if (cy < content.height / 2f) dp(48).toFloat() else (content.height - dp(10) - mh).toFloat().coerceAtLeast(dp(48).toFloat())
+                                  miniTx = toX; miniTy = toY
+                                  old.web.animate().translationX(toX).translationY(toY).setDuration(180).start()
+                                  ov.animate().translationX(toX).translationY(toY).setDuration(180).start()
                               }
-                              moved = false
                           }
                       }
                       true
                   }
-                  ov.addView(tap, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                  fun pill(txt: String, g: Int, act: () -> Unit) {
-                      val b2 = TextView(this)
-                      b2.text = txt
-                      b2.textSize = 15f
-                      b2.setTextColor(Color.WHITE)
-                      b2.gravity = Gravity.CENTER
-                      b2.background = shape(0x99000000.toInt(), 16)
-                      b2.setOnClickListener { act() }
-                      ov.addView(b2, FrameLayout.LayoutParams(dp(34), dp(34), g).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
-                  }
-                  pill("⏯", Gravity.TOP or Gravity.START) {
-                      try {
-                          miniTab?.web?.evaluateJavascript("(function(){window.__rotaWas=false;var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();", null)
-                      } catch (_: Exception) { }
-                  }
-                  pill("✕", Gravity.TOP or Gravity.END) { dismissMini() }
+                  ov.addView(pad, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                  val close = TextView(this)
+                  close.text = "✕"
+                  close.textSize = 13f
+                  close.setTextColor(Color.WHITE)
+                  close.gravity = Gravity.CENTER
+                  close.background = shape(0x99000000.toInt(), 14)
+                  close.setOnClickListener { dismissYtMini(stop = true) }
+                  ov.addView(close, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP or Gravity.END).apply {
+                      setMargins(dp(4), dp(4), dp(4), dp(4))
+                  })
+                  ov.translationX = miniTx
+                  ov.translationY = miniTy
                   miniOverlay = ov
-                  content.addView(ov, FrameLayout.LayoutParams(mw, miniH, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(12), dp(16)) })
-                  // Arkadaki gezinme sayfasında video ön izlemeleri kapalı: iki video aynı anda oynayıp kasmasın
-                  try { nt.web.evaluateJavascript(YT_NO_PREVIEW_JS, null) } catch (_: Exception) { }
-                  handler.removeCallbacks(miniPoll)
-                  handler.postDelayed(miniPoll, 500)
-                  resumeMini(old)
-              }
+                  content.addView(ov, FrameLayout.LayoutParams(mw, mh))
 
-              /** Küçük pencereden PiP'e girilmişse, PiP'ten dönünce video büyük ekranda temiz bir görünümle, kaldığı saniyeden açılır. */
-              private fun reopenAfterMiniPip() {
-                  // PiP'ten dönüş: sayfayı yeniden yükleme — normal tam ekran YouTube gibi devam
-                  val t = tabs.getOrNull(cur) ?: return
-                  val w = t.web
-                  try {
-                      w.scaleX = 1f
-                      w.scaleY = 1f
-                      w.translationX = 0f
-                      w.translationY = 0f
-                      w.clipBounds = null
-                      w.clipToOutline = false
-                      w.layoutParams = FrameLayout.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-                      )
-                      w.requestLayout()
-                  } catch (_: Exception) { }
-                  try { w.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
-                  try {
-                      w.evaluateJavascript(
-                          "(function(){try{" +
-                          "window.__pipBlock=false;window.__userPause=false;" +
-                          "var v=document.querySelector('video');" +
-                          "if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}" +
-                          "var pl=document.querySelector('#movie_player,.html5-video-player');" +
-                          "if(pl){pl.classList.remove('ytp-fullscreen');}" +
-                          "}catch(e){}})();",
-                          null
-                      )
-                  } catch (_: Exception) { }
-                  try { w.onResume() } catch (_: Exception) { }
-                  setBarShown(true)
-                  syncUi()
-                  resumeMini(t)
-              }
-
-              /** Küçük pencerede video oynuyorsa arkadaki ön izlemeler durur; video duraklıysa ön izlemeler serbest. */
-              private val miniPoll = object : Runnable {
-                  override fun run() {
-                      val mt = miniTab ?: return
-                      try {
-                          mt.web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})();") { r ->
-                              if (miniTab === mt) {
-                                  val fg = tabs.getOrNull(cur)
-                                  if (fg != null && fg !== mt) {
-                                      try { fg.web.evaluateJavascript("window.__rotaNoPreview=" + (r == "true") + ";", null) } catch (_: Exception) { }
-                                  }
-                              }
-                          }
-                      } catch (_: Exception) { }
-                      handler.postDelayed(this, 700)
-                  }
-              }
-
-              private fun previewsOff() {
-                  handler.removeCallbacks(miniPoll)
-                  for (t in tabs) { try { t.web.evaluateJavascript("window.__rotaNoPreview=false;", null) } catch (_: Exception) { } }
-              }
-
-              /** Küçük oynatıcıya dokununca video tam ekran olur (yeni sekme olarak). */
-              private fun expandMini(fromP: Float) {
-                  val mt = miniTab ?: return
-                  prepExpand(mt)
-                  animMini(fromP, 0f, 200) { finishExpand(mt) }
-              }
-
-              /** Animasyonsuz: küçük pencereyi hemen tam ekran video sekmesine çevirir (PiP'e girmeden önce kullanılır). */
-              private fun expandMiniNow() {
-                  val mt = miniTab ?: return
-                  prepExpand(mt)
-                  applyMini(0f)
-                  finishExpand(mt)
-              }
-
-              private fun prepExpand(mt: BTab) {
-                  val ov = miniOverlay
-                  miniOverlay = null
-                  try { content.removeView(ov) } catch (_: Exception) { }
-                  try { mt.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
-              }
-
-              private fun finishExpand(mt: BTab) {
-                  miniTab = null
-                  mt.web.clipBounds = null
-                  try { mt.web.setLayerType(View.LAYER_TYPE_NONE, null) } catch (_: Exception) { }
-                  roundMini(mt, false)
-                  try { tabs.getOrNull(cur)?.let { capturePreview(it) } } catch (_: Exception) { }
-                  shown?.let { try { content.removeView(it) } catch (_: Exception) { } }
-                  val at = (cur + 1).coerceIn(0, tabs.size)
-                  tabs.add(at, mt)
-                  cur = at
-                  shown = mt.web
-                  updateTabCount()
+                  val bg = createTab(false)
+                  tabs.remove(bg)
+                  var idx = tabs.indexOf(old)
+                  if (idx < 0) idx = 0
+                  tabs.add(idx, bg)
+                  cur = tabs.indexOf(bg)
+                  shown = bg.web
+                  try { content.removeView(bg.web) } catch (_: Exception) { }
+                  content.addView(bg.web, 0, FrameLayout.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                  ))
+                  try { bg.web.settings.cacheMode = android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK } catch (_: Exception) { }
+                  bg.pendingUrl = null
+                  bg.url = back
+                  applyHostUa(bg, back)
+                  bg.web.loadUrl(back)
+                  try { bg.web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT } catch (_: Exception) { }
                   for (t in tabs) {
-                      if (t !== mt) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
+                      if (t !== old && t !== bg) {
+                          try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { }
+                      }
                   }
-                  previewsOff()
-                  mt.web.onResume()
+                  updateTabCount()
                   closeFind()
                   setBarShown(true)
                   privateBadge.visibility = View.GONE
                   topBar.setBackgroundColor(cBg)
                   syncUi()
-                  resumeMini(mt)
               }
 
-              /** Küçük oynatıcıyı kapatır (✕ ya da ön planda başka video açılınca). */
-              private fun dismissMini() {
+              private fun expandYtMini() {
                   val mt = miniTab ?: return
                   val ov = miniOverlay
-                  miniTab = null
                   miniOverlay = null
-                  previewsOff()
-                  try { mt.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { }
-                  val done = {
-                      try { content.removeView(ov) } catch (_: Exception) { }
-                      try { content.removeView(mt.web) } catch (_: Exception) { }
-                      try { mt.web.stopLoading(); mt.web.destroy() } catch (_: Exception) { }
-                  }
-                  mt.web.animate().alpha(0f).setDuration(150).withEndAction { done() }.start()
-                  ov?.animate()?.alpha(0f)?.setDuration(150)?.start()
+                  miniTab = null
+                  try { content.removeView(ov) } catch (_: Exception) { }
+                  try { mt.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
+                  try {
+                      mt.web.clipToOutline = false
+                      mt.web.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+                      mt.web.elevation = 0f
+                      mt.web.translationX = 0f
+                      mt.web.translationY = 0f
+                      mt.web.scaleX = 1f
+                      mt.web.scaleY = 1f
+                  } catch (_: Exception) { }
+                  try { content.removeView(mt.web) } catch (_: Exception) { }
+                  shown?.let { try { content.removeView(it) } catch (_: Exception) { } }
+                  val at = tabs.indexOf(mt).let { if (it >= 0) it else (cur + 1).coerceIn(0, tabs.size) }
+                  if (!tabs.contains(mt)) tabs.add(at, mt)
+                  cur = tabs.indexOf(mt).coerceAtLeast(0)
+                  shown = mt.web
+                  content.addView(mt.web, FrameLayout.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                  ))
+                  mt.web.layoutParams = FrameLayout.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                  )
+                  try { mt.web.onResume() } catch (_: Exception) { }
+                  try {
+                      mt.web.evaluateJavascript(
+                          "(function(){try{var v=document.querySelector('video');if(v&&v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}catch(e){}})();",
+                          null
+                      )
+                  } catch (_: Exception) { }
+                  updateTabCount()
+                  setBarShown(true)
+                  syncUi()
               }
 
-    
+              private fun dismissYtMini(stop: Boolean) {
+                  val mt = miniTab ?: return
+                  val ov = miniOverlay
+                  miniOverlay = null
+                  miniTab = null
+                  try { content.removeView(ov) } catch (_: Exception) { }
+                  try { content.removeView(mt.web) } catch (_: Exception) { }
+                  if (stop) {
+                      try { mt.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { }
+                  }
+                  try { mt.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
+                  tabs.remove(mt)
+                  try { mt.web.stopLoading(); mt.web.destroy() } catch (_: Exception) { }
+                  if (cur >= tabs.size) cur = tabs.size - 1
+                  if (cur < 0 && tabs.isNotEmpty()) cur = 0
+                  if (tabs.isEmpty()) openTab(null) else switchTo(cur.coerceAtLeast(0))
+                  updateTabCount()
+                  syncUi()
+              }
+
               private fun updateTabCount() { tabCount.text = tabs.size.toString() }
 
               private fun stateFile(i: Int) = java.io.File(filesDir, "tabstate_$i.bin")
@@ -2075,7 +1845,6 @@ jobs:
 
                   override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                       if (url != null && !url.startsWith("data:")) tab.url = url
-                      if (miniTab != null && tab !== miniTab && url != null && url.contains("youtube.com/watch")) dismissMini()
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
 
@@ -2094,8 +1863,9 @@ jobs:
                       if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
                           try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
                           try { view?.evaluateJavascript(YT_PROMO_JS, null) } catch (_: Exception) { }
-                          try { view?.evaluateJavascript(YT_MINI_PLAYER_JS, null) } catch (_: Exception) { }
-                          if (miniTab != null && tab !== miniTab) { try { view?.evaluateJavascript(YT_NO_PREVIEW_JS, null) } catch (_: Exception) { } }
+                      }
+                      if ((u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")) {
+                          try { view?.evaluateJavascript(YT_MINI_GESTURE_JS, null) } catch (_: Exception) { }
                       }
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
@@ -5052,7 +4822,51 @@ jobs:
                       "})();"
 
                   // YouTube üst çubuğundaki "Uygulamada aç" düğmesini gizler; başka hiçbir şeye dokunmaz.
-                  const val OPEN_APP_HIDE_JS =
+
+                  const val YT_MINI_CSS_ON_JS =
+                      "(function(){try{" +
+                      "var s=document.getElementById('__rota_mini_css');" +
+                      "if(!s){s=document.createElement('style');s.id='__rota_mini_css';document.documentElement.appendChild(s);}" +
+                      "s.textContent='html,body{background:#000!important;overflow:hidden!important;margin:0!important;height:100%!important}" +
+                      "body>*{visibility:hidden!important;pointer-events:none!important}" +
+                      "#movie_player,.html5-video-player,#player{visibility:visible!important;pointer-events:auto!important;" +
+                      "position:fixed!important;inset:0!important;width:100%!important;height:100%!important;z-index:99999!important;background:#000!important}" +
+                      ".html5-video-container,video{visibility:visible!important;width:100%!important;height:100%!important;object-fit:contain!important}" +
+                      ".html5-video-player>*:not(.html5-video-container){display:none!important}" +
+                      ".ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-pause-overlay{display:none!important}';" +
+                      "}catch(e){}})();"
+
+                  const val YT_MINI_CSS_OFF_JS =
+                      "(function(){try{var s=document.getElementById('__rota_mini_css');if(s)s.remove();}catch(e){}})();"
+
+                  const val YT_MINI_GESTURE_JS =
+                      "(function(){try{" +
+                      "if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;" +
+                      "if(window.__rotaMiniG)return;window.__rotaMiniG=1;" +
+                      "var sx=0,sy=0,on=false,armed=false;" +
+                      "function watch(){return location.pathname.indexOf('/watch')===0&&!document.fullscreenElement&&window.RotaMini;}" +
+                      "function pl(){return document.querySelector('#movie_player')||document.querySelector('.html5-video-player');}" +
+                      "document.addEventListener('touchstart',function(e){" +
+                      "on=false;armed=false;if(!watch()||e.touches.length!==1)return;" +
+                      "var t=e.touches[0],p=pl();if(!p)return;var r=p.getBoundingClientRect();" +
+                      "if(t.clientY<r.top||t.clientY>r.bottom||t.clientX<r.left||t.clientX>r.right)return;" +
+                      "sx=t.clientX;sy=t.clientY;on=true;" +
+                      "},{passive:true,capture:true});" +
+                      "document.addEventListener('touchmove',function(e){" +
+                      "if(!on)return;var t=e.touches[0];if(!t)return;" +
+                      "var dy=t.clientY-sy,dx=t.clientX-sx;" +
+                      "if(!armed){if(Math.abs(dy)+Math.abs(dx)<14)return;if(dy>18&&dy>Math.abs(dx)*1.15)armed=true;else{on=false;return;}}" +
+                      "try{e.preventDefault();}catch(z){}" +
+                      "},{passive:false,capture:true});" +
+                      "document.addEventListener('touchend',function(){" +
+                      "if(!on)return;on=false;" +
+                      "if(armed){try{window.RotaMini.shrink();}catch(z){}}" +
+                      "armed=false;" +
+                      "},{passive:true,capture:true});" +
+                      "}catch(e){}})();"
+
+
+                                    const val OPEN_APP_HIDE_JS =
                       "(function(){" +
                       "if(location.hostname.indexOf('youtube.com')<0)return;" +
                       "var reApp=/uygulamada\\s*a[cç]|uygulamay[ıi]\\s*a[cç]|uygulamay[ıi]\\s*(edin|indir)|open\\s*(in\\s*)?(the\\s*)?app|get\\s*the\\s*app|use\\s*the\\s*app/i;" +
@@ -5081,17 +4895,9 @@ jobs:
                       "document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,.yt-upsell-dialog').forEach(function(d){" +
                       "var t=(d.textContent||'');if(rePrem.test(t)){hideEl(d);var b=d.querySelector('#cancel-button,button');if(b)try{b.click();}catch(z){}}" +
                       "});" +
-                      "document.querySelectorAll('ytm-banner-promo-renderer,ytd-banner-promo-renderer,ytm-statement-banner-renderer,ytm-mealbar-promo-renderer,ytd-mealbar-promo-renderer,ytm-open-app-banner-renderer,ytm-open-app-button-renderer,ytd-open-app-button-renderer,ytmusic-mealbar-promo-renderer,.ytp-pause-overlay').forEach(hideEl);" +
-                      "document.querySelectorAll('a,button,ytm-button-renderer,yt-button-renderer,[role=button]').forEach(function(e){" +
-                      "var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\\s+/g,' ').trim();" +
-                      "if(t.length>0&&t.length<100&&(/uygulama|install\\s*app|get\\s*(the\\s*)?(youtube\\s*)?app|open\\s*in\\s*app|tavsiye|önerilen|premium/i.test(t))){" +
-                      "var c=e.closest('ytm-button-renderer,yt-button-renderer,ytm-banner-promo-renderer,ytd-banner-promo-renderer,ytm-mealbar-promo-renderer')||e;hideEl(c);}" +
-                      "});" +
                       "}catch(x){}" +
                       "}" +
-                      "hide();" +
-                      "setInterval(hide,400);" +
-                      "try{new MutationObserver(function(){hide();}).observe(document.documentElement,{childList:true,subtree:true});}catch(z){}" +
+                      "setInterval(hide,600);" +
                       "})();"
 
                   // YouTube sayfasında ortadaki büyük logo / oynat katmanı ve watermark
@@ -5109,109 +4915,10 @@ jobs:
                       "}catch(e){}})();"
 
                   // YouTube: videoyu aşağı çek → video parmakla birlikte sağ alta küçülür (hareketi native yönetir)
-                  const val YT_MINI_PLAYER_JS = """
-                  (function(){try{
-                  if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;
-                  if(window.__rotaMini3)return;window.__rotaMini3=1;
-                  var st=document.createElement('style');
-                  st.textContent='#movie_player,.html5-video-player{touch-action:none!important}';
-                  document.documentElement.appendChild(st);
-                  var sx=0,sy=0,pl=null,drag=false,locked=0,started=false,dy=0,lx=0;
-                  function watch(){return location.pathname.indexOf('/watch')===0&&window.innerHeight>400&&!document.fullscreenElement&&!!window.RotaMini;}
-                  function player(){return document.querySelector('#movie_player')||document.querySelector('.html5-video-player');}
-                  document.addEventListener('touchstart',function(e){
-                  drag=false;locked=0;started=false;dy=0;
-                  if(!watch()||e.touches.length>1)return;
-                  var t=e.touches[0];if(!t)return;
-                  pl=player();if(!pl)return;
-                  var r=pl.getBoundingClientRect();
-                  if(t.clientY<r.top||t.clientY>r.bottom||t.clientX<r.left||t.clientX>r.right)return;
-                  sx=t.clientX;sy=t.clientY;drag=true;
-                  },{passive:true,capture:true});
-                  document.addEventListener('touchmove',function(e){
-                  if(!drag)return;
-                  var t=e.touches[0];if(!t)return;
-                  var mx=t.clientX-sx,my=t.clientY-sy;
-                  if(!locked){if(Math.abs(mx)+Math.abs(my)<12)return;locked=(my>0&&Math.abs(my)>Math.abs(mx)*1.2)?1:2;}
-                  if(locked!==1){drag=false;return;}
-                  try{e.preventDefault();}catch(z){}
-                  dy=my;lx=t.clientX;
-                  if(!started){
-                  started=true;
-                  var v=document.querySelector('video');window.__rotaWas=!!(v&&!v.paused);
-                  try{window.scrollTo(0,0);}catch(z){}
-                  try{window.RotaMini.start(pl.getBoundingClientRect().bottom);}catch(z){}
-                  }
-                  try{window.RotaMini.move(dy,lx);}catch(z){}
-                  },{passive:false,capture:true});
-                  document.addEventListener('touchend',function(){
-                  if(!drag)return;drag=false;
-                  if(started){started=false;try{window.RotaMini.end(dy,lx,false);}catch(z){}}
-                  },{passive:true,capture:true});
-                  document.addEventListener('touchcancel',function(){
-                  if(!drag)return;drag=false;
-                  if(started){started=false;try{window.RotaMini.end(dy,lx,true);}catch(z){}}
-                  },{passive:true,capture:true});
-                  }catch(e){}})();
-                  """
-
-
-                  // Küçük pencerede: oynatıcının üstündeki YouTube yazıları/kontroller gizlenir, video pencereyi doldurur
-                  const val YT_MINI_CSS_ON_JS = """
-                  (function(){try{
-                  var s=document.getElementById('__rota_mini_css');
-                  if(!s){s=document.createElement('style');s.id='__rota_mini_css';document.documentElement.appendChild(s);}
-                  // Sadece video: sayfa gövdesi ve oynatıcı dışı her şey gizlenir
-                  s.textContent=
-                  'html,body{background:#000!important;overflow:hidden!important;margin:0!important;padding:0!important;height:100%!important;width:100%!important}'+
-                  'body>*:not(#player):not(#player-container-outer):not(#player-container-inner):not(#player-container):not(#movie_player):not(.html5-video-player){visibility:hidden!important;pointer-events:none!important;opacity:0!important}'+
-                  '#player,#player-container-outer,#player-container-inner,#player-container,#movie_player,.html5-video-player{'+
-                  'position:fixed!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;'+
-                  'z-index:2147483646!important;background:#000!important;margin:0!important;padding:0!important;border:0!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}'+
-                  '.html5-video-container{position:absolute!important;inset:0!important;width:100%!important;height:100%!important}'+
-                  '.html5-video-player video,video.html5-main-video,video{'+
-                  'position:absolute!important;inset:0!important;width:100%!important;height:100%!important;'+
-                  'object-fit:contain!important;background:#000!important;visibility:visible!important;opacity:1!important}'+
-                  '.html5-video-player>*:not(.html5-video-container){display:none!important;visibility:hidden!important}'+
-                  '.ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-youtube-button,'+
-                  '.ytp-pause-overlay,.ytp-ce-element,.ytp-endscreen-content,.ytp-cards-teaser,.ytp-paid-content-overlay,'+
-                  '.ytp-spinner,.ytp-title,.ytp-title-text,.ytp-title-channel,.ytp-show-cards-title,.annotation,'+
-                  '[class*="player-controls"],.ytp-progress-bar-container,.ytp-progress-bar,.ytp-timed-markers-container,'+
-                  '.ytp-caption-window-container,.caption-window,ytm-pivot-bar-renderer,ytm-mobile-topbar-renderer,'+
-                  'ytm-app,ytm-watch,ytm-single-column-watch-next-results-renderer,#related,#comments,#masthead-container,'+
-                  '#secondary,#below,#info,#meta,#chat,#chat-container,.watch-below-the-player{display:none!important;visibility:hidden!important;height:0!important;overflow:hidden!important}';
-                  // Video elemanını görünür tut
-                  try{var v=document.querySelector('#movie_player video,video.html5-main-video,video');if(v){v.style.setProperty('visibility','visible','important');v.style.setProperty('opacity','1','important');}}catch(z){}
-                  }catch(e){}})();
-                  """
-
-                  const val YT_MINI_CSS_OFF_JS = """
-                  (function(){try{var s=document.getElementById('__rota_mini_css');if(s)s.remove();}catch(e){}})();
-                  """
-
-                  // Küçük pencere açıkken gezinme sayfasında video ön izlemeleri oynamaz
-                  const val YT_NO_PREVIEW_JS = """
-                  (function(){try{
-                  if(location.hostname.indexOf('youtube.com')<0)return;
-                  if(window.__rotaNoPreview===undefined)window.__rotaNoPreview=false;
-                  if(!window.__rotaPlayHooked){
-                  window.__rotaPlayHooked=true;
-                  var op=HTMLMediaElement.prototype.play;
-                  HTMLMediaElement.prototype.play=function(){
-                  if(window.__rotaNoPreview&&location.pathname.indexOf('/watch')!==0){try{this.pause();}catch(e){}return Promise.resolve();}
-                  return op.apply(this,arguments);
-                  };
-                  }
-                  function stop(){
-                  if(!window.__rotaNoPreview||location.pathname.indexOf('/watch')===0)return;
-                  document.querySelectorAll('video,audio').forEach(function(v){try{if(!v.paused)v.pause();}catch(e){}});
-                  }
-                  if(!window.__rotaNpTimer)window.__rotaNpTimer=setInterval(stop,600);
-                  stop();
-                  }catch(e){}})();
-                  """
-
-                  // Uygulama açık temadayken YouTube / YT Music arayüzünü de açık tona zorlar
+                  
+                  
+                  
+                  
                   const val FORCE_LIGHT_YT_JS =
                       "(function(){" +
                       "if(location.hostname.indexOf('youtube.com')<0)return;" +
