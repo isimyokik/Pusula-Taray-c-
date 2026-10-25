@@ -5319,12 +5319,13 @@ jobs:
                       "if(!l)return '';\n" +
                       "return l.getAttributeNames().map(function(k){return k+'='+l.getAttribute(k);}).join('|');\n" +
                       "}\n" +
-                      "function openNow(){\n" +
+                      "function openNow(dy){\n" +
+                      "dy=dy||0;\n" +
                       "var p=pageEl();if(!p)return false;\n" +
                       "var cs=getComputedStyle(p);\n" +
                       "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
-                      "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
-                      "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n" +
+                      "var r=p.getBoundingClientRect(),H=window.innerHeight,tp=r.top-dy,bt=r.bottom-dy;\n" +
+                      "return r.width>0&&r.height>H*0.5&&tp<H*0.25&&bt>H*0.6;\n" +
                       "}\n" +
                       "function showDebug(){\n" +
                       "try{\n" +
@@ -5421,9 +5422,6 @@ jobs:
                       "}\n" +
                       "function afterDown(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
-                      "pg.style.setProperty('opacity','0','important');\n" +
-                      "pg.style.removeProperty('transform');\n" +
-                      "pg.style.removeProperty('border-radius');\n" +
                       "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n" +
                       "function success(){\n" +
                       "pg.style.removeProperty('opacity');\n" +
@@ -5441,10 +5439,12 @@ jobs:
                       "var ok=false;\n" +
                       "try{ok=tries[i++]();}catch(z){}\n" +
                       "if(!ok){next();return;}\n" +
-                      "var sig0=layoutSig();\n" +
-                      "setTimeout(function(){\n" +
-                      "if(!openNow()||layoutSig()!==sig0)success();else next();\n" +
-                      "},600);\n" +
+                      "var sig0=layoutSig(),t0=Date.now();\n" +
+                      "(function poll(){\n" +
+                      "if(!openNow(window.innerHeight)||layoutSig()!==sig0){success();return;}\n" +
+                      "if(Date.now()-t0>=600){next();return;}\n" +
+                      "setTimeout(poll,90);\n" +
+                      "})();\n" +
                       "}\n" +
                       "next();\n" +
                       "}\n" +
