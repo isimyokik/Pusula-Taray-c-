@@ -776,6 +776,7 @@ jobs:
                       // PiP'ten büyüyünce video yarım/bozuk kalırsa önce düzeni yenile, olmazsa kaldığı saniyeden yeniden yükle
                       handler.postDelayed({ checkAfterPip(0) }, 800)
                       handler.postDelayed({ normalizeLater(tabs.getOrNull(cur)) }, 700)
+                      reapplyInsetsLater()
                   }
               }
 
@@ -950,6 +951,7 @@ jobs:
 
               override fun onWindowFocusChanged(hasFocus: Boolean) {
                   super.onWindowFocusChanged(hasFocus)
+                  if (hasFocus && !isInPictureInPictureMode) reapplyInsetsLater()
                   if (isInPictureInPictureMode) {
                       try { currentWeb()?.evaluateJavascript("if(window.__pipFlash)window.__pipFlash();", null) } catch (_: Exception) { }
                   }
@@ -1795,6 +1797,23 @@ jobs:
               }
 
               /** Geçişlerden (küçük pencere, PiP) sonra artık ölçek/kayma/yatay kaydırma kalmasın: sayfa sola kaymasın. */
+              /** PiP/geçişlerden sonra sistem çubuğu boşlukları (üst/sol) bazen sıfırda kalıyor: ekran sol-üste kayar. Yeniden uygulanır. */
+              private fun reapplyInsets() {
+                  try {
+                      ViewCompat.requestApplyInsets(root)
+                      if (isInPictureInPictureMode) return
+                      val wi = ViewCompat.getRootWindowInsets(root) ?: return
+                      val b = wi.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
+                      if (root.paddingLeft != b.left || root.paddingTop != b.top || root.paddingRight != b.right || root.paddingBottom != b.bottom) {
+                          root.setPadding(b.left, b.top, b.right, b.bottom)
+                      }
+                  } catch (_: Exception) { }
+              }
+
+              private fun reapplyInsetsLater() {
+                  for (d in longArrayOf(100L, 400L, 900L, 1800L)) handler.postDelayed({ reapplyInsets() }, d)
+              }
+
               private fun normalizeView(t: BTab?) {
                   if (t == null || t === miniTab || t === mdOld) return
                   val w = t.web
@@ -1921,6 +1940,7 @@ jobs:
                   syncUi()
                   resumeMini(mt)
                   normalizeLater(mt)
+                  reapplyInsetsLater()
               }
 
               /** Küçük oynatıcıyı kapatır (✕ ya da ön planda başka video açılınca). */
