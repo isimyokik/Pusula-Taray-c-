@@ -741,22 +741,19 @@ jobs:
                       for (t in tabs) {
                           try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
                       }
+                      // Çalarken de duraklatılmışken de aynı yol: önce düzen/stil temizliği (PIP_RECOVER_JS)
+                      handler.postDelayed({
+                          try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
+                      }, 120)
                       if (playing && prefs.bgPlay) {
-                          // Oynatma sürsün: otomatik pause engeli + wasPlaying işareti
-                          try {
-                              currentWeb()?.evaluateJavascript(
-                                  "(function(){try{" +
-                                  "window.__pipBlock=true;window.__userPause=false;" +
-                                  "if(!window.__op){window.__op=HTMLMediaElement.prototype.pause;" +
-                                  "HTMLMediaElement.prototype.pause=function(){if(window.__pipBlock&&!window.__userPause)return;return window.__op.apply(this,arguments);};}" +
-                                  "document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='1';" +
-                                  "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}});" +
-                                  "}catch(e){}})();", null)
-                          } catch (_: Exception) { }
-                      } else {
+                          // Çalıyorsa temizlikten sonra oynatma sürsün (kullanıcı duraklatmadıysa)
                           handler.postDelayed({
-                              try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
-                          }, 120)
+                              try {
+                                  currentWeb()?.evaluateJavascript(
+                                      "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='1';" +
+                                      "if(m.paused&&!window.__userPause){var p=m.play();if(p&&p.catch)p.catch(function(){});}});}catch(e){}})();", null)
+                              } catch (_: Exception) { }
+                          }, 450)
                       }
                       if (hasMedia) {
                           PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
