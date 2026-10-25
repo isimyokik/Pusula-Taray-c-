@@ -5237,27 +5237,82 @@ jobs:
                       "window.addEventListener('pointercancel',inkUp,true);\n" +
                       "window.addEventListener('touchend',inkUp,true);\n" +
                       "window.addEventListener('touchcancel',inkUp,true);\n" +
-                      "function minimizePlayer(){\n" +
-                      "try{\n" +
-                      "var pg=document.querySelector('ytmusic-player-page');\n" +
-                      "if(pg){\n" +
-                      "var direct=pg.querySelector('tp-yt-paper-icon-button.toggle-player,.toggle-player,#player-page .toggle-player');\n" +
-                      "if(direct){direct.click();return true;}\n" +
+                      "function clickable(e){\n" +
+                      "var n=e;\n" +
+                      "for(var k=0;k<12&&n;k++){\n" +
+                      "if(n.nodeType===1&&n.matches&&n.matches('button,[role=button],tp-yt-paper-icon-button,yt-icon-button,a,[class*=minimize],[class*=collapse],[class*=toggle-player]'))return n;\n" +
+                      "n=n.parentElement||(n.getRootNode&&n.getRootNode().host)||null;\n" +
+                      "}\n" +
+                      "return null;\n" +
+                      "}\n" +
+                      "function findChevron(){\n" +
+                      "var pg=pageEl();if(!pg)return null;\n" +
+                      "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','.toggle-player','[class*=minimize]','[class*=collapse-button]','[class*=dismiss]'];\n" +
+                      "for(var i=0;i<sels.length;i++){var el=pg.querySelector(sels[i]);if(el)return el;}\n" +
                       "var all=pg.querySelectorAll('[aria-label]');\n" +
-                      "for(var i=0;i<all.length;i++){\n" +
-                      "var al=all[i].getAttribute('aria-label')||'';\n" +
-                      "if(/^(aşağı|asagi|collapse|minimi|küçült|down\\b)/i.test(al)){all[i].click();return true;}\n" +
+                      "for(var j=0;j<all.length;j++){\n" +
+                      "var al=all[j].getAttribute('aria-label')||'';\n" +
+                      "if(/^(aşağı|asagi|collapse|minimi|küçült|kucult|down\\b)/i.test(al))return all[j];\n" +
+                      "}\n" +
+                      "for(var y=16;y<=110;y+=12){\n" +
+                      "for(var x=16;x<=96;x+=12){\n" +
+                      "var c=clickable(document.elementFromPoint(x,y));\n" +
+                      "if(c&&c.getBoundingClientRect().width<120)return c;\n" +
                       "}\n" +
                       "}\n" +
+                      "return null;\n" +
+                      "}\n" +
+                      "function fullTap(el){\n" +
+                      "var r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;\n" +
+                      "try{\n" +
+                      "var tc=new Touch({identifier:77,target:el,clientX:x,clientY:y});\n" +
+                      "el.dispatchEvent(new TouchEvent('touchstart',{touches:[tc],targetTouches:[tc],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n" +
+                      "el.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n" +
+                      "}catch(z){}\n" +
+                      "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){\n" +
+                      "var C=t.indexOf('pointer')===0?PointerEvent:MouseEvent;\n" +
+                      "try{el.dispatchEvent(new C(t,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,view:window,button:0,pointerType:'touch',isPrimary:true}));}catch(z){}\n" +
+                      "});\n" +
+                      "}\n" +
+                      "function tryClick(){var el=findChevron();if(!el)return false;el.click();return true;}\n" +
+                      "function tryTap(){var el=findChevron();if(!el)return false;fullTap(el);return true;}\n" +
+                      "function tryLayout(){\n" +
                       "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
-                      "if(layout){\n" +
+                      "if(!layout)return false;\n" +
                       "try{if('playerPageOpen_' in layout)layout.playerPageOpen_=false;}catch(z){}\n" +
                       "try{layout.removeAttribute('player-page-open_');}catch(z){}\n" +
                       "try{layout.setAttribute('player-ui-state_','PLAYER_BAR_ONLY');}catch(z){}\n" +
                       "return true;\n" +
                       "}\n" +
-                      "}catch(e){}\n" +
-                      "return false;\n" +
+                      "function layoutSig(){\n" +
+                      "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
+                      "if(!l)return '';\n" +
+                      "return l.getAttributeNames().map(function(k){return k+'='+l.getAttribute(k);}).join('|');\n" +
+                      "}\n" +
+                      "function openNow(){\n" +
+                      "var p=pageEl();if(!p)return false;\n" +
+                      "var cs=getComputedStyle(p);\n" +
+                      "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
+                      "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
+                      "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n" +
+                      "}\n" +
+                      "function showDebug(){\n" +
+                      "try{\n" +
+                      "var seen=[];\n" +
+                      "for(var y=16;y<=110;y+=22){for(var x=16;x<=96;x+=26){\n" +
+                      "var e=document.elementFromPoint(x,y),n=0;\n" +
+                      "while(e&&n<3){\n" +
+                      "var d=e.tagName.toLowerCase()+(e.className&&typeof e.className==='string'?'.'+e.className.trim().split(/\\s+/).slice(0,2).join('.'):'')+(e.getAttribute('aria-label')?'['+e.getAttribute('aria-label')+']':'');\n" +
+                      "if(seen.indexOf(d)<0)seen.push(d);\n" +
+                      "e=e.parentElement;n++;\n" +
+                      "}\n" +
+                      "}}\n" +
+                      "var b=document.createElement('div');\n" +
+                      "b.style.cssText='position:fixed;left:8px;right:8px;bottom:70px;z-index:2147483647;background:rgba(0,0,0,.85);color:#fff;font:11px/1.3 monospace;padding:8px;border-radius:8px;word-break:break-all;';\n" +
+                      "b.textContent='Rota: küçült tuşu çalışmadı. '+seen.slice(0,14).join(' ; ');\n" +
+                      "document.documentElement.appendChild(b);\n" +
+                      "setTimeout(function(){try{b.remove();}catch(z){}},12000);\n" +
+                      "}catch(z){}\n" +
                       "}\n" +
                       "function pageEl(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}\n" +
                       "function pageOpen(){\n" +
@@ -5278,7 +5333,7 @@ jobs:
                       "}\n" +
                       "function clean(){\n" +
                       "if(!pg)return;\n" +
-                      "['transform','transition','border-radius','will-change','overflow'].forEach(function(k){pg.style.removeProperty(k);});\n" +
+                      "['transform','transition','border-radius','will-change','overflow','opacity'].forEach(function(k){pg.style.removeProperty(k);});\n" +
                       "busy=false;\n" +
                       "}\n" +
                       "function springBack(){\n" +
@@ -5294,14 +5349,36 @@ jobs:
                       "var d=Math.max(170,Math.min(340,left/Math.max(v,0.9)));\n" +
                       "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
                       "setOff(H);\n" +
-                      "setTimeout(function(){\n" +
-                      "minimizePlayer();\n" +
-                      "setTimeout(function(){\n" +
-                      "pg.style.setProperty('transition','transform .5s cubic-bezier(.3,1.2,.5,1)','important');\n" +
+                      "setTimeout(afterDown,d);\n" +
+                      "}\n" +
+                      "function afterDown(){\n" +
+                      "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
                       "pg.style.removeProperty('transform');\n" +
-                      "setTimeout(clean,560);\n" +
-                      "},420);\n" +
-                      "},d);\n" +
+                      "pg.style.removeProperty('border-radius');\n" +
+                      "var tries=[tryClick,tryTap,tryLayout],i=0;\n" +
+                      "function success(){\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "clean();\n" +
+                      "}\n" +
+                      "function fail(){\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "void pg.offsetWidth;\n" +
+                      "showDebug();\n" +
+                      "springBack();\n" +
+                      "}\n" +
+                      "function next(){\n" +
+                      "if(i>=tries.length){fail();return;}\n" +
+                      "var ok=false;\n" +
+                      "try{ok=tries[i++]();}catch(z){}\n" +
+                      "if(!ok){next();return;}\n" +
+                      "var sig0=layoutSig();\n" +
+                      "setTimeout(function(){\n" +
+                      "if(!openNow()||layoutSig()!==sig0)success();else next();\n" +
+                      "},450);\n" +
+                      "}\n" +
+                      "next();\n" +
                       "}\n" +
                       "document.addEventListener('touchstart',function(e){\n" +
                       "tracking=false;locked=false;\n" +
