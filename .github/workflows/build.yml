@@ -689,7 +689,17 @@ jobs:
               /** YouTube küçült (PiP) — yalnızca menüden. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
-                  if (miniTab != null) { expandMiniNow(); pipFromMini = true }
+                  if (miniTab != null) {
+                      expandMiniNow()
+                      pipFromMini = true
+                      // PiP öncesi transform kalıntısı olmasın
+                      try {
+                          val w = tabs.getOrNull(cur)?.web
+                          w?.scaleX = 1f; w?.scaleY = 1f
+                          w?.translationX = 0f; w?.translationY = 0f
+                          w?.clipBounds = null
+                      } catch (_: Exception) { }
+                  }
                   enterPipWith(android.util.Rational(16, 9))
               }
 
@@ -1482,6 +1492,10 @@ jobs:
                   val t = (miniTab ?: mdOld) ?: return
                   val q = p.coerceIn(0f, 1f)
                   val sc = 1f + (miniS - 1f) * q
+                  // GPU katmanı — sürüklerken daha az kasma
+                  if (t.web.layerType != View.LAYER_TYPE_HARDWARE) {
+                      try { t.web.setLayerType(View.LAYER_TYPE_HARDWARE, null) } catch (_: Exception) { }
+                  }
                   t.web.scaleX = sc
                   t.web.scaleY = sc
                   t.web.translationX = miniTx * q
@@ -1618,7 +1632,19 @@ jobs:
                   tabs.remove(nt)
                   applyHostUa(nt, mdBack)
                   content.addView(nt.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                  nt.web.loadUrl(mdBack)
+                  // Önceki sayfayı yeniden indirme — önbellekten aç (kasma / yenileme hissi azalır)
+                  try {
+                      nt.web.settings.cacheMode = android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK
+                  } catch (_: Exception) { }
+                  // Animasyon bitsin diye bir kare ertele
+                  val backUrl = mdBack
+                  handler.post {
+                      try {
+                          if (tabs.contains(nt)) nt.web.loadUrl(backUrl)
+                      } catch (_: Exception) { }
+                      // Normal moda geri dön
+                      try { nt.web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT } catch (_: Exception) { }
+                  }
                   var idx = tabs.indexOf(old)
                   if (idx < 0) idx = cur.coerceAtLeast(0)
                   tabs.remove(old)
@@ -1627,8 +1653,9 @@ jobs:
                   shown = nt.web
                   miniTab = old
                   updateTabCount()
+                  // Arka plan yüklenirken mini videoyu DURDURMA — sadece diğer sekmeleri
                   for (t in tabs) {
-                      if (t !== nt) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
+                      if (t !== nt && t !== old) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
                   }
                   nt.web.onResume()
                   closeFind()
@@ -1636,9 +1663,9 @@ jobs:
                   privateBadge.visibility = View.GONE
                   topBar.setBackgroundColor(cBg)
                   syncUi()
-                  // Flu görüntü, yeni sayfa yüklenince kaybolur
+                  // Flu görüntü kısa süre; sayfa önbellekten gelirse hızlı kaybolur
                   val b = mdBlur
-                  handler.postDelayed({ if (mdBlur === b) removeMiniBlur(300) }, 1400)
+                  handler.postDelayed({ if (mdBlur === b) removeMiniBlur(200) }, 500)
                   // Küçük pencerede YouTube yazıları / kontroller gizlenir, video pencereyi doldurur
                   try { old.web.evaluateJavascript(YT_MINI_CSS_ON_JS, null) } catch (_: Exception) { }
 
@@ -1669,7 +1696,15 @@ jobs:
                           }
                           MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                               if (!moved) {
-                                  if (e.actionMasked == MotionEvent.ACTION_UP) expandMini(1f)
+                                  // Tek dokunuş: oynat / duraklat (başlık/expand yok)
+                                  if (e.actionMasked == MotionEvent.ACTION_UP) {
+                                      try {
+                                          miniTab?.web?.evaluateJavascript(
+                                              "(function(){window.__rotaWas=false;var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();",
+                                              null
+                                          )
+                                      } catch (_: Exception) { }
+                                  }
                               } else {
                                   val web = miniTab?.web
                                   if (web != null) {
@@ -1730,28 +1765,38 @@ jobs:
 
               /** Küçük pencereden PiP'e girilmişse, PiP'ten dönünce video büyük ekranda temiz bir görünümle, kaldığı saniyeden açılır. */
               private fun reopenAfterMiniPip() {
+                  // PiP'ten dönüş: sayfayı yeniden yükleme — normal tam ekran YouTube gibi devam
                   val t = tabs.getOrNull(cur) ?: return
                   val w = t.web
-                  w.scaleX = 1f
-                  w.scaleY = 1f
-                  w.translationX = 0f
-                  w.translationY = 0f
-                  w.clipBounds = null
-                  w.clipToOutline = false
-                  w.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                  w.requestLayout()
-                  val url = t.url
-                  if (!url.contains("youtube.com/watch")) return
                   try {
-                      w.evaluateJavascript("(function(){var v=document.querySelector('video');return v&&isFinite(v.currentTime)?Math.floor(v.currentTime):-1;})();") { r ->
-                          val sec = r?.trim()?.toIntOrNull() ?: -1
-                          if (sec >= 0 && tabs.getOrNull(cur) === t) {
-                              val base = url.replace(Regex("([?&])t=[^&]*"), "").trimEnd('?', '&')
-                              val sep = if (base.contains("?")) "&" else "?"
-                              w.loadUrl(base + sep + "t=" + sec + "s")
-                          }
-                      }
+                      w.scaleX = 1f
+                      w.scaleY = 1f
+                      w.translationX = 0f
+                      w.translationY = 0f
+                      w.clipBounds = null
+                      w.clipToOutline = false
+                      w.layoutParams = FrameLayout.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                      )
+                      w.requestLayout()
                   } catch (_: Exception) { }
+                  try { w.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
+                  try {
+                      w.evaluateJavascript(
+                          "(function(){try{" +
+                          "window.__pipBlock=false;window.__userPause=false;" +
+                          "var v=document.querySelector('video');" +
+                          "if(v){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}}" +
+                          "var pl=document.querySelector('#movie_player,.html5-video-player');" +
+                          "if(pl){pl.classList.remove('ytp-fullscreen');}" +
+                          "}catch(e){}})();",
+                          null
+                      )
+                  } catch (_: Exception) { }
+                  try { w.onResume() } catch (_: Exception) { }
+                  setBarShown(true)
+                  syncUi()
+                  resumeMini(t)
               }
 
               /** Küçük pencerede video oynuyorsa arkadaki ön izlemeler durur; video duraklıysa ön izlemeler serbest. */
@@ -1802,6 +1847,7 @@ jobs:
               private fun finishExpand(mt: BTab) {
                   miniTab = null
                   mt.web.clipBounds = null
+                  try { mt.web.setLayerType(View.LAYER_TYPE_NONE, null) } catch (_: Exception) { }
                   roundMini(mt, false)
                   try { tabs.getOrNull(cur)?.let { capturePreview(it) } } catch (_: Exception) { }
                   shown?.let { try { content.removeView(it) } catch (_: Exception) { } }
@@ -5104,9 +5150,27 @@ jobs:
                   (function(){try{
                   var s=document.getElementById('__rota_mini_css');
                   if(!s){s=document.createElement('style');s.id='__rota_mini_css';document.documentElement.appendChild(s);}
-                  s.textContent='.html5-video-player>*:not(.html5-video-container){visibility:hidden!important}'+
-                  '.html5-video-player video{object-fit:cover!important}'+
-                  '.ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-youtube-button,.ytp-pause-overlay,.ytp-ce-element,.ytp-endscreen-content,.ytp-cards-teaser,.ytp-paid-content-overlay,.ytp-spinner,.annotation,[class*="player-controls"]{display:none!important}';
+                  // Sadece video: sayfa gövdesi ve oynatıcı dışı her şey gizlenir
+                  s.textContent=
+                  'html,body{background:#000!important;overflow:hidden!important;margin:0!important;padding:0!important;height:100%!important;width:100%!important}'+
+                  'body>*:not(#player):not(#player-container-outer):not(#player-container-inner):not(#player-container):not(#movie_player):not(.html5-video-player){visibility:hidden!important;pointer-events:none!important;opacity:0!important}'+
+                  '#player,#player-container-outer,#player-container-inner,#player-container,#movie_player,.html5-video-player{'+
+                  'position:fixed!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;'+
+                  'z-index:2147483646!important;background:#000!important;margin:0!important;padding:0!important;border:0!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}'+
+                  '.html5-video-container{position:absolute!important;inset:0!important;width:100%!important;height:100%!important}'+
+                  '.html5-video-player video,video.html5-main-video,video{'+
+                  'position:absolute!important;inset:0!important;width:100%!important;height:100%!important;'+
+                  'object-fit:contain!important;background:#000!important;visibility:visible!important;opacity:1!important}'+
+                  '.html5-video-player>*:not(.html5-video-container){display:none!important;visibility:hidden!important}'+
+                  '.ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-youtube-button,'+
+                  '.ytp-pause-overlay,.ytp-ce-element,.ytp-endscreen-content,.ytp-cards-teaser,.ytp-paid-content-overlay,'+
+                  '.ytp-spinner,.ytp-title,.ytp-title-text,.ytp-title-channel,.ytp-show-cards-title,.annotation,'+
+                  '[class*="player-controls"],.ytp-progress-bar-container,.ytp-progress-bar,.ytp-timed-markers-container,'+
+                  '.ytp-caption-window-container,.caption-window,ytm-pivot-bar-renderer,ytm-mobile-topbar-renderer,'+
+                  'ytm-app,ytm-watch,ytm-single-column-watch-next-results-renderer,#related,#comments,#masthead-container,'+
+                  '#secondary,#below,#info,#meta,#chat,#chat-container,.watch-below-the-player{display:none!important;visibility:hidden!important;height:0!important;overflow:hidden!important}';
+                  // Video elemanını görünür tut
+                  try{var v=document.querySelector('#movie_player video,video.html5-main-video,video');if(v){v.style.setProperty('visibility','visible','important');v.style.setProperty('opacity','1','important');}}catch(z){}
                   }catch(e){}})();
                   """
 
