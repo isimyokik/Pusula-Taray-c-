@@ -115,6 +115,9 @@ jobs:
                   <meta-data
                       android:name="com.google.android.gms.car.application"
                       android:resource="@xml/automotive_app_desc" />
+                  <meta-data
+                      android:name="com.google.android.gms.car.notification.SmallIcon"
+                      android:resource="@drawable/ic_notif" />
 
                   <service
                       android:name=".PlaybackService"
@@ -123,7 +126,9 @@ jobs:
 
                   <service
                       android:name=".RotaMediaBrowserService"
-                      android:exported="true">
+                      android:exported="true"
+                      android:label="@string/app_name"
+                      android:icon="@drawable/ic_launcher">
                       <intent-filter>
                           <action android:name="android.media.browse.MediaBrowserService" />
                       </intent-filter>
@@ -5159,95 +5164,88 @@ jobs:
                             }catch(e){}})();
                             """
 
-                  // YouTube Music: play/pause ripple + oynatıcıyı parmakla yumuşak kaydırarak küçült
+                  // YouTube Music: play/pause = ileri/geri ripple; aşağı kaydır = küçült tuşu
                   const val YT_MUSIC_UX_JS =
                       "(function(){try{" +
                       "if(location.hostname.indexOf('music.youtube.com')<0)return;" +
-                      "if(window.__rotaMusicUx)return;window.__rotaMusicUx=1;" +
-                      // 1) Oynat/duraklat için ileri-geri gibi yuvarlak şeffaf ripple
-                      "var st=document.createElement('style');st.id='__rota_ytm_ux';" +
+                      "if(window.__rotaMusicUx2)return;window.__rotaMusicUx2=1;" +
+                      "var st=document.createElement('style');st.id='__rota_ytm_ux2';" +
                       "st.textContent='" +
-                      "#play-pause-button,ytmusic-play-button-renderer,tp-yt-paper-icon-button.play-pause-button," +
-                      ".play-pause-button,ytmusic-player-bar #play-pause-button{" +
-                      "position:relative!important;overflow:visible!important;border-radius:50%!important;}" +
-                      "#play-pause-button::after,ytmusic-play-button-renderer::after{" +
-                      "content:\\'\\';position:absolute;left:50%;top:50%;width:0;height:0;" +
-                      "border-radius:50%;background:rgba(255,255,255,.28);transform:translate(-50%,-50%);" +
-                      "pointer-events:none;opacity:0;transition:width .35s ease,height .35s ease,opacity .4s ease;}" +
-                      "#play-pause-button.__rotaRipple::after,ytmusic-play-button-renderer.__rotaRipple::after{" +
-                      "width:72px;height:72px;opacity:1;transition:width .2s ease,height .2s ease,opacity .15s ease;}" +
-                      "ytmusic-player-page#player-page{transition:transform .38s cubic-bezier(.22,.9,.3,1),opacity .3s ease!important;" +
-                      "will-change:transform;}" +
-                      "ytmusic-player-page#player-page.__rotaDrag{transition:none!important;}" +
+                      // Play/pause: ileri-geri ikon düğmeleriyle aynı tıklama halkası
+                      "#play-pause-button,ytmusic-player-bar #play-pause-button," +
+                      "ytmusic-player-bar .play-pause-button,ytmusic-play-button-renderer{" +
+                      "position:relative!important;overflow:visible!important;}" +
+                      ".__rotaInk{position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;" +
+                      "border-radius:50%;background:rgba(255,255,255,.35);pointer-events:none;" +
+                      "transform:scale(0);opacity:.9;transition:transform .28s ease-out,opacity .32s ease-out;z-index:5}" +
                       "';document.documentElement.appendChild(st);" +
-                      "function rippleTarget(el){" +
-                      "if(!el||!el.closest)return null;" +
-                      "return el.closest('#play-pause-button,ytmusic-play-button-renderer,.play-pause-button')||" +
-                      "(el.id==='play-pause-button'?el:null);" +
+                      "function inkOn(el){" +
+                      "if(!el)return;" +
+                      "var host=el.closest('#play-pause-button,ytmusic-play-button-renderer,.play-pause-button')||el;" +
+                      "try{if(getComputedStyle(host).position==='static')host.style.position='relative';}catch(z){}" +
+                      "var ink=document.createElement('span');ink.className='__rotaInk';host.appendChild(ink);" +
+                      "requestAnimationFrame(function(){ink.style.transform='scale(9)';ink.style.opacity='0';});" +
+                      "setTimeout(function(){try{ink.remove();}catch(z){}},360);" +
                       "}" +
-                      "function flashRipple(btn){" +
-                      "if(!btn)return;btn.classList.add('__rotaRipple');" +
-                      "setTimeout(function(){try{btn.classList.remove('__rotaRipple');}catch(z){}},320);" +
-                      "}" +
-                      "document.addEventListener('pointerdown',function(e){var b=rippleTarget(e.target);if(b)flashRipple(b);},true);" +
-                      // 2) Tam oynatıcıyı aşağı kaydırarak kapat (lastik hissi)
-                      "var drag=false,sy=0,dy=0,page=null;" +
-                      "function playerPage(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}" +
-                      "function isOpen(p){" +
-                      "if(!p)return false;" +
-                      "var s=window.getComputedStyle(p);" +
-                      "if(s.display==='none'||s.visibility==='hidden')return false;" +
-                      "var r=p.getBoundingClientRect();return r.height>window.innerHeight*0.45;" +
-                      "}" +
-                      "function collapse(){" +
-                      "var p=playerPage();if(!p)return;" +
-                      "p.classList.remove('__rotaDrag');" +
-                      "p.style.transform='';" +
-                      // Önce tırnak / geri / kapat düğmesi
-                      "var btn=document.querySelector('ytmusic-player-page [aria-label*=\"Aşağı\"],ytmusic-player-page [aria-label*=\"Down\"]," +
-                      "ytmusic-player-page [aria-label*=\"Küçült\"],ytmusic-player-page [aria-label*=\"Minimize\"]," +
-                      "ytmusic-player-page .previous-button,tp-yt-paper-icon-button.toggle-player," +
-                      "#movie-bg,#layout ytmusic-player-page .close-button');" +
-                      "var tab=document.querySelector('ytmusic-app-layout #player-bar-background,ytmusic-player-bar');" +
+                      "document.addEventListener('pointerdown',function(e){" +
+                      "var t=e.target;" +
+                      "if(!t||!t.closest)return;" +
+                      "var b=t.closest('#play-pause-button,ytmusic-play-button-renderer,.play-pause-button');" +
+                      "if(b)inkOn(b);" +
+                      "},true);" +
+                      // Gerçek küçültme: YT Music'in kendi toggle/kapat yolunu kullan
+                      "function minimizePlayer(){" +
                       "try{" +
-                      "var tgl=document.querySelector('ytmusic-app-layout');" +
-                      "if(tgl){tgl.setAttribute('player-page-open_',false);tgl.removeAttribute('player-page-open_');}" +
-                      "}catch(z){}" +
-                      "try{var b2=document.querySelector('ytmusic-player-page .toggle-player,ytmusic-player-page #toggle-player');if(b2)b2.click();}" +
-                      "catch(z){}" +
-                      "try{if(tab)tab.click();}catch(z){}" +
+                      "var sels=[" +
+                      "'ytmusic-player-page tp-yt-paper-icon-button.toggle-player'," +
+                      "'ytmusic-player-page .toggle-player'," +
+                      "'#player-page .toggle-player'," +
+                      "'ytmusic-player-page [aria-label*=\"Aşağı\" i]'," +
+                      "'ytmusic-player-page [aria-label*=\"Down\" i]'," +
+                      "'ytmusic-player-page [aria-label*=\"Collapse\" i]'," +
+                      "'ytmusic-player-page [aria-label*=\"Minimize\" i]'," +
+                      "'ytmusic-player-page [aria-label*=\"Küçült\" i]'" +
+                      "];" +
+                      "for(var i=0;i<sels.length;i++){" +
+                      "var el=document.querySelector(sels[i]);" +
+                      "if(el){el.click();return true;}" +
                       "}" +
+                      // Polymer / app-layout bayrağı
+                      "var layout=document.querySelector('ytmusic-app-layout,#layout');" +
+                      "if(layout){" +
+                      "try{if('playerPageOpen_' in layout){layout.playerPageOpen_=false;return true;}}catch(z){}" +
+                      "try{layout.removeAttribute('player-page-open_');layout.setAttribute('player-ui-state_','PLAYER_BAR_ONLY');}catch(z){}" +
+                      "}" +
+                      "var bar=document.querySelector('ytmusic-player-bar,#player-bar-background');" +
+                      "if(bar){bar.click();return true;}" +
+                      "}catch(e){}" +
+                      "return false;" +
+                      "}" +
+                      "function pageOpen(){" +
+                      "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');" +
+                      "if(!p)return false;" +
+                      "var r=p.getBoundingClientRect();" +
+                      "return r.height>window.innerHeight*0.4 && r.width>0;" +
+                      "}" +
+                      "var drag=false,sy=0,dy=0,moved=false;" +
                       "document.addEventListener('touchstart',function(e){" +
-                      "page=playerPage();if(!page||!isOpen(page))return;" +
+                      "if(!pageOpen())return;" +
                       "var t=e.touches&&e.touches[0];if(!t)return;" +
-                      // Üst bölgeden veya genel sayfadan dikey sürükleme
-                      "var r=page.getBoundingClientRect();" +
-                      "if(t.clientY>r.top+Math.min(180,r.height*0.35))return;" +
-                      "sy=t.clientY;dy=0;drag=true;page.classList.add('__rotaDrag');" +
-                      "}, {passive:true,capture:true});" +
+                      // Kaydırma çubuğu / progress'e dokunuluyorsa karışma
+                      "var tg=e.target;" +
+                      "if(tg&&tg.closest&&tg.closest('ytmusic-player-bar #progress-bar,tp-yt-paper-slider,#progress-bar,input[type=range]'))return;" +
+                      "sy=t.clientY;dy=0;moved=false;drag=true;" +
+                      "},{passive:true,capture:true});" +
                       "document.addEventListener('touchmove',function(e){" +
-                      "if(!drag||!page)return;" +
+                      "if(!drag)return;" +
                       "var t=e.touches&&e.touches[0];if(!t)return;" +
-                      "dy=Math.max(0,t.clientY-sy);" +
-                      // Lastik: dirençli kayma
-                      "var resist=dy<0?0:(dy*0.85);" +
-                      "page.style.transform='translate3d(0,'+resist+'px,0)';" +
-                      "page.style.opacity=String(Math.max(0.35,1-resist/window.innerHeight));" +
-                      "try{e.preventDefault();}catch(z){}" +
-                      "},{passive:false,capture:true});" +
+                      "dy=t.clientY-sy;" +
+                      "if(Math.abs(dy)>12)moved=true;" +
+                      "},{passive:true,capture:true});" +
                       "document.addEventListener('touchend',function(){" +
-                      "if(!drag||!page)return;drag=false;" +
-                      "page.classList.remove('__rotaDrag');" +
-                      "if(dy>110){" +
-                      "page.style.transition='transform .4s cubic-bezier(.22,.9,.3,1),opacity .35s ease';" +
-                      "page.style.transform='translate3d(0,100%,0)';page.style.opacity='0';" +
-                      "var p=page;setTimeout(function(){try{p.style.transform='';p.style.opacity='';collapse();}catch(z){}},380);" +
-                      "}else{" +
-                      "page.style.transition='transform .4s cubic-bezier(.22,.9,.3,1),opacity .3s ease';" +
-                      "page.style.transform='translate3d(0,0,0)';page.style.opacity='1';" +
-                      "var p2=page;setTimeout(function(){try{p2.style.transform='';p2.style.opacity='';p2.style.transition='';}catch(z){}},420);" +
-                      "}" +
-                      "page=null;dy=0;" +
+                      "if(!drag)return;drag=false;" +
+                      // Aşağı anlamlı kaydırma → küçült tuşuyla aynı iş
+                      "if(moved&&dy>70){minimizePlayer();}" +
                       "},{passive:true,capture:true});" +
                       "}catch(e){}})();"
 
@@ -7197,31 +7195,80 @@ jobs:
           import androidx.media.MediaBrowserServiceCompat
 
           /**
-           * Android Auto medya tarayıcısı.
-           * Auto kendi yatay arayüzünü çizer: başlık, oynat/duraklat, sonraki/önceki, arama, listeler.
-           * WebView Auto'da açılamaz; çalma telefonda WebView üzerinden sürer.
+           * Android Auto medya servisi — kendi MediaSessionCompat'i ile listelenir.
+           * Çalma komutları telefona (MainActivity / WebView) yayınlanır.
            */
           class RotaMediaBrowserService : MediaBrowserServiceCompat() {
 
+              private var session: MediaSessionCompat? = null
+
               override fun onCreate() {
                   super.onCreate()
-                  // PlaybackService oturumu yoksa boş bir oturum ile Auto'ya bağlan
-                  val token = PlaybackService.sessionToken
-                  if (token != null) {
-                      try { sessionToken = MediaSessionCompat.Token.fromToken(token) } catch (_: Exception) { }
-                  }
-                  if (sessionToken == null) {
-                      // Servisi uyandır
-                      try {
-                          PlaybackService.update(this, false, "Rota", "Android Auto")
-                          PlaybackService.sessionToken?.let {
-                              sessionToken = MediaSessionCompat.Token.fromToken(it)
+                  val s = MediaSessionCompat(this, "RotaAuto")
+                  s.setFlags(
+                      MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+                          MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+                  )
+                  s.setCallback(object : MediaSessionCompat.Callback() {
+                      override fun onPlay() { send(PlaybackService.ACTION_PLAY) }
+                      override fun onPause() { send(PlaybackService.ACTION_PAUSE) }
+                      override fun onSkipToNext() { send(PlaybackService.ACTION_NEXT) }
+                      override fun onSkipToPrevious() { send(PlaybackService.ACTION_PREVIOUS) }
+                      override fun onSeekTo(pos: Long) {
+                          sendBroadcast(Intent(PlaybackService.ACTION_SEEK).setPackage(packageName).putExtra("pos", pos))
+                      }
+                      override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
+                          val id = mediaId ?: return
+                          if (id.startsWith("http")) {
+                              sendBroadcast(Intent(PlaybackService.ACTION_OPEN).setPackage(packageName).putExtra("url", id))
                           }
-                      } catch (_: Exception) { }
-                  }
+                      }
+                      override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+                          val q = query?.trim().orEmpty()
+                          if (q.isNotEmpty()) {
+                              sendBroadcast(Intent(PlaybackService.ACTION_SEARCH).setPackage(packageName).putExtra("q", q))
+                          }
+                      }
+                      override fun onCustomAction(action: String?, extras: Bundle?) {
+                          when (action) {
+                              "like" -> send(PlaybackService.ACTION_LIKE)
+                              "home" -> send(PlaybackService.ACTION_HOME)
+                          }
+                      }
+                  })
+                  s.setPlaybackState(
+                      PlaybackStateCompat.Builder()
+                          .setActions(
+                              PlaybackStateCompat.ACTION_PLAY or
+                                  PlaybackStateCompat.ACTION_PAUSE or
+                                  PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                                  PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                                  PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                                  PlaybackStateCompat.ACTION_SEEK_TO or
+                                  PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
+                                  PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
+                          )
+                          .setState(PlaybackStateCompat.STATE_PAUSED, 0, 1f)
+                          .build()
+                  )
+                  s.setMetadata(
+                      MediaMetadataCompat.Builder()
+                          .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Rota")
+                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, "Rota")
+                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, "Android Auto")
+                          .build()
+                  )
+                  s.isActive = true
+                  session = s
+                  sessionToken = s.sessionToken
+              }
+
+              private fun send(action: String) {
+                  sendBroadcast(Intent(action).setPackage(packageName))
               }
 
               override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
+                  // Auto / sistem medya tarayıcılarına izin ver
                   return BrowserRoot(ROOT, null)
               }
 
@@ -7230,18 +7277,24 @@ jobs:
                   val out = ArrayList<MediaBrowserCompat.MediaItem>()
                   when (parentId) {
                       ROOT -> {
-                          out.add(folder(HOME, "Ana sayfa · Önerilen"))
+                          out.add(folder(HOME, "Ana sayfa"))
                           out.add(folder(FAV, "Favoriler"))
                           out.add(folder(RECENT, "Son dinlenenler"))
                       }
                       HOME, RECENT -> {
-                          for (e in prefs.history().take(30)) {
+                          for (e in prefs.history().take(40)) {
                               if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
+                          }
+                          if (out.isEmpty()) {
+                              out.add(song("https://music.youtube.com/", "YouTube Music", "Aç"))
                           }
                       }
                       FAV -> {
                           for (e in prefs.bookmarks().take(40)) {
                               if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
+                          }
+                          if (out.isEmpty()) {
+                              out.add(song("https://music.youtube.com/", "Favori yok · Music aç", "YouTube Music"))
                           }
                       }
                   }
@@ -7253,18 +7306,21 @@ jobs:
                   val prefs = Prefs(this)
                   val out = ArrayList<MediaBrowserCompat.MediaItem>()
                   if (q.isNotEmpty()) {
-                      // Önce yerelden eşleşenler
-                      val all = prefs.bookmarks() + prefs.history()
-                      for (e in all) {
+                      val searchUrl = "https://music.youtube.com/search?q=" + android.net.Uri.encode(q)
+                      out.add(song(searchUrl, "\"$q\" ara", "YouTube Music"))
+                      for (e in (prefs.bookmarks() + prefs.history())) {
                           if (e.title.contains(q, true) || e.url.contains(q, true)) {
                               out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
                           }
                       }
-                      // YouTube Music araması (telefonda açılır / çalmaya hazırlanır)
-                      val searchUrl = "https://music.youtube.com/search?q=" + android.net.Uri.encode(q)
-                      out.add(0, song(searchUrl, "\"$q\" ara · YouTube Music", "YouTube Music"))
                   }
                   result.sendResult(out)
+              }
+
+              override fun onDestroy() {
+                  try { session?.isActive = false; session?.release() } catch (_: Exception) { }
+                  session = null
+                  super.onDestroy()
               }
 
               private fun folder(id: String, title: String): MediaBrowserCompat.MediaItem {
