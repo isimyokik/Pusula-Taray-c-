@@ -763,8 +763,10 @@ jobs:
                       }
                       if (pipFromMini) {
                           pipFromMini = false
-                          handler.postDelayed({ reopenAfterMiniPip() }, 300)
+                          handler.postDelayed({ reopenAfterMiniPip(false) }, 100)
                       }
+                      // PiP'ten büyüyünce video yarım/bozuk kalırsa önce düzeni yenile, olmazsa kaldığı saniyeden yeniden yükle
+                      handler.postDelayed({ checkAfterPip(0) }, 800)
                   }
               }
 
@@ -1729,20 +1731,20 @@ jobs:
                       val b2 = TextView(this)
                       b2.text = txt
                       b2.textSize = 15f
-                      b2.setTextColor(Color.WHITE)
+                      b2.setTextColor(0xCCDADADA.toInt())
                       b2.gravity = Gravity.CENTER
                       b2.background = shape(0x99000000.toInt(), 16)
                       b2.setOnClickListener { act() }
                       ov.addView(b2, FrameLayout.LayoutParams(dp(34), dp(34), g).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
                       return b2
                   }
-                  miniPlayBtn = pill("⏸", Gravity.TOP or Gravity.START) {
+                  miniPlayBtn = pill("❚❚", Gravity.TOP or Gravity.START) {
                       val mt = miniTab
                       if (mt != null) {
                           // Bildirimdeki oynat/durdur ile aynı komut: sayfanın duraklatma engeline takılmaz
                           try { mt.web.evaluateJavascript("window.__rotaWas=false;", null) } catch (_: Exception) { }
                           try { mt.web.evaluateJavascript(MEDIA_TOGGLE_FAST_JS, null) } catch (_: Exception) { }
-                          miniPlayBtn?.text = if (miniPlayBtn?.text == "⏸") "▶" else "⏸"
+                          miniPlayBtn?.text = if (miniPlayBtn?.text?.toString() == "❚❚") "▶\uFE0E" else "❚❚"
                           handler.postDelayed({ miniSyncBtn() }, 400)
                       }
                   }
@@ -1757,7 +1759,7 @@ jobs:
               }
 
               /** Küçük pencereden PiP'e girilmişse, PiP'ten dönünce video büyük ekranda temiz bir görünümle, kaldığı saniyeden açılır. */
-              private fun reopenAfterMiniPip() {
+              private fun reopenAfterMiniPip(reload: Boolean) {
                   val t = tabs.getOrNull(cur) ?: return
                   val w = t.web
                   w.scaleX = 1f
@@ -1769,7 +1771,7 @@ jobs:
                   w.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                   w.requestLayout()
                   val url = t.url
-                  if (!url.contains("youtube.com/watch")) return
+                  if (!reload || !url.contains("youtube.com/watch")) return
                   try {
                       w.evaluateJavascript("(function(){var v=document.querySelector('video');return v&&isFinite(v.currentTime)?Math.floor(v.currentTime):-1;})();") { r ->
                           val sec = r?.trim()?.toIntOrNull() ?: -1
@@ -1782,6 +1784,23 @@ jobs:
                   } catch (_: Exception) { }
               }
 
+              private fun checkAfterPip(attempt: Int) {
+                  val t = tabs.getOrNull(cur) ?: return
+                  if (isInPictureInPictureMode || miniTab != null) return
+                  try {
+                      t.web.evaluateJavascript(PIP_LAYOUT_CHECK_JS) { r ->
+                          if (r != null && r.contains("bad") && tabs.getOrNull(cur) === t && !isInPictureInPictureMode) {
+                              if (attempt == 0) {
+                                  try { t.web.evaluateJavascript(PIP_RELAYOUT_JS, null) } catch (_: Exception) { }
+                                  handler.postDelayed({ checkAfterPip(1) }, 900)
+                              } else {
+                                  reopenAfterMiniPip(true)
+                              }
+                          }
+                      }
+                  } catch (_: Exception) { }
+              }
+
               /** Küçük pencerede video oynuyorsa arkadaki ön izlemeler durur; video duraklıysa ön izlemeler serbest. */
               private val miniPoll = object : Runnable {
                   override fun run() {
@@ -1789,7 +1808,7 @@ jobs:
                       try {
                           mt.web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})();") { r ->
                               if (miniTab === mt) {
-                                  miniPlayBtn?.text = if (r == "true") "⏸" else "▶"
+                                  miniPlayBtn?.text = if (r == "true") "❚❚" else "▶\uFE0E"
                                   val fg = tabs.getOrNull(cur)
                                   if (fg != null && fg !== mt) {
                                       try { fg.web.evaluateJavascript("window.__rotaNoPreview=" + (r == "true") + ";", null) } catch (_: Exception) { }
@@ -1806,7 +1825,7 @@ jobs:
                   val mt = miniTab ?: return
                   try {
                       mt.web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})();") { r ->
-                          if (miniTab === mt) miniPlayBtn?.text = if (r == "true") "⏸" else "▶"
+                          if (miniTab === mt) miniPlayBtn?.text = if (r == "true") "❚❚" else "▶\uFE0E"
                       }
                   } catch (_: Exception) { }
               }
@@ -5284,6 +5303,26 @@ jobs:
                       "if(window.__pipFlash)window.__pipFlash();return;}" +
                       "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
                       "if(b)b.click();" +
+                      "}catch(e){}})();"
+
+                  // PiP'ten dönünce video düzeni bozuk mu? (oynatıcı sayfa genişliğinden dar ya da PiP stili kalmış)
+                  const val PIP_LAYOUT_CHECK_JS =
+                      "(function(){try{" +
+                      "if(location.pathname.indexOf('/watch')!==0)return 'ok';" +
+                      "var p=document.querySelector('#movie_player,.html5-video-player');if(!p)return 'ok';" +
+                      "var r=p.getBoundingClientRect();" +
+                      "var bad=r.width<window.innerWidth*0.9||r.height<60||document.getElementById('__pip')!==null||document.querySelector('.__pipv')!==null;" +
+                      "return bad?'bad':'ok';" +
+                      "}catch(e){return 'ok';}})();"
+
+                  const val PIP_RELAYOUT_JS =
+                      "(function(){try{" +
+                      "var s=document.getElementById('__pip');if(s)s.remove();" +
+                      "var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
+                      "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
+                      "var p=document.querySelector('.html5-video-player');if(p)p.classList.remove('ytp-pause-overlay');" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v){try{v.style.cssText='';}catch(z){}}" +
+                      "window.dispatchEvent(new Event('resize'));" +
                       "}catch(e){}})();"
 
                   const val MEDIA_PAUSE_FAST_JS =
