@@ -980,10 +980,17 @@ jobs:
                       if (hasMedia && lastPlaying) {
                           try {
                               currentWeb()?.evaluateJavascript(
-                                  "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){" +
+                                  "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                                   "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                           } catch (_: Exception) { }
                           PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      } else {
+                          // Kullanıcı durdurmuşsa arka planda tekrar başlatma
+                          try {
+                              currentWeb()?.evaluateJavascript(
+                                  "(function(){try{window.__userPause=true;document.querySelectorAll('video,audio').forEach(function(m){" +
+                                  "m.dataset.pusulaWasPlaying='';});}catch(e){}})();", null)
+                          } catch (_: Exception) { }
                       }
                   } else {
                       appInBackground = true
@@ -5032,6 +5039,14 @@ jobs:
                           "document.addEventListener('visibilitychange',function(e){" +
                           "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
                           "e.stopImmediatePropagation();},true);" +
+                          // Kullanıcı durdurduysa arka planda tekrar başlatma
+                          "document.addEventListener('pause',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                          "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
+                          "if(window.__pipBlock&&!window.__userPause)return;" +
+                          "m.dataset.pusulaWasPlaying='';}catch(z){}},true);" +
+                          "document.addEventListener('play',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                          "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
+                          "m.dataset.pusulaWasPlaying='1';window.__userPause=false;}catch(z){}},true);" +
                           "}catch(e){}})();"
 
                   // Reklam sırasında: siyah bekleme ekranı örtülür, ses tamamen kısılır, altyazı ve reklam arayüzü gizlenir,
@@ -5323,6 +5338,7 @@ jobs:
 
                   const val BACKGROUND_MEDIA_JS =
                       "(function(){try{" +
+                          "if(window.__userPause)return;" +
                           "document.querySelectorAll('video,audio').forEach(function(m){" +
                           "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                           "});" +
@@ -5383,9 +5399,11 @@ jobs:
                       "if(location.pathname.indexOf('/watch')===0&&window.scrollY>0&&window.scrollY<160)window.scrollTo(0,0);" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
+                      "var mc=document.getElementById('__rota_mini_css');if(mc)mc.remove();" +
                       "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
                       "var p=document.querySelector('.html5-video-player');if(p)p.classList.remove('ytp-pause-overlay');" +
-                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v){try{v.style.cssText='';}catch(z){}}" +
+                      "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
+                      "if(v){try{v.style.removeProperty('transform');v.style.removeProperty('object-fit');v.style.removeProperty('object-position');}catch(z){}}" +
                       "window.dispatchEvent(new Event('resize'));" +
                       "}catch(e){}})();"
 
