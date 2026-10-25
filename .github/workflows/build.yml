@@ -1516,6 +1516,29 @@ jobs:
                       @android.webkit.JavascriptInterface
                       fun end(dy: Double, x: Double, cancel: Boolean) { handler.post { miniDragEnd(dy, cancel) } }
                   }, "RotaMini")
+                  web.addJavascriptInterface(object {
+                      @android.webkit.JavascriptInterface
+                      fun tap(fx: Double, fy: Double) {
+                          handler.post {
+                              try {
+                                  val px = (fx * web.width).toFloat()
+                                  val py = (fy * web.height).toFloat()
+                                  val t0 = android.os.SystemClock.uptimeMillis()
+                                  val dn = android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_DOWN, px, py, 0)
+                                  web.dispatchTouchEvent(dn)
+                                  dn.recycle()
+                                  handler.postDelayed({
+                                      try {
+                                          val t1 = android.os.SystemClock.uptimeMillis()
+                                          val upE = android.view.MotionEvent.obtain(t0, t1, android.view.MotionEvent.ACTION_UP, px, py, 0)
+                                          web.dispatchTouchEvent(upE)
+                                          upE.recycle()
+                                      } catch (_: Exception) { }
+                                  }, 60)
+                              } catch (_: Exception) { }
+                          }
+                      }
+                  }, "RotaTap")
                   web.webViewClient = makeClient(tab)
                   web.webChromeClient = makeChrome(tab)
                   tabs.add(tab)
@@ -5274,6 +5297,13 @@ jobs:
                       "try{el.dispatchEvent(new C(t,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,view:window,button:0,pointerType:'touch',isPrimary:true}));}catch(z){}\n" +
                       "});\n" +
                       "}\n" +
+                      "function tryNative(){\n" +
+                      "if(!window.RotaTap)return false;\n" +
+                      "var x=45,y=32,el=findChevron();\n" +
+                      "if(el){var r=el.getBoundingClientRect();if(r.width>0&&r.top<200&&r.left<200){x=r.left+r.width/2;y=r.top+r.height/2;}}\n" +
+                      "window.RotaTap.tap(x/window.innerWidth,y/window.innerHeight);\n" +
+                      "return true;\n" +
+                      "}\n" +
                       "function tryClick(){var el=findChevron();if(!el)return false;el.click();return true;}\n" +
                       "function tryTap(){var el=findChevron();if(!el)return false;fullTap(el);return true;}\n" +
                       "function tryLayout(){\n" +
@@ -5356,7 +5386,7 @@ jobs:
                       "pg.style.setProperty('opacity','0','important');\n" +
                       "pg.style.removeProperty('transform');\n" +
                       "pg.style.removeProperty('border-radius');\n" +
-                      "var tries=[tryClick,tryTap,tryLayout],i=0;\n" +
+                      "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n" +
                       "function success(){\n" +
                       "pg.style.removeProperty('opacity');\n" +
                       "clean();\n" +
@@ -5376,7 +5406,7 @@ jobs:
                       "var sig0=layoutSig();\n" +
                       "setTimeout(function(){\n" +
                       "if(!openNow()||layoutSig()!==sig0)success();else next();\n" +
-                      "},450);\n" +
+                      "},600);\n" +
                       "}\n" +
                       "next();\n" +
                       "}\n" +
@@ -7794,7 +7824,7 @@ jobs:
                           .put("m", e.mime)
                           .put("ts", e.time))
                   }
-                  sp.edit().putString("downloads", arr.toString()).apply()
+                  sp.edit().putString("downloaerrorarr.toString()).apply()
               }
 
               fun clearDownloads() { sp.edit().putString("downloads", "[]").apply() }
