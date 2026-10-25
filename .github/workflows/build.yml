@@ -576,6 +576,7 @@ jobs:
               private var mdOld: BTab? = null
               private var mdPeek: BTab? = null
               private var mdClipH = 0
+              private var mdTop = 0
               private var miniH = 0
               private var miniS = 1f
               private var miniTx = 0f
@@ -760,10 +761,8 @@ jobs:
                           PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                       }
                       if (pipFromMini) {
-                          // Küçük pencere hiç yokmuş gibi: video normal büyük sekme olarak kalır, sayfa yeniden yüklenmez
                           pipFromMini = false
-                          handler.post { sanitizeAfterMiniPip() }
-                          handler.postDelayed({ sanitizeAfterMiniPip() }, 300)
+                          handler.postDelayed({ reopenAfterMiniPip() }, 300)
                       }
                   }
               }
@@ -794,15 +793,6 @@ jobs:
                                   "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(v)v.currentTime=" + sec + ";}catch(e){}})();", null)
                           } catch (_: Exception) { }
                           return
-                      }
-                      if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
-                          // GEÇİCİ TEŞHİS: tuşa basınca hangi sekmeye ne gittiğini ve videonun durumunu ekranda gösterir
-                          val dt = miniTab ?: tabs.getOrNull(cur)
-                          val lab = act.substringAfterLast('_') + " mini=" + (miniTab != null) + " cur=" + cur + "/" + tabs.size + " pip=" + isInPictureInPictureMode + " bg=" + appInBackground + " | "
-                          try { dt?.web?.evaluateJavascript(DIAG_JS) { r -> toast(lab + (r ?: "null")) } } catch (_: Exception) { }
-                          handler.postDelayed({
-                              try { dt?.web?.evaluateJavascript(DIAG_JS) { r -> toast("SONRA | " + (r ?: "null")) } } catch (_: Exception) { }
-                          }, 1500L)
                       }
                       val js = when (act) {
                           PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
@@ -1388,7 +1378,7 @@ jobs:
                   }, "RotaDl")
                   web.addJavascriptInterface(object {
                       @android.webkit.JavascriptInterface
-                      fun start(bottom: Double) { handler.post { if (tabs.getOrNull(cur) === tab) miniDragStart(bottom) } }
+                      fun start(bottom: Double, top: Double) { handler.post { if (tabs.getOrNull(cur) === tab) miniDragStart(bottom, top) } }
                       @android.webkit.JavascriptInterface
                       fun move(dy: Double, x: Double) { handler.post { miniDragMove(dy) } }
                       @android.webkit.JavascriptInterface
@@ -1497,7 +1487,7 @@ jobs:
                   t.web.scaleX = sc
                   t.web.scaleY = sc
                   t.web.translationX = miniTx * q
-                  t.web.translationY = miniCy * q
+                  t.web.translationY = (miniCy - mdTop) * q
               }
 
               /** Görünmez yüklenen arka sayfayı açar ve flu görüntüyü kaldırır. */
@@ -1520,7 +1510,7 @@ jobs:
                   if (on) {
                       t.web.outlineProvider = object : android.view.ViewOutlineProvider() {
                           override fun getOutline(v: View, o: android.graphics.Outline) {
-                              o.setRoundRect(0, 0, v.width, mdClipH.coerceAtLeast(1), dp(18).toFloat())
+                              o.setRoundRect(0, mdTop, v.width, mdTop + mdClipH.coerceAtLeast(1), dp(18).toFloat())
                           }
                       }
                       t.web.clipToOutline = true
@@ -1549,7 +1539,7 @@ jobs:
               }
 
               /** Video aşağı çekilmeye başladı: video yalnızca oynatıcı kısmı olarak ayrılır, arka sayfa flulaştırılmış görüntüye döner (kasmasın). */
-              private fun miniDragStart(bottomCss: Double) {
+              private fun miniDragStart(bottomCss: Double, topCss: Double) {
                   if (mdOld != null) return
                   val old = tabs.getOrNull(cur) ?: return
                   if (old.incognito || !old.url.contains("youtube.com/watch")) return
@@ -1568,7 +1558,10 @@ jobs:
                       }
                   } catch (_: Exception) { }
                   mdBack = back
-                  val clipH = miniPx(bottomCss).toInt().coerceIn(dp(120), h)
+                  val topPx = miniPx(topCss).toInt().coerceIn(0, (h - dp(120)).coerceAtLeast(0))
+                  val botPx = miniPx(bottomCss).toInt().coerceIn(topPx + dp(120), h.coerceAtLeast(topPx + dp(120)))
+                  val clipH = botPx - topPx
+                  mdTop = topPx
                   // Arka plan: küçültülüp büyütülmüş (flu) anlık görüntü; sayfa çizilmediği için sürükleme akıcı kalır
                   val blur = android.widget.ImageView(this)
                   try {
@@ -1597,8 +1590,8 @@ jobs:
                   miniTyT = dp(12).toFloat()
                   miniCy = miniTy
                   old.web.pivotX = 0f
-                  old.web.pivotY = 0f
-                  old.web.clipBounds = android.graphics.Rect(0, 0, w, clipH)
+                  old.web.pivotY = topPx.toFloat()
+                  old.web.clipBounds = android.graphics.Rect(0, topPx, w, botPx)
                   roundMini(old, true)
                   mdLastDy = 0f
                   mdLastT = android.os.SystemClock.uptimeMillis()
@@ -1608,7 +1601,7 @@ jobs:
               private fun miniDragMove(dyCss: Double) {
                   if (mdOld == null) return
                   val dy = miniPx(dyCss)
-                  applyMini(dy / miniTy)
+                  applyMini(dy / (miniTy - mdTop).coerceAtLeast(1f))
                   val now = android.os.SystemClock.uptimeMillis()
                   if (now > mdLastT) mdVel = (dy - mdLastDy) / (now - mdLastT) * 1000f
                   mdLastDy = dy
@@ -1618,7 +1611,7 @@ jobs:
               private fun miniDragEnd(dyCss: Double, cancel: Boolean) {
                   val old = mdOld ?: return
                   val dy = miniPx(dyCss)
-                  val p = (dy / miniTy).coerceIn(0f, 1f)
+                  val p = (dy / (miniTy - mdTop).coerceAtLeast(1f)).coerceIn(0f, 1f)
                   val commit = !cancel && (p > 0.3f || (mdVel > 900f && dy > dp(40)))
                   if (commit) animMini(p, 1f, 200) { commitMini() }
                   else animMini(p, 0f, 180) { abortMini(old) }
@@ -1684,7 +1677,7 @@ jobs:
                                   val tx = (baseTx + dx).coerceIn(0f, (content.width - mw).toFloat())
                                   val ty = (baseTy + dy).coerceIn(0f, (content.height - miniH).toFloat())
                                   miniTab?.web?.translationX = tx
-                                  miniTab?.web?.translationY = ty
+                                  miniTab?.web?.translationY = ty - mdTop
                                   ov.translationX = tx - miniTxR
                                   ov.translationY = ty - miniTy
                               }
@@ -1696,11 +1689,11 @@ jobs:
                                   val web = miniTab?.web
                                   if (web != null) {
                                       val cx = web.translationX + mw / 2f
-                                      val cy = web.translationY + miniH / 2f
+                                      val cy = web.translationY + mdTop + miniH / 2f
                                       val toX = if (cx < content.width / 2f) miniTxL else miniTxR
                                       val toY = if (cy < content.height / 2f) miniTyT else miniTy
                                       val fx = web.translationX
-                                      val fy = web.translationY
+                                      val fy = web.translationY + mdTop
                                       val a = android.animation.ValueAnimator.ofFloat(0f, 1f)
                                       a.duration = 200
                                       a.interpolator = android.view.animation.DecelerateInterpolator(1.4f)
@@ -1709,7 +1702,7 @@ jobs:
                                           val vx = fx + (toX - fx) * f
                                           val vy = fy + (toY - fy) * f
                                           miniTab?.web?.translationX = vx
-                                          miniTab?.web?.translationY = vy
+                                          miniTab?.web?.translationY = vy - mdTop
                                           ov.translationX = vx - miniTxR
                                           ov.translationY = vy - miniTy
                                       }
@@ -1750,29 +1743,7 @@ jobs:
                   resumeMini(old)
               }
 
-              /** Küçük pencereden PiP'e girilmişse, PiP'ten dönünce küçük pencereden kalan her şey (ölçek, kırpma, stil) temizlenir. */
-              private fun sanitizeAfterMiniPip() {
-                  val t = tabs.getOrNull(cur) ?: return
-                  val w = t.web
-                  w.scaleX = 1f
-                  w.scaleY = 1f
-                  w.translationX = 0f
-                  w.translationY = 0f
-                  w.clipBounds = null
-                  w.clipToOutline = false
-                  w.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                  w.requestLayout()
-                  try { w.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
-                  try {
-                      // Küçük pencere / PiP'ten kalan bayraklar ve duraklatma engeli temizlenir: oynat-durdur tuşları normal çalışsın
-                      w.evaluateJavascript("(function(){try{var s=document.getElementById('__pip');if(s)s.remove();" +
-                          "window.__rotaWas=false;window.__pipBlock=false;window.__userPause=false;" +
-                          "if(window.__op){try{HTMLMediaElement.prototype.pause=window.__op;}catch(z){}window.__op=null;}" +
-                          "window.dispatchEvent(new Event('resize'));}catch(e){}})();", null)
-                  } catch (_: Exception) { }
-              }
-
-              /** (Eski) PiP'ten dönünce videoyu kaldığı saniyeden yeniden yükleyerek açardı; artık kullanılmıyor. */
+              /** Küçük pencereden PiP'e girilmişse, PiP'ten dönünce video büyük ekranda temiz bir görünümle, kaldığı saniyeden açılır. */
               private fun reopenAfterMiniPip() {
                   val t = tabs.getOrNull(cur) ?: return
                   val w = t.web
@@ -5138,7 +5109,7 @@ jobs:
                   started=true;
                   var v=document.querySelector('video');window.__rotaWas=!!(v&&!v.paused);
                   try{window.scrollTo(0,0);}catch(z){}
-                  try{window.RotaMini.start(pl.getBoundingClientRect().bottom);}catch(z){}
+                  try{var rr=pl.getBoundingClientRect();window.RotaMini.start(rr.bottom,rr.top);}catch(z){}
                   }
                   try{window.RotaMini.move(dy,lx);}catch(z){}
                   },{passive:false,capture:true});
@@ -5258,10 +5229,6 @@ jobs:
                           "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                           "});" +
                           "}catch(e){}})();"
-
-                  const val DIAG_JS =
-                      "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
-                      "return location.hostname.replace('www.','')+location.pathname+' v='+l.length+' ['+l.map(function(m){return (m.paused?'DURUK':'ÇALIYOR')+' vol'+Math.round(m.volume*100)+(m.muted?' muted':'')+' t'+Math.round(m.currentTime)+' rs'+m.readyState;}).join(', ')+'] blk='+!!window.__pipBlock+' up='+!!window.__userPause+' op='+!!window.__op+' rw='+!!window.__rotaWas;}catch(e){return 'hata '+e;}})();"
 
                   const val MEDIA_TOGGLE_JS =
                       "(function(){try{" +
