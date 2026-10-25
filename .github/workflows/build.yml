@@ -554,6 +554,7 @@ jobs:
               private var lastPlaying = false
               private var lastTitle = ""
               private var lastArtist = ""
+              private var lastArtUrl = ""
               private var sentPos = 0L
               private var sentAt = 0L
               private var sentPlaying = false
@@ -615,8 +616,8 @@ jobs:
                   val expected = if (sentPlaying) sentPos + (now - sentAt) else sentPos
                   val jumped = hasMedia && Math.abs(pos - expected) > 2500L
                   val playChanged = playing != lastPlaying
-                  val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || dur != lastDur || jumped
-                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastDur = dur
+                  val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
+                  hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
                   if (changed && (playing || PlaybackService.running)) {
                       sentPos = pos; sentAt = now; sentPlaying = playing
                       PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
@@ -4491,9 +4492,14 @@ jobs:
                       "if(site(t))t=(document.title||'').replace(/\\s*[-|]\\s*YouTube( Music)?\\s*$/i,'');" +
                       "var a=(md&&md.artist)||tx('ytmusic-player-bar .byline')||tx('.slim-owner-channel-name')||tx('ytm-slim-owner-renderer .slim-owner-channel-name')||'';" +
                       "var art='';" +
-                      "try{if(md&&md.artwork&&md.artwork.length){art=md.artwork[md.artwork.length-1].src||md.artwork[0].src||'';}}catch(x){}" +
-                      "if(!art){try{var ms=document.getElementsByTagName('meta');for(var i=0;i<ms.length;i++){var p=ms[i].getAttribute('property')||ms[i].getAttribute('name')||'';if(p==='og:image'||p==='twitter:image'){art=ms[i].getAttribute('content')||'';if(art)break;}}}catch(x){}}" +
-                      "if(!art){try{var img=document.querySelector('ytmusic-player-bar img,ytmusic-player-page img.image,ytm-player-microformat-renderer img,#movie_player .ytp-cued-thumbnail-overlay-image,ytd-video-owner-renderer img');if(img)art=img.src||img.getAttribute('src')||'';}catch(x){}}" +
+                      "var art='';var H=location.hostname;var yt=/youtube\\.com|youtu\\.be/i.test(H);var ytm=/music\\.youtube\\.com/i.test(H);" +
+                      "function ok(u){return !!u&&/^(https?:)?\\/\\//.test(u)&&!/(favicon|logo|yt_1200)/i.test(u);}" +
+                      "function fx(u){try{u=new URL(u,location.href).href;}catch(x){return '';}var m=u.match(/\\/\\/(?:i|img)\\.ytimg\\.com\\/vi(?:_webp)?\\/([\\w-]{11})\\//);if(m)return 'https://i.ytimg.com/vi/'+m[1]+'/mqdefault.jpg';return u.replace(/=w\\d+-h\\d+/,'=w512-h512');}" +
+                      "try{if(md&&md.artwork&&md.artwork.length){var bs=-1;for(var k=0;k<md.artwork.length;k++){var w=parseInt(String(md.artwork[k].sizes||'0').split('x')[0],10)||0;var sr=md.artwork[k].src;if(ok(sr)&&w>=bs){bs=w;art=sr;}}}}catch(x){}" +
+                      "if(!art&&ytm){try{var im=document.querySelector('ytmusic-player-bar img.image,ytmusic-player-bar img,#song-image img');var s2=im&&(im.currentSrc||im.src);if(ok(s2))art=s2;}catch(x){}}" +
+                      "if(!art&&yt){try{var vid=new URLSearchParams(location.search).get('v');if(!vid){var mm=location.pathname.match(/\\/(?:shorts|embed|live)\\/([\\w-]{11})/);if(mm)vid=mm[1];}if(vid&&/^[\\w-]{11}$/.test(vid))art='https://i.ytimg.com/vi/'+vid+'/mqdefault.jpg';}catch(x){}}" +
+                      "if(!art&&!yt){try{var mt=document.getElementsByTagName('meta');for(var q=0;q<mt.length;q++){var pp=mt[q].getAttribute('property')||mt[q].getAttribute('name')||'';if(pp==='og:image'||pp==='twitter:image'){var cc=mt[q].getAttribute('content')||'';if(ok(cc)){art=cc;break;}}}}catch(x){}}" +
+                      "if(art)art=fx(art);" +
                       "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a,d:(isFinite(v.duration)?Math.round(v.duration*1000):-1),c:Math.round((v.currentTime||0)*1000),art:art||''});" +
                       "}catch(e){return '';}})();"
                   const val KEEP_MEDIA_PLAYING_JS =
@@ -5679,6 +5685,9 @@ jobs:
                       override fun onPause() { send(ACTION_PAUSE) }
                       override fun onSkipToNext() { send(ACTION_NEXT) }
                       override fun onSkipToPrevious() { send(ACTION_PREVIOUS) }
+                      override fun onCustomAction(action: String, extras: android.os.Bundle?) {
+                          if (action == "close") closeAll()
+                      }
                       override fun onSeekTo(pos: Long) {
                           sendBroadcast(Intent(ACTION_SEEK).setPackage(packageName).putExtra("pos", pos))
                           position = pos
@@ -5690,6 +5699,17 @@ jobs:
               }
 
               private fun send(action: String) { sendBroadcast(Intent(action).setPackage(packageName)) }
+
+              private fun closeAll() {
+                  send(ACTION_PAUSE)
+                  playing = false
+                  idleHandler.removeCallbacks(idleStop)
+                  try { session?.isActive = false } catch (_: Exception) { }
+                  try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
+                  try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) } catch (_: Exception) { }
+                  foregroundStarted = false
+                  stopSelf()
+              }
 
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                   when (intent?.action) {
@@ -5710,10 +5730,7 @@ jobs:
                       }
                       ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
                       ACTION_CLOSE -> {
-                          send(ACTION_PAUSE)
-                          try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
-                          try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) } catch (_: Exception) { }
-                          stopSelf()
+                          closeAll()
                           return START_NOT_STICKY
                       }
                   }
@@ -5735,8 +5752,15 @@ jobs:
                           c.readTimeout = 5000
                           c.setRequestProperty("User-Agent", "Mozilla/5.0")
                           c.connect()
-                          val bmp = android.graphics.BitmapFactory.decodeStream(c.inputStream)
+                          var bmp = android.graphics.BitmapFactory.decodeStream(c.inputStream)
                           c.disconnect()
+                          if (bmp != null) {
+                              // Ortadan kare kırp (16:9 küçük resimlerde kapak ortada olur), en fazla 512px
+                              val side = Math.min(bmp.width, bmp.height)
+                              var sq = android.graphics.Bitmap.createBitmap(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side)
+                              if (side > 512) sq = android.graphics.Bitmap.createScaledBitmap(sq, 512, 512, true)
+                              bmp = sq
+                          }
                           if (bmp != null && artUrl == url) {
                               artBmp = bmp
                               // Ana thread'de bildirimi yenile
@@ -5769,6 +5793,7 @@ jobs:
                       (if (duration > 0) PlaybackState.ACTION_SEEK_TO else 0L)
                   s.setPlaybackState(PlaybackState.Builder()
                       .setActions(actions)
+                      .addCustomAction(PlaybackState.CustomAction.Builder("close", "Kapat", R.drawable.ic_close).build())
                       .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, position, 1f)
                       .build())
 
@@ -6217,6 +6242,11 @@ jobs:
           cat > app/src/main/res/drawable/ic_pip_prev.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
               <path android:fillColor="#FFFFFFFF" android:pathData="M8,8h8v32h-8zM40,8 L16,24 40,40z"/>
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_close.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z"/>
           </vector>
           EOF
           cat > app/src/main/res/drawable/ic_pip_next.xml <<'EOF'
