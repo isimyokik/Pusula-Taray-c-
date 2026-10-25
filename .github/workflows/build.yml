@@ -764,6 +764,7 @@ jobs:
                       }
                       // PiP'ten büyüyünce video yarım/bozuk kalırsa önce düzeni yenile, olmazsa kaldığı saniyeden yeniden yükle
                       handler.postDelayed({ checkAfterPip(0) }, 800)
+                      handler.postDelayed({ normalizeLater(tabs.getOrNull(cur)) }, 700)
                   }
               }
 
@@ -1629,6 +1630,7 @@ jobs:
                   roundMini(old, false)
                   removeMiniBlur(120)
                   resumeMini(old)
+                  normalizeLater(old)
               }
 
               private fun commitMini() {
@@ -1781,9 +1783,32 @@ jobs:
                   } catch (_: Exception) { }
               }
 
+              /** Geçişlerden (küçük pencere, PiP) sonra artık ölçek/kayma/yatay kaydırma kalmasın: sayfa sola kaymasın. */
+              private fun normalizeView(t: BTab?) {
+                  if (t == null || t === miniTab || t === mdOld) return
+                  val w = t.web
+                  if (w.scaleX != 1f || w.scaleY != 1f || w.translationX != 0f || w.translationY != 0f) {
+                      w.scaleX = 1f
+                      w.scaleY = 1f
+                      w.translationX = 0f
+                      w.translationY = 0f
+                  }
+                  if (w.clipBounds != null) w.clipBounds = null
+                  if (w.scrollX != 0) w.scrollTo(0, w.scrollY)
+                  if (w.scrollY in 1..dp(160) && t.url.contains("youtube.com/watch")) w.scrollTo(0, 0)
+                  try { w.evaluateJavascript(FIX_HSCROLL_JS, null) } catch (_: Exception) { }
+              }
+
+              private fun normalizeLater(t: BTab?) {
+                  for (d in longArrayOf(0L, 300L, 1000L)) {
+                      handler.postDelayed({ if (tabs.getOrNull(cur) === t) normalizeView(t) }, d)
+                  }
+              }
+
               private fun checkAfterPip(attempt: Int) {
                   val t = tabs.getOrNull(cur) ?: return
                   if (isInPictureInPictureMode || miniTab != null) return
+                  normalizeView(t)
                   try {
                       t.web.evaluateJavascript(PIP_LAYOUT_CHECK_JS) { r ->
                           if (r != null && r.contains("bad") && tabs.getOrNull(cur) === t && !isInPictureInPictureMode) {
@@ -1884,6 +1909,7 @@ jobs:
                   topBar.setBackgroundColor(cBg)
                   syncUi()
                   resumeMini(mt)
+                  normalizeLater(mt)
               }
 
               /** Küçük oynatıcıyı kapatır (✕ ya da ön planda başka video açılınca). */
@@ -5122,6 +5148,7 @@ jobs:
                   (function(){try{
                   if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;
                   if(window.__rotaMini3)return;window.__rotaMini3=1;
+                  window.addEventListener('scroll',function(){if(window.scrollX>0)window.scrollTo(0,window.scrollY);},{passive:true});
                   var st=document.createElement('style');
                   st.textContent='#movie_player,.html5-video-player{touch-action:none!important}';
                   document.documentElement.appendChild(st);
@@ -5308,12 +5335,21 @@ jobs:
                       "if(location.pathname.indexOf('/watch')!==0)return 'ok';" +
                       "var p=document.querySelector('#movie_player,.html5-video-player');if(!p)return 'ok';" +
                       "var r=p.getBoundingClientRect();" +
-                      "var bad=r.width<window.innerWidth*0.9||r.height<60||document.getElementById('__pip')!==null||document.querySelector('.__pipv')!==null;" +
+                      "var bad=window.scrollX>0||(window.scrollY>0&&window.scrollY<160)||r.width<window.innerWidth*0.9||r.height<60||document.getElementById('__pip')!==null||document.querySelector('.__pipv')!==null;" +
                       "return bad?'bad':'ok';" +
                       "}catch(e){return 'ok';}})();"
 
+                  const val FIX_HSCROLL_JS =
+                      "(function(){try{var e=document.scrollingElement||document.documentElement;" +
+                      "if(e&&e.scrollLeft)e.scrollLeft=0;if(window.scrollX)window.scrollTo(0,window.scrollY);" +
+                      "if(location.pathname.indexOf('/watch')===0&&window.scrollY>0&&window.scrollY<160)window.scrollTo(0,0);" +
+                      "if(document.body&&document.body.scrollLeft)document.body.scrollLeft=0;" +
+                      "}catch(x){}})();"
+
                   const val PIP_RELAYOUT_JS =
                       "(function(){try{" +
+                      "var e0=document.scrollingElement||document.documentElement;if(e0&&e0.scrollLeft)e0.scrollLeft=0;if(window.scrollX)window.scrollTo(0,window.scrollY);" +
+                      "if(location.pathname.indexOf('/watch')===0&&window.scrollY>0&&window.scrollY<160)window.scrollTo(0,0);" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
                       "document.querySelectorAll('.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
