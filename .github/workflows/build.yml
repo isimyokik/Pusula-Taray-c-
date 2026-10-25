@@ -692,12 +692,15 @@ jobs:
                   if (miniTab != null) {
                       expandMiniNow()
                       pipFromMini = true
-                      // PiP öncesi transform kalıntısı olmasın
+                  }
+                  // PiP öncesi tüm WebView katmanları temiz (video yüzeyi bozulmasın)
+                  for (t in tabs) {
                       try {
-                          val w = tabs.getOrNull(cur)?.web
-                          w?.scaleX = 1f; w?.scaleY = 1f
-                          w?.translationX = 0f; w?.translationY = 0f
-                          w?.clipBounds = null
+                          t.web.setLayerType(View.LAYER_TYPE_NONE, null)
+                          t.web.scaleX = 1f; t.web.scaleY = 1f
+                          t.web.translationX = 0f; t.web.translationY = 0f
+                          t.web.clipBounds = null
+                          t.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null)
                       } catch (_: Exception) { }
                   }
                   enterPipWith(android.util.Rational(16, 9))
@@ -5078,9 +5081,17 @@ jobs:
                       "document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,.yt-upsell-dialog').forEach(function(d){" +
                       "var t=(d.textContent||'');if(rePrem.test(t)){hideEl(d);var b=d.querySelector('#cancel-button,button');if(b)try{b.click();}catch(z){}}" +
                       "});" +
+                      "document.querySelectorAll('ytm-banner-promo-renderer,ytd-banner-promo-renderer,ytm-statement-banner-renderer,ytm-mealbar-promo-renderer,ytd-mealbar-promo-renderer,ytm-open-app-banner-renderer,ytm-open-app-button-renderer,ytd-open-app-button-renderer,ytmusic-mealbar-promo-renderer,.ytp-pause-overlay').forEach(hideEl);" +
+                      "document.querySelectorAll('a,button,ytm-button-renderer,yt-button-renderer,[role=button]').forEach(function(e){" +
+                      "var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\\s+/g,' ').trim();" +
+                      "if(t.length>0&&t.length<100&&(/uygulama|install\\s*app|get\\s*(the\\s*)?(youtube\\s*)?app|open\\s*in\\s*app|tavsiye|önerilen|premium/i.test(t))){" +
+                      "var c=e.closest('ytm-button-renderer,yt-button-renderer,ytm-banner-promo-renderer,ytd-banner-promo-renderer,ytm-mealbar-promo-renderer')||e;hideEl(c);}" +
+                      "});" +
                       "}catch(x){}" +
                       "}" +
-                      "setInterval(hide,600);" +
+                      "hide();" +
+                      "setInterval(hide,400);" +
+                      "try{new MutationObserver(function(){hide();}).observe(document.documentElement,{childList:true,subtree:true});}catch(z){}" +
                       "})();"
 
                   // YouTube sayfasında ortadaki büyük logo / oynat katmanı ve watermark
@@ -5820,7 +5831,7 @@ jobs:
                           return null
                       } finally {
                           page.close()
-                      }
+  error               }
                   }
               }
 
