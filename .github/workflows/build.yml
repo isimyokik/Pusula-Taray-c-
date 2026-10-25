@@ -5513,33 +5513,46 @@ jobs:
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "clearInterval(window.__pipIv);document.removeEventListener('pointerdown',window.__pipDoc,true);window.__pipFlash=null;var pb=document.getElementById('__pipbar');if(pb)pb.remove();" +
                       "document.querySelectorAll('video.__pipv,.__pipv').forEach(function(x){x.classList.remove('__pipv');});" +
-                      // PiP sırasında yazılan visibility/transform/overflow hepsini geri al
+                      // PiP stilleri: video + player + parent temizliği (sol üste kayma önlemi)
+                      "function clr(el){if(!el||!el.style)return;try{el.style.cssText='';" +
+                      "['position','top','left','right','bottom','inset','width','height','max-width','max-height'," +
+                      "'transform','transform-origin','object-fit','object-position','margin','padding','z-index'," +
+                      "'visibility','overflow','background'].forEach(function(p){el.style.removeProperty(p);});}catch(z){}}" +
+                      "document.querySelectorAll('video,.html5-video-player,.html5-video-container,#movie_player').forEach(clr);" +
                       "document.querySelectorAll('*').forEach(function(x){try{if(!x.style)return;" +
                       "if(x.style.getPropertyPriority('visibility')==='important')x.style.removeProperty('visibility');" +
                       "if(x.style.getPropertyPriority('transform')==='important')x.style.removeProperty('transform');" +
                       "if(x.style.getPropertyPriority('overflow')==='important')x.style.removeProperty('overflow');" +
                       "}catch(z){}});" +
+                      "try{document.documentElement.style.cssText='';document.body.style.cssText='';}catch(z){}" +
                       "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
 
-                  // PiP sonrası: pause engeli kalkmış olsun, spinner/kilitli kontroller toparlansın
+                  // PiP sonrası: video karesi tekrar ortalansın / sol üste kaymasın
                   const val PIP_RECOVER_JS =
                       "(function(){try{" +
                       "window.__pipBlock=false;window.__userPause=false;" +
                       "if(window.__op){try{HTMLMediaElement.prototype.pause=window.__op;}catch(z){}window.__op=null;}" +
+                      "var s=document.getElementById('__pip');if(s)s.remove();" +
                       "document.querySelectorAll('.ytp-spinner,.ytp-cued-thumbnail-overlay').forEach(function(e){" +
                       "try{e.style.removeProperty('display');e.style.removeProperty('visibility');}catch(z){}});" +
-                      "var p=document.querySelector('.html5-video-player');" +
-                      "if(p){p.classList.remove('ytp-pause-overlay');}" +
+                      "function clr(el){if(!el||!el.style)return;try{el.style.cssText='';" +
+                      "['position','top','left','right','bottom','inset','width','height','max-width','max-height'," +
+                      "'transform','transform-origin','object-fit','object-position','margin','padding','z-index'].forEach(function(p){el.style.removeProperty(p);});}catch(z){}}" +
+                      "var p=document.querySelector('.html5-video-player')||document.getElementById('movie_player');" +
+                      "if(p){p.classList.remove('ytp-pause-overlay');clr(p);}" +
+                      "document.querySelectorAll('.html5-video-container').forEach(clr);" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
-                      "if(v){" +
-                      "try{v.style.cssText='';}catch(z){}" +
-                      "v.classList.remove('__pipv');" +
-                      // Kontrolleri uyandırmak için kısa timeupdate
+                      "if(v){clr(v);v.classList.remove('__pipv');" +
                       "try{var t=v.currentTime;v.currentTime=Math.max(0,t-0.001);v.currentTime=t;}catch(z){}" +
                       "try{if(!v.paused)v.dispatchEvent(new Event('playing'));}catch(z){}" +
                       "}" +
+                      // YouTube iç boyutunu yenile
+                      "try{var mp=document.getElementById('movie_player');" +
+                      "if(mp&&mp.setSize){var r=mp.getBoundingClientRect();mp.setSize(Math.round(r.width),Math.round(r.height));}" +
+                      "}catch(z){}" +
                       "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
+                      "setTimeout(function(){try{window.dispatchEvent(new Event('resize'));}catch(z){}},200);" +
                       "}catch(e){}})();"
 
                   const val LANDSCAPE_VIDEO_JS =
