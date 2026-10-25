@@ -998,7 +998,29 @@ jobs:
                   root.isFocusableInTouchMode = true
 
                   barHidden = false
-                  topBar = LinearLayout(this)
+                  topBar = object : LinearLayout(this@MainActivity) {
+                      private var sy = 0f
+                      private var sx = 0f
+                      private var fired = false
+                      override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
+                          when (e.actionMasked) {
+                              MotionEvent.ACTION_DOWN -> { sy = e.rawY; sx = e.rawX; fired = false }
+                              MotionEvent.ACTION_MOVE -> if (!fired) {
+                                  val dy = e.rawY - sy
+                                  val dx = e.rawX - sx
+                                  // Alttaysa yukarı çek = aç, üstteyse aşağı çek = aç
+                                  val openDir = if (prefs.barBottom) dy < 0 else dy > 0
+                                  if (openDir && kotlin.math.abs(dy) > dp(36) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.5f) {
+                                      fired = true
+                                      if (menuDialog?.isShowing != true) showMenu(this)
+                                      return true
+                                  }
+                              }
+                          }
+                          return false
+                      }
+                      override fun onTouchEvent(e: MotionEvent): Boolean = true
+                  }
                   topBar.orientation = LinearLayout.HORIZONTAL
                   topBar.gravity = Gravity.CENTER_VERTICAL
                   topBar.setPadding(dp(10), dp(8), dp(10), dp(8))
@@ -1047,8 +1069,6 @@ jobs:
 
                   backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }
                   val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
-                  attachBarDrawerGesture(topBar)
-                  attachBarDrawerGesture(pill)
 
                   val tabsWrap = FrameLayout(this)
                   tabsWrap.background = ripple(null)
@@ -2124,7 +2144,31 @@ jobs:
                   col.addView(row("🎨", "Tema") { chooseTheme { } })
                   col.addView(row("⚙️", "Ayarlar") { showSettings() })
 
-                  sheetWindow(d, col, false)
+                  // Çekmece: adres çubuğu üstteyse yukarı, altaysa aşağı kaydırınca kapanır
+                  val swipeWrap = object : FrameLayout(this@MainActivity) {
+                      private var sy = 0f
+                      private var sx = 0f
+                      private var done = false
+                      override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
+                          when (e.actionMasked) {
+                              MotionEvent.ACTION_DOWN -> { sy = e.rawY; sx = e.rawX; done = false }
+                              MotionEvent.ACTION_MOVE -> if (!done) {
+                                  val dy = e.rawY - sy
+                                  val dx = e.rawX - sx
+                                  val closeDir = if (prefs.barBottom) dy > 0 else dy < 0
+                                  if (closeDir && kotlin.math.abs(dy) > dp(36) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.5f) {
+                                      done = true
+                                      try { d.dismiss() } catch (_: Exception) { }
+                                      return true
+                                  }
+                              }
+                          }
+                          return false
+                      }
+                      override fun onTouchEvent(e: MotionEvent): Boolean = true
+                  }
+                  swipeWrap.addView(col, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                  sheetWindow(d, swipeWrap, false)
                   d.show()
               }
 
@@ -3993,7 +4037,6 @@ jobs:
                   })
                   add(settingsRow("🌐", "Varsayılan tarayıcı yap", if (isDefaultBrowser()) "Şu an varsayılan ✓" else "Linkler Rota ile açılsın", chevron()) { d.dismiss(); askDefaultBrowser() })
                   label("Görünüm ve arama")
-                  add(settingsRow("🎨", "Tema", Themes.get(prefs.theme).name, chevron()) { chooseTheme { d.dismiss(); showSettings() } })
                   add(settingsRow("🔎", "Arama motoru", Engines.get(prefs.engine).name, chevron()) { chooseEngine { d.dismiss(); showSettings() } })
                   label("Gizlilik")
                   add(switchRow("🧹", "Çıkışta temizle", "Kapanınca çerez ve veriler silinir", prefs.clearOnExit) { v ->
@@ -4428,7 +4471,7 @@ jobs:
                       "if(v){" +
                       "if(!v.paused){window.__userPause=true;" +
                       "var from=v.volume;v.dataset._fv=String(from);" +
-                      "fadeTo(v,from,0,350,function(){v.pause();});" +
+                      "fadeTo(v,from,0,350,function(){v.pause();try{v.volume=from;}catch(z){}});" +
                       "}else{" +
                       "window.__userPause=false;var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
                       "var p=v.play();if(p&&p.catch)p.catch(function(){});" +
@@ -4443,7 +4486,7 @@ jobs:
                       "(function(){try{" +
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
                       "document.querySelectorAll('video,audio').forEach(function(m){" +
-                      "window.__userPause=true;if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();m.dataset.pusulaWasPlaying='';});}" +
+                      "window.__userPause=true;if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();try{m.volume=from;}catch(z){}m.dataset.pusulaWasPlaying='';});}" +
                       "});" +
                       "}catch(e){}})();"
 
@@ -4522,6 +4565,7 @@ jobs:
                       "if(document.getElementById('__pip'))return;" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
                       "if(!v)return;" +
+                      "try{window.__pipVol=v.volume;}catch(z){}" +
                       "window.__userPause=false;window.__pipBlock=true;" +
                       "if(!window.__op){window.__op=HTMLMediaElement.prototype.pause;HTMLMediaElement.prototype.pause=function(){if(window.__pipBlock&&!window.__userPause)return;return window.__op.apply(this,arguments);};}" +
                       "var s=document.createElement('style');s.id='__pip';" +
@@ -4548,6 +4592,8 @@ jobs:
 
                   const val PIP_OFF_JS =
                       "(function(){try{" +
+                      "var pv=window.__pipVol;window.__pipVol=null;" +
+                      "if(pv>0){var n=0;var iv2=setInterval(function(){n++;try{if(!document.querySelector('.html5-video-player.ad-showing,.html5-video-player.ad-interrupting')){document.querySelectorAll('video,audio').forEach(function(m){if(!m.dataset._fv&&Math.abs(m.volume-pv)>0.001)m.volume=pv;});}}catch(z){}if(n>=8)clearInterval(iv2);},200);}" +
                       "window.__pipBlock=false;window.__userPause=false;" +
                       "if(window.__op){HTMLMediaElement.prototype.pause=window.__op;window.__op=null;}" +
                       "var s=document.getElementById('__pip');if(s)s.remove();" +
