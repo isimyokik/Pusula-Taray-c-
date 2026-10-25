@@ -692,8 +692,34 @@ jobs:
               /** YouTube küçült (PiP) — yalnızca menüden. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
-                  if (miniTab != null) { expandMiniNow(); pipFromMini = true }
+                  if (miniTab != null) {
+                      expandMiniNow()
+                      pipFromMini = true
+                      // Mini ölçeği/kayması PiP'e taşınmasın
+                      currentWeb()?.let { resetWebLayout(it) }
+                  }
                   enterPipWith(android.util.Rational(16, 9))
+              }
+
+              /** Mini/PiP geçişlerinden sonra WebView kayma-ölçek kalmasın. */
+              private fun resetWebLayout(w: WebView) {
+                  try {
+                      w.animate().cancel()
+                      w.scaleX = 1f
+                      w.scaleY = 1f
+                      w.translationX = 0f
+                      w.translationY = 0f
+                      w.rotation = 0f
+                      if (w.width > 0) w.pivotX = w.width / 2f
+                      if (w.height > 0) w.pivotY = w.height / 2f
+                      w.clipBounds = null
+                      w.clipToOutline = false
+                      w.layoutParams = FrameLayout.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT,
+                          ViewGroup.LayoutParams.MATCH_PARENT
+                      )
+                      w.requestLayout()
+                  } catch (_: Exception) { }
               }
 
               private fun enterPipWith(ratio: android.util.Rational) {
@@ -736,46 +762,61 @@ jobs:
                       updatePipActions()
                       if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
                   } else {
-                      // PiP kapandı: stil gitsin. Çalıyorsa otomatik pause engeli kalsın (sadece pencere yok olur).
+                      // PiP kapandı (✕ veya büyütme): tek temiz yol — fazla müdahale yok
                       val playing = lastPlaying
+                      val wasMini = pipFromMini
+                      pipFromMini = false
+
+                      // 1) WebView kayma/ölçek sıfır
+                      currentWeb()?.let { resetWebLayout(it) }
+
+                      // 2) PiP + mini stilleri bir kez kaldır
                       for (t in tabs) {
                           try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
+                          try { t.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
                       }
-                      // Çalarken de duraklatılmışken de aynı yol: önce düzen/stil temizliği (PIP_RECOVER_JS)
+
+                      // 3) Layout oturunca bir kez daha sıfırla + recover (oynatmayı bozmadan)
                       handler.postDelayed({
+                          if (isInPictureInPictureMode) return@postDelayed
+                          currentWeb()?.let { resetWebLayout(it) }
+                          normalizeView(tabs.getOrNull(cur))
                           try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
-                      }, 120)
+                          reapplyInsets()
+                      }, 250)
+                      handler.postDelayed({
+                          if (isInPictureInPictureMode) return@postDelayed
+                          currentWeb()?.let { resetWebLayout(it) }
+                          normalizeView(tabs.getOrNull(cur))
+                      }, 700)
+
+                      // 4) Duraklatılmışsa yeniden başlamasın
                       if (!playing) {
-                          // PiP'te duraklatıldıysa büyütünce kendiliğinden başlamasın: kısa süre duraklı kalması sağlanır
-                          for (d in longArrayOf(150L, 500L, 1100L)) {
-                              handler.postDelayed({
-                                  try {
-                                      currentWeb()?.evaluateJavascript(
-                                          "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.ended){m.dataset.pusulaWasPlaying='';m.pause();}});}catch(e){}})();", null)
-                                  } catch (_: Exception) { }
-                              }, d)
-                          }
-                      }
-                      if (playing && prefs.bgPlay) {
-                          // Çalıyorsa temizlikten sonra oynatma sürsün (kullanıcı duraklatmadıysa)
                           handler.postDelayed({
                               try {
                                   currentWeb()?.evaluateJavascript(
-                                      "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='1';" +
-                                      "if(m.paused&&!window.__userPause){var p=m.play();if(p&&p.catch)p.catch(function(){});}});}catch(e){}})();", null)
+                                      "(function(){try{window.__userPause=true;document.querySelectorAll('video,audio').forEach(function(m){" +
+                                      "m.dataset.pusulaWasPlaying='';if(!m.paused&&!m.ended)m.pause();});}catch(e){}})();", null)
                               } catch (_: Exception) { }
-                          }, 450)
+                          }, 300)
+                      } else if (prefs.bgPlay) {
+                          // Çalıyorsa işareti koru (✕ ile arka plan / büyütünce devam)
+                          handler.postDelayed({
+                              try {
+                                  currentWeb()?.evaluateJavascript(
+                                      "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){" +
+                                      "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
+                              } catch (_: Exception) { }
+                          }, 300)
                       }
+
                       if (hasMedia) {
                           PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                       }
-                      if (pipFromMini) {
-                          pipFromMini = false
-                          handler.postDelayed({ reopenAfterMiniPip(false) }, 100)
+                      if (wasMini) {
+                          handler.postDelayed({ reopenAfterMiniPip(false) }, 200)
                       }
-                      // PiP'ten büyüyünce video yarım/bozuk kalırsa önce düzeni yenile, olmazsa kaldığı saniyeden yeniden yükle
-                      handler.postDelayed({ checkAfterPip(0) }, 800)
-                      handler.postDelayed({ normalizeLater(tabs.getOrNull(cur)) }, 700)
+                      handler.postDelayed({ checkAfterPip(0) }, 1000)
                       reapplyInsetsLater()
                   }
               }
@@ -1907,6 +1948,7 @@ jobs:
                   prepExpand(mt)
                   applyMini(0f)
                   finishExpand(mt)
+                  resetWebLayout(mt.web)
               }
 
               private fun prepExpand(mt: BTab) {
