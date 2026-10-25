@@ -761,11 +761,13 @@ jobs:
                       val act = intent?.action ?: return
                       if (act == PlaybackService.ACTION_BACK10 || act == PlaybackService.ACTION_FWD10) {
                           val d = if (act == PlaybackService.ACTION_BACK10) -10 else 10
+                          try { (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
                           return
                       }
                       if (act == PlaybackService.ACTION_SEEK) {
                           val sec = intent.getLongExtra("pos", 0L) / 1000.0
                           try {
+                              (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(
                                   "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
                                   "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(v)v.currentTime=" + sec + ";}catch(e){}})();", null)
                           } catch (_: Exception) { }
@@ -778,6 +780,8 @@ jobs:
                           PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
                           else -> return
                       }
+                      val targets = if (act == PlaybackService.ACTION_PAUSE) (tabs.toList() + listOfNotNull(miniTab))
+                                    else listOfNotNull(miniTab ?: tabs.getOrNull(cur))
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
                       }
