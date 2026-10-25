@@ -124,7 +124,7 @@ jobs:
                       android:exported="false"
                       android:foregroundServiceType="mediaPlayback" />
 
-                  <service
+                                    <service
                       android:name=".RotaMediaBrowserService"
                       android:exported="true"
                       android:enabled="true"
@@ -134,6 +134,7 @@ jobs:
                           <action android:name="android.media.browse.MediaBrowserService" />
                       </intent-filter>
                   </service>
+
 
                   <activity
                       android:name=".MainActivity"
@@ -183,7 +184,7 @@ jobs:
                   android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
                   android:theme="@style/Theme.Pusula" />
               </application>
-          
+
               <queries>
                   <package android:name="com.google.android.projection.gearhead" />
                   <package android:name="com.google.android.gms" />
@@ -191,7 +192,7 @@ jobs:
                       <action android:name="android.media.browse.MediaBrowserService" />
                   </intent>
               </queries>
-</manifest>
+          </manifest>
           EOF
           cat > app/src/main/assets/newtab.html <<'EOF'
           <!doctype html>
