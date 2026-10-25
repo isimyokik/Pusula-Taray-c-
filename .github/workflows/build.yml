@@ -745,6 +745,17 @@ jobs:
                       handler.postDelayed({
                           try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
                       }, 120)
+                      if (!playing) {
+                          // PiP'te duraklatıldıysa büyütünce kendiliğinden başlamasın: kısa süre duraklı kalması sağlanır
+                          for (d in longArrayOf(150L, 500L, 1100L)) {
+                              handler.postDelayed({
+                                  try {
+                                      currentWeb()?.evaluateJavascript(
+                                          "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused&&!m.ended){m.dataset.pusulaWasPlaying='';m.pause();}});}catch(e){}})();", null)
+                                  } catch (_: Exception) { }
+                              }, d)
+                          }
+                      }
                       if (playing && prefs.bgPlay) {
                           // Çalıyorsa temizlikten sonra oynatma sürsün (kullanıcı duraklatmadıysa)
                           handler.postDelayed({
@@ -1815,7 +1826,7 @@ jobs:
                               if (attempt == 0) {
                                   try { t.web.evaluateJavascript(PIP_RELAYOUT_JS, null) } catch (_: Exception) { }
                                   handler.postDelayed({ checkAfterPip(1) }, 900)
-                              } else {
+                              } else if (lastPlaying) {
                                   reopenAfterMiniPip(true)
                               }
                           }
@@ -5506,7 +5517,7 @@ jobs:
                       "v.classList.remove('__pipv');" +
                       // Kontrolleri uyandırmak için kısa timeupdate
                       "try{var t=v.currentTime;v.currentTime=Math.max(0,t-0.001);v.currentTime=t;}catch(z){}" +
-                      "try{v.dispatchEvent(new Event('playing'));}catch(z){}" +
+                      "try{if(!v.paused)v.dispatchEvent(new Event('playing'));}catch(z){}" +
                       "}" +
                       "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
