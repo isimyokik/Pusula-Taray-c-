@@ -112,16 +112,30 @@ jobs:
                           android:resource="@xml/file_paths" />
                   </provider>
 
+                  <meta-data
+                      android:name="com.google.android.gms.car.application"
+                      android:resource="@xml/automotive_app_desc" />
+
                   <service
                       android:name=".PlaybackService"
                       android:exported="false"
                       android:foregroundServiceType="mediaPlayback" />
 
+                  <service
+                      android:name=".RotaMediaBrowserService"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.media.browse.MediaBrowserService" />
+                      </intent-filter>
+                  </service>
+
                   <activity
                       android:name=".MainActivity"
                       android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
                       android:exported="true"
-                      android:launchMode="singleTask"
+                      android:launchMode="standard"
+                      android:documentLaunchMode="always"
+                      android:maxRecents="8"
                       android:supportsPictureInPicture="true"
                       android:windowSoftInputMode="adjustResize|stateHidden">
                       <intent-filter>
@@ -848,6 +862,30 @@ jobs:
                           } catch (_: Exception) { }
                           return
                       }
+                      if (act == PlaybackService.ACTION_LIKE) {
+                          val tab = tabs.getOrNull(cur) ?: return
+                          val url = tab.url
+                          if (url.startsWith("http")) {
+                              val title = tab.title.ifBlank { shownUrl(url) }
+                              val added = prefs.toggleBookmark(title, url)
+                              toast(if (added) "Favorilere eklendi" else "Favorilerden çıkarıldı")
+                          }
+                          return
+                      }
+                      if (act == PlaybackService.ACTION_HOME) {
+                          openTab("https://music.youtube.com/", appMode = true)
+                          return
+                      }
+                      if (act == PlaybackService.ACTION_SEARCH) {
+                          val q = intent.getStringExtra("q")?.trim().orEmpty()
+                          if (q.isNotEmpty()) openTab("https://music.youtube.com/search?q=" + Uri.encode(q), appMode = true)
+                          return
+                      }
+                      if (act == PlaybackService.ACTION_OPEN) {
+                          val u = intent.getStringExtra("url")?.trim().orEmpty()
+                          if (u.startsWith("http")) openTab(u, appMode = true)
+                          return
+                      }
                       val js = when (act) {
                           PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> if (isInPictureInPictureMode) MEDIA_TOGGLE_FAST_JS else MEDIA_TOGGLE_JS
                           PlaybackService.ACTION_PAUSE -> if (isInPictureInPictureMode) MEDIA_PAUSE_FAST_JS else MEDIA_PAUSE_JS
@@ -977,6 +1015,10 @@ jobs:
                       addAction(PlaybackService.ACTION_SEEK)
                       addAction(PlaybackService.ACTION_BACK10)
                       addAction(PlaybackService.ACTION_FWD10)
+                      addAction(PlaybackService.ACTION_LIKE)
+                      addAction(PlaybackService.ACTION_HOME)
+                      addAction(PlaybackService.ACTION_SEARCH)
+                      addAction(PlaybackService.ACTION_OPEN)
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
                   startBrowsing()
@@ -1485,8 +1527,26 @@ jobs:
                   t.appMode = appMode
                   switchTo(tabs.size - 1)
                   applyHostUa(t, url)
+                  if (appMode) applyAppTaskDescription(url)
                   if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL))
                   return t
+              }
+
+              /** Ana ekran kısayolu: son uygulamalarda site adı ile ayrı görev gibi görünsün. */
+              private fun applyAppTaskDescription(url: String?) {
+                  try {
+                      val host = try { Uri.parse(url ?: "").host ?: "Web" } catch (_: Exception) { "Web" }
+                      val label = host.removePrefix("www.").removePrefix("m.").replaceFirstChar { it.uppercase() }
+                      if (Build.VERSION.SDK_INT >= 28) {
+                          setTaskDescription(android.app.ActivityManager.TaskDescription.Builder()
+                              .setLabel(label)
+                              .setIcon(R.drawable.ic_launcher)
+                              .build())
+                      } else {
+                          @Suppress("DEPRECATION")
+                          setTaskDescription(android.app.ActivityManager.TaskDescription(label))
+                      }
+                  } catch (_: Exception) { }
               }
 
               private fun switchTo(i: Int) {
@@ -2182,7 +2242,14 @@ jobs:
                           }
                           "about", "blob", "data" -> false
                           "file", "content", "javascript" -> true
-                          else -> askExternal(urlStr, tab, gesture)
+                          // YouTube / YT Music native uygulamaya yönlendirme engeli
+                          "intent", "market", "vnd.youtube", "youtube", "youtubemusic" -> true
+                          else -> {
+                              if (urlStr.contains("play.google.com/store") &&
+                                  (urlStr.contains("com.google.android.youtube") || urlStr.contains("com.google.android.apps.youtube.music"))) {
+                                  true
+                              } else askExternal(urlStr, tab, gesture)
+                          }
                       }
                   }
 
@@ -2640,7 +2707,10 @@ jobs:
                       action = Intent.ACTION_VIEW
                       data = Uri.parse(url)
                       putExtra("pusula_app", true)
-                      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                      // Son uygulamalarda Rota'tan ayrı bir "uygulama" gibi görünsün
+                      flags = Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
+                          Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                          Intent.FLAG_ACTIVITY_NEW_TASK
                   }
                   val iconJs = """(function(){var best='',bs=-1;var ls=document.querySelectorAll('link[rel~="apple-touch-icon"],link[rel~="apple-touch-icon-precomposed"],link[rel~="icon"],link[rel="shortcut icon"]');for(var i=0;i<ls.length;i++){var l=ls[i];var sz=parseInt((l.getAttribute('sizes')||'0').split('x')[0],10)||0;if(/apple/.test(l.rel||''))sz+=1000;if(l.href&&sz>=bs){bs=sz;best=l.href;}}return best;})();"""
                   try {
@@ -5048,29 +5118,34 @@ jobs:
                       "}catch(e){return '[]';}})();"
 
 
-                            // YouTube / YouTube Music: "Uygulamayı dene / aç / yükle" öneri ve örtülerini kaldırır
+                            // YouTube / YouTube Music: "uygulamada aç / izle / en iyi deneyim" pencerelerini kapatır
                             const val YT_PROMO_JS = """
                             (function(){try{
                             if(window.__rotaPromo)return;window.__rotaPromo=1;
-                            var re=/uygulama(y[ıi]|n[ıi])?\s*(dene|a[cç]|y[üu]kle|indir|edin|al\b|ile)|uygulamada\s*(a[cç]|dinle|izle|devam)|get\s*the\s*app|open\s*(in\s*)?(the\s*)?app|try\s*the\s*app|use\s*the\s*app|install\s*(the\s*)?app|download\s*the\s*app|listen\s*in\s*the\s*app|continue\s*in\s*(the\s*)?app/i;
-                            var no=/^(hay[ıi]r|şimdi de[gğ]il|simdi degil|belki sonra|not now|no,? thanks|continue in browser|taray[ıi]c[ıi]da devam|kapat|close|dismiss|vazge[cç])/i;
-                            function hide(e){try{e.style.setProperty('display','none','important');}catch(x){}}
+                            var re=/uygulama(y[ıi]|n[ıi]|s[ıi]nda)?\s*(dene|a[cç]|y[üu]kle|indir|edin|al\b|ile|izle|dinle)|uygulamada\s*(a[cç]|dinle|izle|devam)|en iyi deneyim|t[üu]m [öo]zellik|get\s*the\s*app|open\s*(in\s*)?(the\s*)?app|try\s*the\s*app|use\s*the\s*app|install\s*(the\s*)?app|download\s*the\s*app|listen\s*in\s*the\s*app|watch\s*in\s*(the\s*)?(youtube\s*)?app|continue\s*in\s*(the\s*)?app|better\s*on\s*the\s*app|youtube music uygulamas[ıi]nda/i;
+                            var no=/^(hay[ıi]r|şimdi de[gğ]il|simdi degil|belki sonra|not now|no,? thanks|continue in browser|taray[ıi]c[ıi]da devam|kapat|close|dismiss|vazge[cç]|×|✕)/i;
+                            function hide(e){if(!e||!e.style)return;try{e.style.setProperty('display','none','important');e.style.setProperty('visibility','hidden','important');e.style.setProperty('pointer-events','none','important');e.setAttribute('aria-hidden','true');}catch(x){}}
+                            function killBackdrop(){
+                            document.querySelectorAll('iron-overlay-backdrop,tp-yt-iron-overlay-backdrop,.dialog-backdrop,[class*="overlay-backdrop"]').forEach(hide);
+                            try{document.body.style.setProperty('overflow','auto','important');document.documentElement.style.setProperty('overflow','auto','important');}catch(x){}
+                            }
                             function scan(){
-                            document.querySelectorAll('ytmusic-mealbar-promo-renderer,ytmusic-app-promo,ytm-promo-banner,ytm-app-promo,ytmusic-premium-upsell,[class*="app-promo"],[class*="open-app"],[class*="get-app"],[id*="app-promo"],[id*="open-app"]').forEach(hide);
+                            document.querySelectorAll('ytmusic-mealbar-promo-renderer,ytmusic-app-promo,ytm-promo-banner,ytm-app-promo,ytmusic-premium-upsell,ytm-open-app-button-renderer,ytm-open-app-banner-renderer,ytd-open-app-button-renderer,ytmusic-open-app-button,[class*="app-promo"],[class*="open-app"],[class*="get-app"],[id*="app-promo"],[id*="open-app"]').forEach(hide);
                             document.querySelectorAll('a,button,[role=button],yt-button-renderer,ytmusic-button-renderer,ytm-button-renderer').forEach(function(e){
                             var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\s+/g,' ').trim();
-                            if(t&&t.length<90&&re.test(t)){var c=e.closest('ytmusic-mealbar-promo-renderer,ytm-promo-banner,tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog]')||e;hide(c);}
+                            if(t&&t.length<120&&re.test(t)){var c=e.closest('ytmusic-mealbar-promo-renderer,ytm-promo-banner,tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog],ytm-bottom-sheet-renderer,ytmusic-popup-container')||e;hide(c);killBackdrop();}
                             });
-                            document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog],ytmusic-popup-container,ytm-bottom-sheet-renderer').forEach(function(d){
+                            document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog],ytmusic-popup-container,ytm-bottom-sheet-renderer,yt-upsell-dialog-renderer').forEach(function(d){
                             var t=(d.textContent||'').replace(/\s+/g,' ');
-                            if(t.length<600&&re.test(t)){
+                            if(t.length<900&&re.test(t)){
                             d.querySelectorAll('a,button,[role=button]').forEach(function(b){var bt=(b.textContent||b.getAttribute('aria-label')||'').trim();if(no.test(bt)){try{b.click();}catch(x){}}});
-                            hide(d);
-                            document.querySelectorAll('iron-overlay-backdrop,tp-yt-iron-overlay-backdrop').forEach(hide);
-                            try{document.body.style.setProperty('overflow','auto','important');document.documentElement.style.setProperty('overflow','auto','important');}catch(x){}
-                            }});
+                            hide(d);killBackdrop();
                             }
-                            setInterval(scan,500);scan();
+                            });
+                            }
+                            setInterval(scan,400);scan();
+                            var mo=new MutationObserver(function(){scan();});
+                            try{mo.observe(document.documentElement,{childList:true,subtree:true});}catch(x){}
                             }catch(e){}})();
                             """
 
@@ -6667,6 +6742,9 @@ jobs:
           import android.content.Intent
           import android.content.pm.ServiceInfo
           import android.graphics.drawable.Icon
+          import android.media.AudioAttributes
+          import android.media.AudioFocusRequest
+          import android.media.AudioManager
           import android.media.MediaMetadata
           import android.media.session.MediaSession
           import android.media.session.PlaybackState
@@ -6689,10 +6767,94 @@ jobs:
               private var duration = -1L
               private val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
               private val idleStop = Runnable { stopSelf() }
+              private var audioManager: AudioManager? = null
+              private var focusRequest: AudioFocusRequest? = null
+              /** Arama / başka uygulama ses alınca true; focus geri gelince devam */
+              private var resumeAfterFocus = false
+              private var heldFocus = false
+
+              private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+                  when (change) {
+                      AudioManager.AUDIOFOCUS_LOSS,
+                      AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                          // Telefon, başka medya, mikrofon vb. — duraklat
+                          if (playing) {
+                              resumeAfterFocus = true
+                              playing = false
+                              send(ACTION_PAUSE)
+                              refresh()
+                          } else {
+                              resumeAfterFocus = false
+                          }
+                          if (change == AudioManager.AUDIOFOCUS_LOSS) {
+                              abandonFocus()
+                          }
+                      }
+                      AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                          // Kısa bildirim sesi: kısma yok, çoğu medya için de duraklatmak daha net
+                          if (playing) {
+                              resumeAfterFocus = true
+                              playing = false
+                              send(ACTION_PAUSE)
+                              refresh()
+                          }
+                      }
+                      AudioManager.AUDIOFOCUS_GAIN -> {
+                          if (resumeAfterFocus) {
+                              resumeAfterFocus = false
+                              playing = true
+                              send(ACTION_PLAY)
+                              refresh()
+                          }
+                      }
+                  }
+              }
+
+              private fun requestFocus(): Boolean {
+                  val am = audioManager ?: return true
+                  if (heldFocus) return true
+                  val ok = if (Build.VERSION.SDK_INT >= 26) {
+                      val req = focusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                          .setAudioAttributes(
+                              AudioAttributes.Builder()
+                                  .setUsage(AudioAttributes.USAGE_MEDIA)
+                                  .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                  .build()
+                          )
+                          .setOnAudioFocusChangeListener(focusListener)
+                          .setAcceptsDelayedFocusGain(true)
+                          .setWillPauseWhenDucked(true)
+                          .build().also { focusRequest = it }
+                      am.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                  } else {
+                      @Suppress("DEPRECATION")
+                      am.requestAudioFocus(
+                          focusListener,
+                          AudioManager.STREAM_MUSIC,
+                          AudioManager.AUDIOFOCUS_GAIN
+                      ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                  }
+                  heldFocus = ok
+                  return ok
+              }
+
+              private fun abandonFocus() {
+                  val am = audioManager ?: return
+                  try {
+                      if (Build.VERSION.SDK_INT >= 26) {
+                          focusRequest?.let { am.abandonAudioFocusRequest(it) }
+                      } else {
+                          @Suppress("DEPRECATION")
+                          am.abandonAudioFocus(focusListener)
+                      }
+                  } catch (_: Exception) { }
+                  heldFocus = false
+              }
 
               override fun onCreate() {
                   super.onCreate()
                   running = true
+                  audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
                   val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                   if (Build.VERSION.SDK_INT >= 26) {
                       nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
@@ -6702,12 +6864,28 @@ jobs:
                   }
                   val s = MediaSession(this, "Rota")
                   s.setCallback(object : MediaSession.Callback() {
-                      override fun onPlay() { send(ACTION_PLAY) }
-                      override fun onPause() { send(ACTION_PAUSE) }
+                      override fun onPlay() {
+                          if (requestFocus()) send(ACTION_PLAY)
+                      }
+                      override fun onPause() {
+                          resumeAfterFocus = false
+                          send(ACTION_PAUSE)
+                      }
                       override fun onSkipToNext() { send(ACTION_NEXT) }
                       override fun onSkipToPrevious() { send(ACTION_PREVIOUS) }
                       override fun onCustomAction(action: String, extras: android.os.Bundle?) {
-                          if (action == "close") closeAll()
+                          when (action) {
+                              "close" -> closeAll()
+                              "like" -> send(ACTION_LIKE)
+                              "home" -> send(ACTION_HOME)
+                          }
+                      }
+                      override fun onPlayFromMediaId(mediaId: String, extras: android.os.Bundle?) {
+                          sendBroadcast(Intent(ACTION_OPEN).setPackage(packageName).putExtra("url", mediaId))
+                      }
+                      override fun onPlayFromSearch(query: String?, extras: android.os.Bundle?) {
+                          val q = query?.trim().orEmpty()
+                          if (q.isNotEmpty()) sendBroadcast(Intent(ACTION_SEARCH).setPackage(packageName).putExtra("q", q))
                       }
                       override fun onSeekTo(pos: Long) {
                           sendBroadcast(Intent(ACTION_SEEK).setPackage(packageName).putExtra("pos", pos))
@@ -6717,13 +6895,16 @@ jobs:
                   })
                   s.isActive = true
                   session = s
+                  sessionToken = s.sessionToken
               }
 
               private fun send(action: String) { sendBroadcast(Intent(action).setPackage(packageName)) }
 
               private fun closeAll() {
+                  resumeAfterFocus = false
                   send(ACTION_PAUSE)
                   playing = false
+                  abandonFocus()
                   idleHandler.removeCallbacks(idleStop)
                   try { session?.isActive = false } catch (_: Exception) { }
                   try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
@@ -6736,6 +6917,15 @@ jobs:
                   when (intent?.action) {
                       ACTION_UPDATE -> {
                           playing = intent.getBooleanExtra("playing", false)
+                          if (playing) {
+                              if (!requestFocus()) {
+                                  // Başka uygulama sesi tutuyorsa çalmaya çalışma
+                                  playing = false
+                                  send(ACTION_PAUSE)
+                              } else {
+                                  resumeAfterFocus = false
+                              }
+                          }
                           val newTitle = intent.getStringExtra("title") ?: ""
                           val titleChanged = newTitle != title
                           title = newTitle
@@ -6814,8 +7004,8 @@ jobs:
                           mb.putBitmap(MediaMetadata.METADATA_KEY_ART, it)
                       }
                   } catch (_: Exception) { }
-                  // Yalnızca çalarken aktif oturum: duraklayınca diğer uygulamaların (YouTube Müzik vb.) bildirimine yer açılır
-                            s.isActive = playing
+                  // Auto / kilit ekranı için oturum servis yaşadığı sürece açık kalsın
+                            s.isActive = true
                             idleHandler.removeCallbacks(idleStop)
                             if (!playing) idleHandler.postDelayed(idleStop, 90000L)
                             s.setMetadata(mb.build())
@@ -6824,6 +7014,8 @@ jobs:
                       (if (duration > 0) PlaybackState.ACTION_SEEK_TO else 0L)
                   s.setPlaybackState(PlaybackState.Builder()
                       .setActions(actions)
+                      .addCustomAction(PlaybackState.CustomAction.Builder("like", "Beğen", android.R.drawable.btn_star_big_on).build())
+                      .addCustomAction(PlaybackState.CustomAction.Builder("home", "Ana sayfa", android.R.drawable.ic_menu_compass).build())
                       .addCustomAction(PlaybackState.CustomAction.Builder("close", "Kapat", R.drawable.ic_close).build())
                       .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, position, 1f)
                       .build())
@@ -6863,11 +7055,14 @@ jobs:
 
               override fun onDestroy() {
                   running = false
+                  resumeAfterFocus = false
+                  abandonFocus()
                             idleHandler.removeCallbacks(idleStop)
                             try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
                             try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) } catch (_: Exception) { }
                   try { session?.release() } catch (_: Exception) { }
                   session = null
+                  sessionToken = null
                   super.onDestroy()
               }
 
@@ -6887,8 +7082,13 @@ jobs:
                   const val ACTION_BACK10 = "com.pusula.browser.MEDIA_BACK10"
                   const val ACTION_FWD10 = "com.pusula.browser.MEDIA_FWD10"
                   const val ACTION_CLOSE = "com.pusula.browser.MEDIA_CLOSE"
+                  const val ACTION_LIKE = "com.pusula.browser.MEDIA_LIKE"
+                  const val ACTION_HOME = "com.pusula.browser.MEDIA_HOME"
+                  const val ACTION_SEARCH = "com.pusula.browser.MEDIA_SEARCH"
+                  const val ACTION_OPEN = "com.pusula.browser.MEDIA_OPEN"
 
                   @Volatile var running = false
+                  @Volatile var sessionToken: MediaSession.Token? = null
 
                   fun update(ctx: Context, playing: Boolean, title: String, artist: String, pip: Boolean = false, pos: Long = -1L, dur: Long = -2L, art: String = "") {
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
@@ -6902,6 +7102,113 @@ jobs:
               }
           }
           EOF
+
+          cat > app/src/main/java/com/pusula/browser/RotaMediaBrowserService.kt <<'EOF'
+          package com.pusula.browser
+
+          import android.content.Intent
+          import android.os.Bundle
+          import android.support.v4.media.MediaBrowserCompat
+          import android.support.v4.media.MediaDescriptionCompat
+          import android.support.v4.media.MediaMetadataCompat
+          import android.support.v4.media.session.MediaSessionCompat
+          import android.support.v4.media.session.PlaybackStateCompat
+          import androidx.media.MediaBrowserServiceCompat
+
+          /**
+           * Android Auto medya tarayıcısı.
+           * Auto kendi yatay arayüzünü çizer: başlık, oynat/duraklat, sonraki/önceki, arama, listeler.
+           * WebView Auto'da açılamaz; çalma telefonda WebView üzerinden sürer.
+           */
+          class RotaMediaBrowserService : MediaBrowserServiceCompat() {
+
+              override fun onCreate() {
+                  super.onCreate()
+                  // PlaybackService oturumu yoksa boş bir oturum ile Auto'ya bağlan
+                  val token = PlaybackService.sessionToken
+                  if (token != null) {
+                      try { sessionToken = MediaSessionCompat.Token.fromToken(token) } catch (_: Exception) { }
+                  }
+                  if (sessionToken == null) {
+                      // Servisi uyandır
+                      try {
+                          PlaybackService.update(this, false, "Rota", "Android Auto")
+                          PlaybackService.sessionToken?.let {
+                              sessionToken = MediaSessionCompat.Token.fromToken(it)
+                          }
+                      } catch (_: Exception) { }
+                  }
+              }
+
+              override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
+                  return BrowserRoot(ROOT, null)
+              }
+
+              override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
+                  val prefs = Prefs(this)
+                  val out = ArrayList<MediaBrowserCompat.MediaItem>()
+                  when (parentId) {
+                      ROOT -> {
+                          out.add(folder(HOME, "Ana sayfa · Önerilen"))
+                          out.add(folder(FAV, "Favoriler"))
+                          out.add(folder(RECENT, "Son dinlenenler"))
+                      }
+                      HOME, RECENT -> {
+                          for (e in prefs.history().take(30)) {
+                              if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
+                          }
+                      }
+                      FAV -> {
+                          for (e in prefs.bookmarks().take(40)) {
+                              if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
+                          }
+                      }
+                  }
+                  result.sendResult(out)
+              }
+
+              override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
+                  val q = query.trim()
+                  val prefs = Prefs(this)
+                  val out = ArrayList<MediaBrowserCompat.MediaItem>()
+                  if (q.isNotEmpty()) {
+                      // Önce yerelden eşleşenler
+                      val all = prefs.bookmarks() + prefs.history()
+                      for (e in all) {
+                          if (e.title.contains(q, true) || e.url.contains(q, true)) {
+                              out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
+                          }
+                      }
+                      // YouTube Music araması (telefonda açılır / çalmaya hazırlanır)
+                      val searchUrl = "https://music.youtube.com/search?q=" + android.net.Uri.encode(q)
+                      out.add(0, song(searchUrl, "\"$q\" ara · YouTube Music", "YouTube Music"))
+                  }
+                  result.sendResult(out)
+              }
+
+              private fun folder(id: String, title: String): MediaBrowserCompat.MediaItem {
+                  val d = MediaDescriptionCompat.Builder().setMediaId(id).setTitle(title).build()
+                  return MediaBrowserCompat.MediaItem(d, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+              }
+
+              private fun song(id: String, title: String, subtitle: String): MediaBrowserCompat.MediaItem {
+                  val d = MediaDescriptionCompat.Builder()
+                      .setMediaId(id)
+                      .setTitle(title.take(80))
+                      .setSubtitle(subtitle.take(80))
+                      .build()
+                  return MediaBrowserCompat.MediaItem(d, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
+              }
+
+              companion object {
+                  const val ROOT = "root"
+                  const val HOME = "home"
+                  const val FAV = "fav"
+                  const val RECENT = "recent"
+              }
+          }
+          EOF
+
           cat > app/src/main/java/com/pusula/browser/DownloadNotifier.kt <<'EOF'
           package com.pusula.browser
 
@@ -7310,6 +7617,12 @@ jobs:
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
               <path android:fillColor="#FFFFFFFF" android:pathData="M4,8 L24,24 4,40z M24,8 L44,24 24,40z"/>
           </vector>
+          EOF
+          cat > app/src/main/res/xml/automotive_app_desc.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <automotiveApp>
+              <uses name="media" />
+          </automotiveApp>
           EOF
           cat > app/src/main/res/xml/file_paths.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
