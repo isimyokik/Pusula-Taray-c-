@@ -1755,7 +1755,11 @@ jobs:
                   w.requestLayout()
                   try { w.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
                   try {
-                      w.evaluateJavascript("(function(){try{var s=document.getElementById('__pip');if(s)s.remove();window.dispatchEvent(new Event('resize'));}catch(e){}})();", null)
+                      // Küçük pencere / PiP'ten kalan bayraklar ve duraklatma engeli temizlenir: oynat-durdur tuşları normal çalışsın
+                      w.evaluateJavascript("(function(){try{var s=document.getElementById('__pip');if(s)s.remove();" +
+                          "window.__rotaWas=false;window.__pipBlock=false;window.__userPause=false;" +
+                          "if(window.__op){try{HTMLMediaElement.prototype.pause=window.__op;}catch(z){}window.__op=null;}" +
+                          "window.dispatchEvent(new Event('resize'));}catch(e){}})();", null)
                   } catch (_: Exception) { }
               }
 
@@ -5242,15 +5246,20 @@ jobs:
                       "(function(){try{" +
                       "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
+                      "function force(v,pause){try{var pl=document.getElementById('movie_player');" +
+                      "if(pause){window.__userPause=true;try{(window.__op||HTMLMediaElement.prototype.pause).call(v);}catch(z){}if(pl&&pl.pauseVideo)pl.pauseVideo();}" +
+                      "else{window.__userPause=false;try{v.play();}catch(z){}if(pl&&pl.playVideo)pl.playVideo();}}catch(e){}}" +
                       "var v=mediaList().find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');" +
                       "if(v){" +
                       "if(!v.paused){window.__userPause=true;" +
                       "var from=v.volume;v.dataset._fv=String(from);" +
                       "fadeTo(v,from,0,350,function(){v.pause();try{v.volume=from;}catch(z){}});" +
+                      "setTimeout(function(){if(!v.paused)force(v,true);},900);" +
                       "}else{" +
                       "window.__userPause=false;var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
                       "var p=v.play();if(p&&p.catch)p.catch(function(){});" +
                       "fadeTo(v,0,to,450,function(){try{delete v.dataset._fv;}catch(z){}});" +
+                      "setTimeout(function(){if(v.paused)force(v,false);},900);" +
                       "}" +
                       "return;}" +
                       "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
@@ -5261,7 +5270,8 @@ jobs:
                       "(function(){try{" +
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
                       "document.querySelectorAll('video,audio').forEach(function(m){" +
-                      "window.__userPause=true;if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();try{m.volume=from;}catch(z){}m.dataset.pusulaWasPlaying='';});}" +
+                      "window.__userPause=true;if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();try{m.volume=from;}catch(z){}m.dataset.pusulaWasPlaying='';});" +
+                      "setTimeout(function(){if(!m.paused){window.__userPause=true;try{(window.__op||HTMLMediaElement.prototype.pause).call(m);}catch(z){}try{var pl=document.getElementById('movie_player');if(pl&&pl.pauseVideo)pl.pauseVideo();}catch(z){}m.dataset.pusulaWasPlaying='';}},800);}" +
                       "});" +
                       "}catch(e){}})();"
 
