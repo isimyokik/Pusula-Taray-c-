@@ -6775,30 +6775,19 @@ jobs:
 
               private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
                   when (change) {
+                      // Telefon / başka uygulama gerçekten sesi alınca
                       AudioManager.AUDIOFOCUS_LOSS,
                       AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                          // Telefon, başka medya, mikrofon vb. — duraklat
-                          if (playing) {
-                              resumeAfterFocus = true
-                              playing = false
-                              send(ACTION_PAUSE)
-                              refresh()
-                          } else {
-                              resumeAfterFocus = false
-                          }
-                          if (change == AudioManager.AUDIOFOCUS_LOSS) {
-                              abandonFocus()
-                          }
-                      }
-                      AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                          // Kısa bildirim sesi: kısma yok, çoğu medya için de duraklatmak daha net
                           if (playing) {
                               resumeAfterFocus = true
                               playing = false
                               send(ACTION_PAUSE)
                               refresh()
                           }
+                          if (change == AudioManager.AUDIOFOCUS_LOSS) abandonFocus()
                       }
+                      // Bildirim vb. — durdurma (önceki sürüm medyayı kesiyordu)
+                      AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> { }
                       AudioManager.AUDIOFOCUS_GAIN -> {
                           if (resumeAfterFocus) {
                               resumeAfterFocus = false
@@ -6823,7 +6812,7 @@ jobs:
                           )
                           .setOnAudioFocusChangeListener(focusListener)
                           .setAcceptsDelayedFocusGain(true)
-                          .setWillPauseWhenDucked(true)
+                          .setWillPauseWhenDucked(false)
                           .build().also { focusRequest = it }
                       am.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
                   } else {
@@ -6865,7 +6854,8 @@ jobs:
                   val s = MediaSession(this, "Rota")
                   s.setCallback(object : MediaSession.Callback() {
                       override fun onPlay() {
-                          if (requestFocus()) send(ACTION_PLAY)
+                          requestFocus()
+                          send(ACTION_PLAY)
                       }
                       override fun onPause() {
                           resumeAfterFocus = false
@@ -6917,14 +6907,10 @@ jobs:
                   when (intent?.action) {
                       ACTION_UPDATE -> {
                           playing = intent.getBooleanExtra("playing", false)
+                          // Odak iste; alınamazsa bile çalmayı kesme (WebView ile çakışıyordu)
                           if (playing) {
-                              if (!requestFocus()) {
-                                  // Başka uygulama sesi tutuyorsa çalmaya çalışma
-                                  playing = false
-                                  send(ACTION_PAUSE)
-                              } else {
-                                  resumeAfterFocus = false
-                              }
+                              requestFocus()
+                              resumeAfterFocus = false
                           }
                           val newTitle = intent.getStringExtra("title") ?: ""
                           val titleChanged = newTitle != title
