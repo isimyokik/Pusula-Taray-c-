@@ -734,11 +734,6 @@ jobs:
                       updatePipActions()
                       if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
                   } else {
-                      // Büyütme tuşuyla uygulamaya dönüldüyse arka plan oynatma döngüsü durur (duraklatmayı geri çevirmesin)
-                      if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
-                          appInBackground = false
-                          handler.removeCallbacks(backgroundMediaPump)
-                      }
                       // PiP kapandı: stil gitsin. Çalıyorsa otomatik pause engeli kalsın (sadece pencere yok olur).
                       val playing = lastPlaying
                       for (t in tabs) {
@@ -5255,27 +5250,19 @@ jobs:
                           "});" +
                           "}catch(e){}})();"
 
-                  // Oynat/duraklat için sağlam yardımcılar: sayfanın değiştirdiği pause()'u atlar (temiz iframe'den orijinalini alır),
-                  // YouTube oynatıcısının kendi komutunu da çağırır ve "otomatik tekrar oynat" bayraklarını temizler.
-                  const val MEDIA_HARD_JS =
-                      "function pristine(n){try{var f=document.createElement('iframe');f.style.display='none';document.documentElement.appendChild(f);var fn=f.contentWindow.HTMLMediaElement.prototype[n];f.parentNode.removeChild(f);return fn;}catch(e){return null;}}" +
-                      "function hardPause(v){try{window.__userPause=true;window.__rotaWas=false;v.dataset.pusulaWasPlaying='';var pl=document.getElementById('movie_player');try{if(pl&&pl.pauseVideo)pl.pauseVideo();}catch(e){}if(!v.paused){var o=pristine('pause');try{(o||HTMLMediaElement.prototype.pause).call(v);}catch(e){}}}catch(e){}}" +
-                      "function hardPlay(v){try{window.__userPause=false;v.dataset.pusulaWasPlaying='1';var pl=document.getElementById('movie_player');try{if(pl&&pl.playVideo)pl.playVideo();}catch(e){}if(v.paused){try{var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(e){}}}catch(e){}}"
-
                   const val MEDIA_TOGGLE_JS =
-                      "(function(){try{" + MEDIA_HARD_JS +
+                      "(function(){try{" +
                       "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
-                      "var v=mediaList().find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video.html5-main-video')||document.querySelector('video,audio');" +
+                      "var v=mediaList().find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');" +
                       "if(v){" +
-                      "if(!v.paused){" +
-                      "var from=v.volume;v.dataset._fv=String(from);window.__userPause=true;window.__rotaWas=false;v.dataset.pusulaWasPlaying='';" +
-                      "fadeTo(v,from,0,350,function(){hardPause(v);try{v.volume=from;}catch(z){}});" +
-                      "setTimeout(function(){if(!v.paused)hardPause(v);},900);" +
+                      "if(!v.paused){window.__userPause=true;" +
+                      "var from=v.volume;v.dataset._fv=String(from);" +
+                      "fadeTo(v,from,0,350,function(){v.pause();try{v.volume=from;}catch(z){}});" +
                       "}else{" +
-                      "var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;hardPlay(v);" +
+                      "window.__userPause=false;var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
+                      "var p=v.play();if(p&&p.catch)p.catch(function(){});" +
                       "fadeTo(v,0,to,450,function(){try{delete v.dataset._fv;}catch(z){}});" +
-                      "setTimeout(function(){if(v.paused)hardPlay(v);},900);" +
                       "}" +
                       "return;}" +
                       "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
@@ -5283,12 +5270,10 @@ jobs:
                       "}catch(e){}})();"
 
                   const val MEDIA_PAUSE_JS =
-                      "(function(){try{" + MEDIA_HARD_JS +
+                      "(function(){try{" +
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
                       "document.querySelectorAll('video,audio').forEach(function(m){" +
-                      "window.__userPause=true;window.__rotaWas=false;m.dataset.pusulaWasPlaying='';" +
-                      "if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){hardPause(m);try{m.volume=from;}catch(z){}});" +
-                      "setTimeout(function(){if(!m.paused)hardPause(m);},800);}" +
+                      "window.__userPause=true;if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();try{m.volume=from;}catch(z){}m.dataset.pusulaWasPlaying='';});}" +
                       "});" +
                       "}catch(e){}})();"
 
