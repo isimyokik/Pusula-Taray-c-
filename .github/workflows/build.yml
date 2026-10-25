@@ -713,42 +713,31 @@ jobs:
                       updatePipActions()
                       if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
                   } else {
-                      // PiP kapandı — ✕ mi yoksa tam ekrana büyütme mi biraz sonra ayırt edilir
+                      // PiP kapandı: stil gitsin. Çalıyorsa otomatik pause engeli kalsın (sadece pencere yok olur).
+                      val playing = lastPlaying
                       for (t in tabs) {
                           try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
                       }
-                      pipExitPending = true
-                      handler.removeCallbacks(pipExitDecide)
-                      handler.postDelayed(pipExitDecide, 350)
-                  }
-              }
-
-              /** PiP çıkışı: ✕ → arka plan; dokunup büyütme → tam ekran + medya bağlı kalsın. */
-              private var pipExitPending = false
-              private val pipExitDecide = Runnable {
-                  if (!pipExitPending) return@Runnable
-                  pipExitPending = false
-                  val expanded = hasWindowFocus() && !isFinishing
-                  if (expanded) {
-                      appInBackground = false
-                      handler.removeCallbacks(backgroundMediaPump)
-                      try { shown?.onResume() } catch (_: Exception) { }
-                      try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
-                      if (hasMedia && (lastPlaying || PlaybackService.running)) {
+                      if (playing && prefs.bgPlay) {
+                          // Oynatma sürsün: otomatik pause engeli + wasPlaying işareti
+                          try {
+                              currentWeb()?.evaluateJavascript(
+                                  "(function(){try{" +
+                                  "window.__pipBlock=true;window.__userPause=false;" +
+                                  "if(!window.__op){window.__op=HTMLMediaElement.prototype.pause;" +
+                                  "HTMLMediaElement.prototype.pause=function(){if(window.__pipBlock&&!window.__userPause)return;return window.__op.apply(this,arguments);};}" +
+                                  "document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='1';" +
+                                  "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}});" +
+                                  "}catch(e){}})();", null)
+                          } catch (_: Exception) { }
+                      } else {
+                          handler.postDelayed({
+                              try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
+                          }, 120)
+                      }
+                      if (hasMedia) {
                           PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                       }
-                  } else if (prefs.bgPlay && hasMedia && lastPlaying) {
-                      appInBackground = true
-                      try { shown?.onResume() } catch (_: Exception) { }
-                      try {
-                          currentWeb()?.evaluateJavascript(
-                              "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){" +
-                              "m.dataset.pusulaWasPlaying='1';if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
-                              "});}catch(e){}})();", null)
-                      } catch (_: Exception) { }
-                      handler.removeCallbacks(backgroundMediaPump)
-                      handler.post(backgroundMediaPump)
-                      PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                   }
               }
 
@@ -933,15 +922,23 @@ jobs:
                   saveTabs()
                   CookieManager.getInstance().flush()
                   if (isInPictureInPictureMode) {
-                      // Küçük pencerede video akışına karışma; sadece WebView'ı canlı tut.
                       try { shown?.onResume() } catch (_: Exception) { }
                       return
                   }
+                  // Ana ekran / PiP ✕: WebView'ı durdurma, arka planda çalsın
                   if (prefs.bgPlay) {
                       appInBackground = true
+                      try { shown?.onResume() } catch (_: Exception) { }
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
-                      if (hasMedia && lastPlaying) PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      if (hasMedia && lastPlaying) {
+                          try {
+                              currentWeb()?.evaluateJavascript(
+                                  "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){" +
+                                  "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
+                          } catch (_: Exception) { }
+                          PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      }
                   } else {
                       appInBackground = true
                       shown?.onPause()
@@ -954,19 +951,14 @@ jobs:
                       try { shown?.onResume() } catch (_: Exception) { }
                       return
                   }
-                  // PiP ✕ veya ana ekran: arka planda çalmaya devam
-                  if (prefs.bgPlay && hasMedia && lastPlaying) {
+                  if (prefs.bgPlay) {
                       appInBackground = true
                       try { shown?.onResume() } catch (_: Exception) { }
-                      try {
-                          currentWeb()?.evaluateJavascript(
-                              "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){" +
-                              "m.dataset.pusulaWasPlaying='1';if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
-                              "});}catch(e){}})();", null)
-                      } catch (_: Exception) { }
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
-                      PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      if (hasMedia && lastPlaying) {
+                          PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      }
                   }
               }
 
@@ -987,15 +979,6 @@ jobs:
 
               override fun onResume() {
                   super.onResume()
-                  // PiP'ten büyütülerek geldiyse hemen tam ekran toparla
-                  if (pipExitPending) {
-                      pipExitPending = false
-                      handler.removeCallbacks(pipExitDecide)
-                      try { currentWeb()?.evaluateJavascript(PIP_RECOVER_JS, null) } catch (_: Exception) { }
-                      if (hasMedia && (lastPlaying || PlaybackService.running)) {
-                          PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
-                      }
-                  }
                   appInBackground = false
                   handler.removeCallbacks(backgroundMediaPump)
                   shown?.onResume()
