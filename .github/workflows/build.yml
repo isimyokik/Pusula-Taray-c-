@@ -127,6 +127,7 @@ jobs:
                   <service
                       android:name=".RotaMediaBrowserService"
                       android:exported="true"
+                      android:enabled="true"
                       android:label="@string/app_name"
                       android:icon="@drawable/ic_launcher">
                       <intent-filter>
@@ -182,7 +183,15 @@ jobs:
                   android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
                   android:theme="@style/Theme.Pusula" />
               </application>
-          </manifest>
+          
+              <queries>
+                  <package android:name="com.google.android.projection.gearhead" />
+                  <package android:name="com.google.android.gms" />
+                  <intent>
+                      <action android:name="android.media.browse.MediaBrowserService" />
+                  </intent>
+              </queries>
+</manifest>
           EOF
           cat > app/src/main/assets/newtab.html <<'EOF'
           <!doctype html>
@@ -5168,43 +5177,53 @@ jobs:
                   const val YT_MUSIC_UX_JS =
                       "(function(){try{" +
                       "if(location.hostname.indexOf('music.youtube.com')<0)return;" +
-                      "if(window.__rotaMusicUx3)return;window.__rotaMusicUx3=1;" +
-                      "var st=document.createElement('style');st.id='__rota_ytm_ux3';" +
+                      "if(window.__rotaMusicUx4)return;window.__rotaMusicUx4=1;" +
+                      "var st=document.createElement('style');st.id='__rota_ytm_ux4';" +
                       "st.textContent='" +
-                      /* Play/pause: mavi kare ripple KAPALI, yuvarlak şeffaf gri halka */
-                      "#play-pause-button,ytmusic-player-bar #play-pause-button," +
-                      "ytmusic-player-bar .play-pause-button,ytmusic-play-button-renderer," +
-                      "ytmusic-player-bar ytmusic-play-button-renderer{" +
+                      /* Mavi kare ripple: play-pause ve tüm bar ikonlarında kapat */
+                      "ytmusic-player-bar #play-pause-button,ytmusic-player-bar ytmusic-play-button-renderer," +
+                      "#play-pause-button,ytmusic-play-button-renderer{" +
                       "position:relative!important;overflow:hidden!important;border-radius:50%!important;" +
                       "--paper-ripple-color:transparent!important;--paper-ripple-opacity:0!important;" +
-                      "--iron-overlay-backdrop-opacity:0!important;--yt-spec-touch-response:transparent!important;" +
+                      "--iron-overlay-backdrop-opacity:0!important;" +
+                      "--yt-spec-touch-response:transparent!important;" +
+                      "--yt-spec-touch-response-v2:transparent!important;" +
+                      "--yt-focus-color:transparent!important;" +
                       "}" +
+                      "ytmusic-player-bar paper-ripple,ytmusic-player-bar tp-yt-paper-ripple," +
                       "#play-pause-button paper-ripple,#play-pause-button tp-yt-paper-ripple," +
-                      "#play-pause-button .paper-ripple,#play-pause-button #ink," +
-                      "ytmusic-play-button-renderer paper-ripple,ytmusic-play-button-renderer tp-yt-paper-ripple," +
-                      "ytmusic-player-bar #play-pause-button paper-ripple," +
-                      "ytmusic-player-bar #play-pause-button tp-yt-paper-ripple{" +
+                      "#play-pause-button #ink,ytmusic-play-button-renderer paper-ripple," +
+                      "ytmusic-play-button-renderer tp-yt-paper-ripple," +
+                      "ytmusic-player-bar .style-scope.tp-yt-paper-ripple{" +
                       "display:none!important;opacity:0!important;visibility:hidden!important;" +
-                      "width:0!important;height:0!important;pointer-events:none!important;}" +
-                      ".__rotaInk{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;" +
-                      "border-radius:50%!important;background:rgba(180,180,180,.45)!important;pointer-events:none;" +
-                      "transform:scale(0);opacity:.95;transition:transform .26s ease-out,opacity .3s ease-out;z-index:9}" +
+                      "pointer-events:none!important;width:0!important;height:0!important;" +
+                      "background:transparent!important;color:transparent!important;}" +
+                      ".__rotaInk{position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;" +
+                      "border-radius:50%!important;background:rgba(160,160,160,.5)!important;pointer-events:none!important;" +
+                      "transform:scale(0);opacity:1;transition:transform .22s ease-out,opacity .28s ease-out;z-index:99}" +
                       "';document.documentElement.appendChild(st);" +
+                      "function killRipple(root){" +
+                      "try{(root||document).querySelectorAll('paper-ripple,tp-yt-paper-ripple,#ink').forEach(function(n){" +
+                      "var h=n.closest&&n.closest('#play-pause-button,ytmusic-play-button-renderer,.play-pause-button');" +
+                      "if(h||(n.closest&&n.closest('ytmusic-player-bar'))){n.style.cssText='display:none!important;opacity:0!important;width:0!important;height:0!important;';}" +
+                      "});}catch(z){}" +
+                      "}" +
+                      "killRipple(document);" +
+                      "try{new MutationObserver(function(){killRipple(document);}).observe(document.documentElement,{childList:true,subtree:true});}catch(z){}" +
                       "function inkOn(el){" +
                       "if(!el)return;" +
                       "var host=el.closest('#play-pause-button,ytmusic-play-button-renderer,.play-pause-button')||el;" +
-                      "try{if(getComputedStyle(host).position==='static')host.style.position='relative';}catch(z){}" +
-                      "try{host.style.borderRadius='50%';host.style.overflow='hidden';}catch(z){}" +
+                      "try{host.style.position='relative';host.style.borderRadius='50%';host.style.overflow='hidden';}catch(z){}" +
+                      "killRipple(host);" +
                       "var ink=document.createElement('span');ink.className='__rotaInk';host.appendChild(ink);" +
-                      "requestAnimationFrame(function(){ink.style.transform='scale(8)';ink.style.opacity='0';});" +
-                      "setTimeout(function(){try{ink.remove();}catch(z){}},340);" +
+                      "requestAnimationFrame(function(){ink.style.transform='scale(7)';ink.style.opacity='0';});" +
+                      "setTimeout(function(){try{ink.remove();}catch(z){}},320);" +
                       "}" +
                       "document.addEventListener('pointerdown',function(e){" +
                       "var t=e.target;if(!t||!t.closest)return;" +
                       "var b=t.closest('#play-pause-button,ytmusic-play-button-renderer,.play-pause-button');" +
                       "if(b)inkOn(b);" +
                       "},true);" +
-                      /* YT Music kendi küçültme (sol üst aşağı ok) */
                       "function minimizePlayer(){" +
                       "try{" +
                       "var sels=[" +
@@ -5212,28 +5231,24 @@ jobs:
                       "'ytmusic-player-page .toggle-player'," +
                       "'#player-page .toggle-player'," +
                       "'ytmusic-player-page #header tp-yt-paper-icon-button'," +
-                      "'ytmusic-player-page .player-page-icons tp-yt-paper-icon-button'," +
                       "'ytmusic-player-page [aria-label*=\"Aşağı\" i]'," +
                       "'ytmusic-player-page [aria-label*=\"aşağı\" i]'," +
                       "'ytmusic-player-page [aria-label*=\"Down\" i]'," +
                       "'ytmusic-player-page [aria-label*=\"down\" i]'," +
                       "'ytmusic-player-page [aria-label*=\"Collapse\" i]'," +
                       "'ytmusic-player-page [aria-label*=\"Minimize\" i]'," +
-                      "'ytmusic-player-page [aria-label*=\"Küçült\" i]'," +
-                      "'ytmusic-player-page [aria-label*=\"Close player\" i]'," +
-                      "'ytmusic-player-page [aria-label*=\"Oyuncu\" i]'" +
+                      "'ytmusic-player-page [aria-label*=\"Küçült\" i]'" +
                       "];" +
                       "for(var i=0;i<sels.length;i++){" +
                       "var nodes=document.querySelectorAll(sels[i]);" +
                       "for(var j=0;j<nodes.length;j++){" +
-                      "var el=nodes[j];" +
-                      "if(!el||el.offsetParent===null)continue;" +
+                      "var el=nodes[j];if(!el)continue;" +
                       "try{el.click();return true;}catch(z){}" +
                       "}" +
                       "}" +
                       "var layout=document.querySelector('ytmusic-app-layout,#layout');" +
                       "if(layout){" +
-                      "try{if('playerPageOpen_' in layout){layout.playerPageOpen_=false;}}catch(z){}" +
+                      "try{if('playerPageOpen_' in layout)layout.playerPageOpen_=false;}catch(z){}" +
                       "try{layout.removeAttribute('player-page-open_');}catch(z){}" +
                       "try{layout.setAttribute('player-ui-state_','PLAYER_BAR_ONLY');}catch(z){}" +
                       "try{layout.dispatchEvent(new CustomEvent('yt-close-player-page'));}catch(z){}" +
@@ -5245,30 +5260,34 @@ jobs:
                       "function pageOpen(){" +
                       "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');" +
                       "if(!p)return false;" +
-                      "try{" +
-                      "if(p.hasAttribute('player-page-open_')||p.getAttribute('visibility')==='VISIBLE')return true;" +
-                      "}catch(z){}" +
                       "var r=p.getBoundingClientRect();" +
-                      "return r.height>window.innerHeight*0.35 && r.width>0 && r.top<window.innerHeight*0.5;" +
+                      "return r.height>window.innerHeight*0.3 && r.width>0;" +
                       "}" +
-                      "var drag=false,sy=0,sx=0,dy=0,moved=false;" +
+                      /* Ekranın her yerinden hafif aşağı kaydır → küçült */
+                      "var drag=false,sy=0,sx=0,dy=0,armed=false;" +
                       "document.addEventListener('touchstart',function(e){" +
                       "if(!pageOpen())return;" +
                       "var t=e.touches&&e.touches[0];if(!t)return;" +
                       "var tg=e.target;" +
-                      "if(tg&&tg.closest&&tg.closest('#progress-bar,tp-yt-paper-slider,input[type=range],.middle-controls .volume-slider'))return;" +
-                      "sx=t.clientX;sy=t.clientY;dy=0;moved=false;drag=true;" +
+                      "if(tg&&tg.closest&&tg.closest('#progress-bar,tp-yt-paper-slider,input[type=range]'))return;" +
+                      "sx=t.clientX;sy=t.clientY;dy=0;armed=false;drag=true;" +
                       "},{passive:true,capture:true});" +
                       "document.addEventListener('touchmove',function(e){" +
-                      "if(!drag)return;" +
+                      "if(!drag||!pageOpen())return;" +
                       "var t=e.touches&&e.touches[0];if(!t)return;" +
                       "dy=t.clientY-sy;" +
                       "var dx=t.clientX-sx;" +
-                      "if(Math.abs(dy)>14&&Math.abs(dy)>Math.abs(dx)*1.1)moved=true;" +
-                      "},{passive:true,capture:true});" +
+                      /* Dikey aşağı baskınsa sayfa kaydırmasın, biz alalım */
+                      "if(dy>10&&dy>=Math.abs(dx)){" +
+                      "armed=true;" +
+                      "try{e.preventDefault();}catch(z){}" +
+                      "}" +
+                      "},{passive:false,capture:true});" +
                       "document.addEventListener('touchend',function(){" +
                       "if(!drag)return;drag=false;" +
-                      "if(moved&&dy>56){minimizePlayer();}" +
+                      /* ~28px yeter — zorlamaya gerek yok */
+                      "if(armed&&dy>28){minimizePlayer();}" +
+                      "armed=false;" +
                       "},{passive:true,capture:true});" +
                       "}catch(e){}})();"
 
@@ -6998,6 +7017,17 @@ jobs:
                           refresh()
                       }
                   })
+                  try {
+                      val launch = packageManager.getLaunchIntentForPackage(packageName)
+                      if (launch != null) {
+                          launch.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                          val pi = PendingIntent.getActivity(
+                              this, 0, launch,
+                              PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                          )
+                          s.setSessionActivity(pi)
+                      }
+                  } catch (_: Exception) { }
                   s.isActive = true
                   session = s
                   sessionToken = s.sessionToken
@@ -7209,6 +7239,7 @@ jobs:
           cat > app/src/main/java/com/pusula/browser/RotaMediaBrowserService.kt <<'EOF'
           package com.pusula.browser
 
+          import android.app.PendingIntent
           import android.content.Intent
           import android.os.Bundle
           import android.support.v4.media.MediaBrowserCompat
@@ -7292,8 +7323,14 @@ jobs:
               }
 
               override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
-                  // Auto / sistem medya tarayıcılarına izin ver
-                  return BrowserRoot(ROOT, null)
+                  // Android Auto (gearhead) + sistem medya tarayıcıları — asla null dönme
+                  val extras = Bundle()
+                  try {
+                      extras.putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+                      extras.putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
+                      extras.putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
+                  } catch (_: Exception) { }
+                  return BrowserRoot(ROOT, extras)
               }
 
               override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
