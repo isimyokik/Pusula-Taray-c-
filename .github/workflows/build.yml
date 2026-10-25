@@ -584,6 +584,7 @@ jobs:
               private var mdLastDy = 0f
               private var mdLastT = 0L
               private var mdVel = 0f
+              private var pipFromMini = false
               private var miniCy = 0f
               private var miniTyT = 0f
               private var mdBlur: android.widget.ImageView? = null
@@ -688,7 +689,7 @@ jobs:
               /** YouTube küçült (PiP) — yalnızca menüden. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
-                  if (miniTab != null) expandMiniNow()
+                  if (miniTab != null) { expandMiniNow(); pipFromMini = true }
                   enterPipWith(android.util.Rational(16, 9))
               }
 
@@ -756,6 +757,10 @@ jobs:
                       }
                       if (hasMedia) {
                           PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                      }
+                      if (pipFromMini) {
+                          pipFromMini = false
+                          handler.postDelayed({ reopenAfterMiniPip() }, 300)
                       }
                   }
               }
@@ -1721,6 +1726,32 @@ jobs:
                   handler.removeCallbacks(miniPoll)
                   handler.postDelayed(miniPoll, 500)
                   resumeMini(old)
+              }
+
+              /** Küçük pencereden PiP'e girilmişse, PiP'ten dönünce video büyük ekranda temiz bir görünümle, kaldığı saniyeden açılır. */
+              private fun reopenAfterMiniPip() {
+                  val t = tabs.getOrNull(cur) ?: return
+                  val w = t.web
+                  w.scaleX = 1f
+                  w.scaleY = 1f
+                  w.translationX = 0f
+                  w.translationY = 0f
+                  w.clipBounds = null
+                  w.clipToOutline = false
+                  w.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                  w.requestLayout()
+                  val url = t.url
+                  if (!url.contains("youtube.com/watch")) return
+                  try {
+                      w.evaluateJavascript("(function(){var v=document.querySelector('video');return v&&isFinite(v.currentTime)?Math.floor(v.currentTime):-1;})();") { r ->
+                          val sec = r?.trim()?.toIntOrNull() ?: -1
+                          if (sec >= 0 && tabs.getOrNull(cur) === t) {
+                              val base = url.replace(Regex("([?&])t=[^&]*"), "").trimEnd('?', '&')
+                              val sep = if (base.contains("?")) "&" else "?"
+                              w.loadUrl(base + sep + "t=" + sec + "s")
+                          }
+                      }
+                  } catch (_: Exception) { }
               }
 
               /** Küçük pencerede video oynuyorsa arkadaki ön izlemeler durur; video duraklıysa ön izlemeler serbest. */
