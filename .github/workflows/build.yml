@@ -586,6 +586,7 @@ jobs:
               private var sentPlaying = false
               private var lastDur = -1L
               private lateinit var dockBar: LinearLayout
+              private lateinit var pipFab: ImageButton
               private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
               private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -635,7 +636,7 @@ jobs:
                   } catch (_: Exception) { return }
                   title = cleanMeta(title); artist = cleanMeta(artist)
                   if (!has) {
-                      if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
+                      if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); hidePipFab() }
                       return
                   }
                   val now = android.os.SystemClock.elapsedRealtime()
@@ -643,7 +644,9 @@ jobs:
                   val jumped = hasMedia && Math.abs(pos - expected) > 2500L
                   val playChanged = playing != lastPlaying
                   val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
+                  val fabTrigger = (playChanged && playing) || title != lastTitle
                   hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
+                  if (fabTrigger) showPipFab()
                   if (changed && (playing || PlaybackService.running)) {
                       sentPos = pos; sentAt = now; sentPlaying = playing
                       PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
@@ -703,6 +706,7 @@ jobs:
                   content.setBackgroundColor(if (pip) Color.BLACK else cBg)
                   dockBar.visibility = if (pip) View.GONE else View.VISIBLE
                   if (pip) {
+                      hidePipFab()
                       closeFind()
                       appInBackground = false
                       handler.removeCallbacks(backgroundMediaPump)
@@ -926,7 +930,50 @@ jobs:
                   super.onStop()
                   if (isInPictureInPictureMode) {
                       try { shown?.onResume() } catch (_: Exception) { }
+                  } else if (!appInBackground && prefs.bgPlay && hasMedia && lastPlaying) {
+                      // Küçük pencere ✕ ile kapatıldı: görüntü gider, ses ve bildirim arka planda sürer
+                      appInBackground = true
+                      handler.removeCallbacks(backgroundMediaPump)
+                      handler.post(backgroundMediaPump)
+                      PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                   }
+              }
+
+              /** Ana ekrana basınca YouTube videosu çalıyorsa kendiliğinden küçük pencereye geçer. */
+              override fun onUserLeaveHint() {
+                  super.onUserLeaveHint()
+                  if (Build.VERSION.SDK_INT >= 26 && !isInPictureInPictureMode && hasMedia && lastPlaying && youtubeVideoTab()) {
+                      enterPip()
+                  }
+              }
+
+              private fun youtubeVideoTab(): Boolean {
+                  val u = tabs.getOrNull(cur)?.url ?: return false
+                  val yt = (u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")
+                  return yt && (u.contains("/watch") || u.contains("youtu.be/") || u.contains("/shorts"))
+              }
+
+              private val pipFabHide = Runnable { hidePipFab() }
+
+              private fun hidePipFab() {
+                  handler.removeCallbacks(pipFabHide)
+                  if (!::pipFab.isInitialized || pipFab.visibility == View.GONE) return
+                  pipFab.animate().alpha(0f).setDuration(200).withEndAction {
+                      if (pipFab.alpha == 0f) pipFab.visibility = View.GONE
+                  }.start()
+              }
+
+              /** Videonun köşesindeki "küçült" düğmesi: birkaç saniye görünür, sonra solar; dokununca geri gelir. */
+              private fun showPipFab() {
+                  if (!::pipFab.isInitialized) return
+                  if (Build.VERSION.SDK_INT < 26 || isInPictureInPictureMode || customView != null || !hasMedia || !youtubeVideoTab()) {
+                      hidePipFab(); return
+                  }
+                  pipFab.animate().cancel()
+                  if (pipFab.visibility != View.VISIBLE) { pipFab.alpha = 0f; pipFab.visibility = View.VISIBLE }
+                  pipFab.animate().alpha(0.9f).setDuration(150).start()
+                  handler.removeCallbacks(pipFabHide)
+                  handler.postDelayed(pipFabHide, 3500L)
               }
 
               override fun onResume() {
@@ -1127,6 +1174,17 @@ jobs:
 
                   content = FrameLayout(this)
                   content.setBackgroundColor(cBg)
+                  pipFab = ImageButton(this)
+                  pipFab.setImageResource(R.drawable.ic_pip_enter)
+                  pipFab.background = shape(0x99000000.toInt(), 21)
+                  pipFab.contentDescription = "Küçült"
+                  pipFab.setPadding(dp(10), dp(10), dp(10), dp(10))
+                  pipFab.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                  pipFab.visibility = View.GONE
+                  pipFab.setOnClickListener { hidePipFab(); enterPip() }
+                  content.addView(pipFab, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.END).apply {
+                      topMargin = dp(10); marginEnd = dp(10)
+                  })
                   if (!prefs.barBottom) {
                       root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
                       root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
@@ -1223,6 +1281,10 @@ jobs:
               @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
               private fun createTab(incognito: Boolean = false): BTab {
                   val web = BgWebView(this)
+                  web.setOnTouchListener { _, ev ->
+                      if (ev.actionMasked == MotionEvent.ACTION_DOWN && tabs.getOrNull(cur)?.web === web) showPipFab()
+                      false
+                  }
                   val bridge = PusulaBridge(prefs)
                   val tab = BTab(web, bridge, incognito)
                   val s = web.settings
@@ -1945,13 +2007,14 @@ jobs:
                   imm.hideSoftInputFromWindow(root.windowToken, 0)
               }
 
-              private fun sheetWindow(d: Dialog, view: View, full: Boolean) {
+              private fun sheetWindow(d: Dialog, view: View, full: Boolean, top: Boolean = false) {
                   d.requestWindowFeature(Window.FEATURE_NO_TITLE)
                   d.setContentView(view)
                   d.window?.let { w ->
                       w.setBackgroundDrawable(ColorDrawable(if (full) cBg else Color.TRANSPARENT))
                       w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, if (full) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT)
-                      if (!full) w.setGravity(Gravity.BOTTOM)
+                      if (!full) w.setGravity(if (top) Gravity.TOP else Gravity.BOTTOM)
+                      if (!full && top) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
                   }
               }
 
@@ -2137,7 +2200,28 @@ jobs:
                       menuDialog = null
                       return
                   }
-                  val d = Dialog(this)
+                  val sheetAtTop = !prefs.barBottom
+                  var sheetView: View? = null
+                  val d = object : Dialog(this@MainActivity) {
+                      private var closing = false
+                      fun finishNow() { try { super.dismiss() } catch (_: Exception) { } }
+                      override fun dismiss() {
+                          if (closing) return
+                          val v = sheetView
+                          if (v == null || !isShowing || this@MainActivity.isFinishing || this@MainActivity.isDestroyed || v.height <= 0) {
+                              finishNow(); return
+                          }
+                          closing = true
+                          val h = v.height.toFloat()
+                          val from = v.translationY
+                          v.animate().translationY(if (sheetAtTop) -h else h)
+                              .setDuration(220)
+                              .setInterpolator(android.view.animation.AccelerateInterpolator(1.2f))
+                              .setUpdateListener { a -> try { window?.setDimAmount(0.5f * (1f - a.animatedFraction)) } catch (_: Exception) { } }
+                              .withEndAction { finishNow() }
+                              .start()
+                      }
+                  }
                   menuDialog = d
                   d.setOnDismissListener { if (menuDialog === d) menuDialog = null }
 
@@ -2178,16 +2262,22 @@ jobs:
 
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
-                  col.setPadding(dp(10), dp(8), dp(10), dp(16))
+                  val statusH = run {
+                      val rid = resources.getIdentifier("status_bar_height", "dimen", "android")
+                      if (rid > 0) resources.getDimensionPixelSize(rid) else dp(28)
+                  }
+                  if (sheetAtTop) col.setPadding(dp(10), dp(8) + statusH, dp(10), dp(8))
+                  else col.setPadding(dp(10), dp(8), dp(10), dp(16))
                   val rad = dp(28).toFloat()
                   val bgd = GradientDrawable()
                   bgd.setColor(cSurface)
-                  bgd.cornerRadii = floatArrayOf(rad, rad, rad, rad, 0f, 0f, 0f, 0f)
+                  bgd.cornerRadii = if (sheetAtTop) floatArrayOf(0f, 0f, 0f, 0f, rad, rad, rad, rad)
+                                    else floatArrayOf(rad, rad, rad, rad, 0f, 0f, 0f, 0f)
                   col.background = bgd
 
                   val handle = View(this)
                   handle.background = shape(cField, 3)
-                  col.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
+                  if (!sheetAtTop) col.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
                       gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(6); bottomMargin = dp(10)
                   })
 
@@ -2199,9 +2289,6 @@ jobs:
                       col.addView(row("🏠", "Ana ekrana ekle") { addCurrentToHomeScreen() })
                   }
                   col.addView(row("🔍", "Sayfada bul") { openFind() })
-                  if (onYt) {
-                      col.addView(row("📺", "YouTube küçült") { handler.postDelayed({ enterPip() }, 150) })
-                  }
                   col.addView(row("➕", "Yeni sekme") { openTab(null) })
                   col.addView(row("🕶️", "Gizli sekme") { openTab(null, true, true) })
 
@@ -2253,31 +2340,84 @@ jobs:
                   col.addView(row("🎨", "Tema") { chooseTheme { } })
                   col.addView(row("⚙️", "Ayarlar") { showSettings() })
 
-                  // Çekmece: adres çubuğu üstteyse yukarı, altaysa aşağı kaydırınca kapanır
+                  if (sheetAtTop) col.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
+                      gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(10); bottomMargin = dp(6)
+                  })
+
+                  // Çekmece parmağı takip eder: adres çubuğu altaysa aşağı, üstteyse yukarı sürükleyince kapanır
                   val swipeWrap = object : FrameLayout(this@MainActivity) {
                       private var sy = 0f
                       private var sx = 0f
-                      private var done = false
+                      private var dragging = false
+                      private var vt: android.view.VelocityTracker? = null
+                      private val slop = dp(10).toFloat()
+                      private fun sg(): Float = if (sheetAtTop) -1f else 1f
+                      private fun dimTo(progress: Float) {
+                          try { d.window?.setDimAmount(0.5f * (1f - progress.coerceIn(0f, 1f))) } catch (_: Exception) { }
+                      }
                       override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
                           when (e.actionMasked) {
-                              MotionEvent.ACTION_DOWN -> { sy = e.rawY; sx = e.rawX; done = false }
-                              MotionEvent.ACTION_MOVE -> if (!done) {
-                                  val dy = e.rawY - sy
-                                  val dx = e.rawX - sx
-                                  val closeDir = if (prefs.barBottom) dy > 0 else dy < 0
-                                  if (closeDir && kotlin.math.abs(dy) > dp(36) && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.5f) {
-                                      done = true
-                                      try { d.dismiss() } catch (_: Exception) { }
-                                      return true
+                              MotionEvent.ACTION_DOWN -> {
+                                  sy = e.rawY; sx = e.rawX; dragging = false
+                                  vt?.recycle(); vt = android.view.VelocityTracker.obtain(); vt?.addMovement(e)
+                              }
+                              MotionEvent.ACTION_MOVE -> {
+                                  vt?.addMovement(e)
+                                  if (!dragging) {
+                                      val dy = (e.rawY - sy) * sg()
+                                      val dx = kotlin.math.abs(e.rawX - sx)
+                                      if (dy > slop && dy > dx * 1.2f) { dragging = true; sy = e.rawY; return true }
                                   }
                               }
                           }
-                          return false
+                          return dragging
                       }
-                      override fun onTouchEvent(e: MotionEvent): Boolean = true
+                      override fun onTouchEvent(e: MotionEvent): Boolean {
+                          vt?.addMovement(e)
+                          when (e.actionMasked) {
+                              MotionEvent.ACTION_MOVE -> if (dragging) {
+                                  val p = Math.max(0f, (e.rawY - sy) * sg())
+                                  col.translationY = p * sg()
+                                  dimTo(p / Math.max(1, col.height).toFloat())
+                              }
+                              MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                  if (dragging) {
+                                      vt?.computeCurrentVelocity(1000)
+                                      val v = (vt?.yVelocity ?: 0f) * sg()
+                                      val p = Math.abs(col.translationY)
+                                      if (p > col.height * 0.3f || v > 1200f) d.dismiss()
+                                      else {
+                                          col.animate().translationY(0f).setDuration(200)
+                                              .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                              .setUpdateListener { a -> dimTo((p / Math.max(1, col.height).toFloat()) * (1f - a.animatedFraction)) }
+                                              .start()
+                                      }
+                                  }
+                                  dragging = false
+                                  vt?.recycle(); vt = null
+                              }
+                          }
+                          return true
+                      }
                   }
                   swipeWrap.addView(col, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-                  sheetWindow(d, swipeWrap, false)
+                  sheetView = col
+                  sheetWindow(d, swipeWrap, false, sheetAtTop)
+                  d.window?.setWindowAnimations(0)
+                  d.window?.setDimAmount(0f)
+                  // Açılış: çekmece adres çubuğunun olduğu yönden kayarak gelir
+                  swipeWrap.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+                      override fun onPreDraw(): Boolean {
+                          swipeWrap.viewTreeObserver.removeOnPreDrawListener(this)
+                          val h = col.height.toFloat()
+                          col.translationY = if (sheetAtTop) -h else h
+                          col.animate().translationY(0f).setDuration(280)
+                              .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                              .setUpdateListener { a -> try { d.window?.setDimAmount(0.5f * a.animatedFraction) } catch (_: Exception) { } }
+                              .start()
+                          return true
+                      }
+                  })
                   d.show()
               }
 
@@ -6431,6 +6571,11 @@ jobs:
           cat > app/src/main/res/drawable/ic_close.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
               <path android:fillColor="#FFFFFFFF" android:pathData="M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z"/>
+          </vector>
+          EOF
+          cat > app/src/main/res/drawable/ic_pip_enter.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+              <path android:fillColor="#FFFFFFFF" android:pathData="M19,7h-8v6h8V7zM21,3H3C1.9,3 1,3.9 1,5v14c0,1.1 0.9,1.98 2,1.98h18c1.1,0 2,-0.88 2,-1.98V5c0,-1.1 -0.9,-2 -2,-2zM21,19.01H3V4.98h18v14.03z"/>
           </vector>
           EOF
           cat > app/src/main/res/drawable/ic_pip_next.xml <<'EOF'
