@@ -573,6 +573,7 @@ jobs:
               private var shown: WebView? = null
               private var miniTab: BTab? = null
               private var miniOverlay: FrameLayout? = null
+              private var miniPlayBtn: TextView? = null
               private var mdOld: BTab? = null
               private var mdPeek: BTab? = null
               private var mdClipH = 0
@@ -795,8 +796,8 @@ jobs:
                           return
                       }
                       val js = when (act) {
-                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> MEDIA_TOGGLE_JS
-                          PlaybackService.ACTION_PAUSE -> MEDIA_PAUSE_JS
+                          PlaybackService.ACTION_PLAY, PlaybackService.ACTION_TOGGLE -> if (isInPictureInPictureMode) MEDIA_TOGGLE_FAST_JS else MEDIA_TOGGLE_JS
+                          PlaybackService.ACTION_PAUSE -> if (isInPictureInPictureMode) MEDIA_PAUSE_FAST_JS else MEDIA_PAUSE_JS
                           PlaybackService.ACTION_PREVIOUS -> MEDIA_PREVIOUS_JS
                           PlaybackService.ACTION_NEXT -> MEDIA_NEXT_JS
                           else -> return
@@ -805,6 +806,12 @@ jobs:
                                     else listOfNotNull(miniTab ?: tabs.getOrNull(cur))
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
+                      }
+                      // Durum hemen güncellenir (yoklama 1,5 sn gecikmeli): PiP düğmesi ve büyütünce gelen davranış doğru olsun
+                      if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
+                          lastPlaying = if (act == PlaybackService.ACTION_PAUSE) false else !lastPlaying
+                          if (isInPictureInPictureMode) updatePipActions()
+                          handler.postDelayed({ pollMedia() }, 250L)
                       }
                       if (isInPictureInPictureMode) {
                           try { tabs.getOrNull(cur)?.web?.evaluateJavascript("if(window.__pipFlash)window.__pipFlash();", null) } catch (_: Exception) { }
@@ -1718,7 +1725,7 @@ jobs:
                       true
                   }
                   ov.addView(tap, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                  fun pill(txt: String, g: Int, act: () -> Unit) {
+                  fun pill(txt: String, g: Int, act: () -> Unit): TextView {
                       val b2 = TextView(this)
                       b2.text = txt
                       b2.textSize = 15f
@@ -1727,11 +1734,17 @@ jobs:
                       b2.background = shape(0x99000000.toInt(), 16)
                       b2.setOnClickListener { act() }
                       ov.addView(b2, FrameLayout.LayoutParams(dp(34), dp(34), g).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+                      return b2
                   }
-                  pill("⏯", Gravity.TOP or Gravity.START) {
-                      try {
-                          miniTab?.web?.evaluateJavascript("(function(){window.__rotaWas=false;var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();", null)
-                      } catch (_: Exception) { }
+                  miniPlayBtn = pill("⏸", Gravity.TOP or Gravity.START) {
+                      val mt = miniTab
+                      if (mt != null) {
+                          // Bildirimdeki oynat/durdur ile aynı komut: sayfanın duraklatma engeline takılmaz
+                          try { mt.web.evaluateJavascript("window.__rotaWas=false;", null) } catch (_: Exception) { }
+                          try { mt.web.evaluateJavascript(MEDIA_TOGGLE_FAST_JS, null) } catch (_: Exception) { }
+                          miniPlayBtn?.text = if (miniPlayBtn?.text == "⏸") "▶" else "⏸"
+                          handler.postDelayed({ miniSyncBtn() }, 400)
+                      }
                   }
                   pill("✕", Gravity.TOP or Gravity.END) { dismissMini() }
                   miniOverlay = ov
@@ -1776,6 +1789,7 @@ jobs:
                       try {
                           mt.web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})();") { r ->
                               if (miniTab === mt) {
+                                  miniPlayBtn?.text = if (r == "true") "⏸" else "▶"
                                   val fg = tabs.getOrNull(cur)
                                   if (fg != null && fg !== mt) {
                                       try { fg.web.evaluateJavascript("window.__rotaNoPreview=" + (r == "true") + ";", null) } catch (_: Exception) { }
@@ -1785,6 +1799,16 @@ jobs:
                       } catch (_: Exception) { }
                       handler.postDelayed(this, 700)
                   }
+              }
+
+              /** Küçük penceredeki oynat/durdur düğmesinin simgesini videonun gerçek durumuna eşitler. */
+              private fun miniSyncBtn() {
+                  val mt = miniTab ?: return
+                  try {
+                      mt.web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended);})();") { r ->
+                          if (miniTab === mt) miniPlayBtn?.text = if (r == "true") "⏸" else "▶"
+                      }
+                  } catch (_: Exception) { }
               }
 
               private fun previewsOff() {
@@ -5237,16 +5261,36 @@ jobs:
                       "var v=mediaList().find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');" +
                       "if(v){" +
                       "if(!v.paused){window.__userPause=true;" +
-                      "var from=v.volume;v.dataset._fv=String(from);" +
+                      "var from=v.volume;v.dataset._fv=String(from);v.dataset.pusulaWasPlaying='';" +
                       "fadeTo(v,from,0,350,function(){v.pause();try{v.volume=from;}catch(z){}});" +
                       "}else{" +
-                      "window.__userPause=false;var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
+                      "window.__userPause=false;v.dataset.pusulaWasPlaying='1';var to=parseFloat(v.dataset._fv||'1');if(!(to>0))to=1;v.volume=0;if(v.muted)v.muted=false;" +
                       "var p=v.play();if(p&&p.catch)p.catch(function(){});" +
                       "fadeTo(v,0,to,450,function(){try{delete v.dataset._fv;}catch(z){}});" +
                       "}" +
                       "return;}" +
                       "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
                       "if(b)b.click();" +
+                      "}catch(e){}})();"
+
+                  // PiP / küçük pencere düğmeleri için gecikmesiz oynat-duraklat (ses geçişi yok)
+                  const val MEDIA_TOGGLE_FAST_JS =
+                      "(function(){try{" +
+                      "var l=Array.from(document.querySelectorAll('video,audio'));" +
+                      "var v=l.find(function(m){return !m.paused&&!m.ended;})||document.querySelector('video,audio');" +
+                      "if(v){" +
+                      "if(!v.paused){window.__userPause=true;v.dataset.pusulaWasPlaying='';v.pause();}" +
+                      "else{window.__userPause=false;v.dataset.pusulaWasPlaying='1';if(v.muted)v.muted=false;var p=v.play();if(p&&p.catch)p.catch(function(){});}" +
+                      "if(window.__pipFlash)window.__pipFlash();return;}" +
+                      "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
+                      "if(b)b.click();" +
+                      "}catch(e){}})();"
+
+                  const val MEDIA_PAUSE_FAST_JS =
+                      "(function(){try{" +
+                      "window.__userPause=true;" +
+                      "document.querySelectorAll('video,audio').forEach(function(m){try{m.dataset.pusulaWasPlaying='';if(!m.paused)m.pause();}catch(z){}});" +
+                      "if(window.__pipFlash)window.__pipFlash();" +
                       "}catch(e){}})();"
 
                   const val MEDIA_PAUSE_JS =
