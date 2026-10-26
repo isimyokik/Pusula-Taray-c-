@@ -849,6 +849,23 @@ jobs:
                       }
                       handler.postDelayed({ checkAfterPip(0) }, 1000)
                       reapplyInsetsLater()
+                      // PiP ✕ ile kapandıysa (aktivite durdu): ses arka planda devam etsin, sadece pencere kapansın
+                      handler.postDelayed({
+                          if (isInPictureInPictureMode) return@postDelayed
+                          if (prefs.bgPlay && !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+                            try { shown?.onResume() } catch (_: Exception) { }
+                              appInBackground = true
+                              handler.removeCallbacks(backgroundMediaPump)
+                              handler.post(backgroundMediaPump)
+                              if (hasMedia && lastPlaying) {
+                                  try {
+                                      currentWeb()?.evaluateJavascript(
+                                          "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
+                                  } catch (_: Exception) { }
+                                  PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                              }
+                          }
+                      }, 400)
                   }
               }
 
@@ -5350,7 +5367,7 @@ jobs:
                       "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
                       "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n" +
                       "}\n" +
-                      "var tracking=false,locked=false,busy=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
+                      "var busyT=0,tracking=false,locked=false,busy=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
                       "function rubber(d){\n" +
                       "if(d<=0)return 0;\n" +
                       "var R=window.innerHeight*1.1;\n" +
@@ -5361,7 +5378,7 @@ jobs:
                       "try{\n" +
                       "if(!document.getElementById('__rota_peek')){\n" +
                       "var s=document.createElement('style');s.id='__rota_peek';\n" +
-                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
+                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
                       "document.documentElement.appendChild(s);\n" +
                       "}\n" +
                       "document.documentElement.classList.add('rota-peek');\n" +
@@ -5388,7 +5405,7 @@ jobs:
                       "}\n" +
                       "function peekOff(){\n" +
                       "try{\n" +
-                      "document.documentElement.classList.remove('rota-peek');\n" +
+                      "document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');\n" +
                       "peekEl.forEach(function(a){a[0].style.cssText=a[1];});\n" +
                       "peekEl=[];\n" +
                       "}catch(z){}\n" +
@@ -5406,13 +5423,13 @@ jobs:
                       "}\n" +
                       "function springBack(){\n" +
                       "if(!pg)return;\n" +
-                      "busy=true;\n" +
+                      "busy=true;busyT=Date.now();\n" +
                       "pg.style.setProperty('transition','transform .55s cubic-bezier(.3,1.35,.5,1)','important');\n" +
                       "setOff(0);\n" +
                       "setTimeout(clean,600);\n" +
                       "}\n" +
                       "function commit(v){\n" +
-                      "busy=true;\n" +
+                      "busy=true;busyT=Date.now();\n" +
                       "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
                       "var d=Math.max(170,Math.min(340,left/Math.max(v,0.9)));\n" +
                       "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
@@ -5421,6 +5438,10 @@ jobs:
                       "}\n" +
                       "function afterDown(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "pg.style.removeProperty('border-radius');\n" +
+                      "document.documentElement.classList.add('rota-noanim');\n" +
                       "pg.style.setProperty('opacity','0','important');\n" +
                       "pg.style.removeProperty('transform');\n" +
                       "pg.style.removeProperty('border-radius');\n" +
@@ -5454,15 +5475,17 @@ jobs:
                       "}\n" +
                       "document.addEventListener('touchstart',function(e){\n" +
                       "tracking=false;locked=false;\n" +
+                      "if(busy&&Date.now()-busyT>2500){busy=false;try{clean();}catch(z){}}\n" +
                       "if(busy)return;\n" +
                       "if(!e.touches||e.touches.length!==1)return;\n" +
                       "if(!pageOpen())return;\n" +
                       "var path=(e.composedPath&&e.composedPath())||[];\n" +
+                      "var pidx=path.indexOf(pageEl());\n" +
                       "for(var i=0;i<path.length;i++){\n" +
                       "var n=path[i];\n" +
                       "if(!n||n.nodeType!==1)continue;\n" +
                       "if(n.matches&&n.matches('#progress-bar,tp-yt-paper-slider,input[type=range],#volume-slider,ytmusic-player-queue-item[selected] #reorder'))return;\n" +
-                      "if(n.scrollTop>0&&n.scrollHeight>n.clientHeight+2)return;\n" +
+                      "if(pidx>=0&&i<pidx&&n!==document.documentElement&&n!==document.body&&n.scrollTop>0&&n.scrollHeight>n.clientHeight+2)return;\n" +
                       "}\n" +
                       "var t=e.touches[0];\n" +
                       "sx=t.clientX;sy=t.clientY;off=0;smp=[];pg=pageEl();tracking=true;\n" +
