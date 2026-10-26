@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Yeni Sekme</title>
+<style>
+  :root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--text);font-family:Roboto,-apple-system,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
+  .glow{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(420px 300px at 85% -40px,color-mix(in srgb,var(--acc) 38%,transparent),transparent 70%),
+               radial-gradient(380px 280px at -10% 18%,color-mix(in srgb,var(--acc2) 30%,transparent),transparent 70%)}
+  main{position:relative;max-width:560px;margin:0 auto;padding:34px 18px 40px}
+  .hello{color:var(--sub);font-size:14px;margin:0 0 2px}
+  h1{font-size:40px;line-height:1.1;margin:0 0 22px;font-weight:800;letter-spacing:-.5px;
+     background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  form{display:flex;gap:8px;margin-bottom:26px}
+  .sbox{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:54px;border-radius:27px;padding:0 18px;
+        background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);
+        box-shadow:0 8px 24px rgba(0,0,0,.18)}
+  .sbox:focus-within{border-color:var(--acc)}
+  .sbox input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-size:16px;outline:none;height:100%}
+  .sbox input::placeholder{color:var(--sub)}
+  button.go{width:54px;height:54px;border-radius:50%;border:0;color:#fff;font-size:22px;
+            background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 8px 20px color-mix(in srgb,var(--acc) 45%,transparent)}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--sub);margin:26px 4px 12px;font-weight:700}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 8px}
+  a.t{display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-size:12px;min-width:0}
+  a.t i{width:58px;height:58px;border-radius:19px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:27px;
+        box-shadow:0 8px 18px rgba(0,0,0,.25);color:#fff;font-weight:700}
+  a.t span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)}
+  .list{display:flex;flex-direction:column;gap:8px}
+  a.row{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);padding:11px 14px;border-radius:16px;
+        background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid color-mix(in srgb,var(--text) 8%,transparent);min-width:0}
+  a.row b{display:block;font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  a.row small{display:block;color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  a.row .d{width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px}
+  .priv{text-align:center;padding-top:60px}
+  .priv .big{font-size:64px;margin-bottom:6px}
+  .priv h1{margin-bottom:8px}
+  .priv p{color:var(--sub);line-height:1.6;margin:0 auto 10px;max-width:30ch}
+  a.t{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transition:transform .15s}
+  a.t.drag{transform:scale(1.14);opacity:.85;z-index:5}
+  a.t.add i{background:transparent!important;border:2px dashed color-mix(in srgb,var(--sub) 70%,transparent);box-shadow:none;color:var(--sub);font-size:30px;font-weight:400}
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+  .sheet{width:100%;max-width:560px;background:var(--surface);border-radius:26px 26px 0 0;padding:20px 18px 26px;box-shadow:0 -10px 40px rgba(0,0,0,.4)}
+  .sheet h3{margin:0 0 14px;font-size:18px}
+  .sheet label{display:block;font-size:12px;color:var(--sub);margin:10px 4px 5px}
+  .sheet input{width:100%;height:46px;border-radius:14px;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);background:var(--field);color:var(--text);font-size:16px;padding:0 14px;outline:none}
+  .sheet input:focus{border-color:var(--acc)}
+  .btns{display:flex;gap:10px;margin-top:18px}
+  .btns button{flex:1;height:48px;border-radius:24px;border:0;font-size:15px;font-weight:700;color:var(--text);background:var(--field)}
+  .btns button.pri{color:#fff;background:linear-gradient(135deg,var(--acc),var(--acc2))}
+  .btns button.dng{color:#fff;background:linear-gradient(135deg,#ff5a5f,#d6245a)}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<main id="main">
+  <div id="home">
+    <p class="hello" id="hello"></p>
+    <h1>Rota</h1>
+    <form id="f"><div class="sbox"><span>🔎</span><input id="q" type="search" placeholder="Ara veya adres yaz" autocomplete="off" autocapitalize="off" enterkeyhint="go"></div><button class="go" type="submit" aria-label="Git">→</button></form>
+    <h2>Hızlı erişim</h2>
+    <div class="grid" id="pins"></div>
+    <div id="bmWrap" hidden><h2>Yer imleri</h2><div class="grid" id="bms"></div></div>
+    <div id="hsWrap" hidden><h2>Son ziyaretler</h2><div class="list" id="hs"></div></div>
+  </div>
+  <div class="priv" id="priv" hidden>
+    <div class="big">🕶️</div>
+    <h1>Gizli sekme</h1>
+    <p>Bu sekmede gezdiğin sayfalar geçmişe kaydedilmez ve sekmeyi kapatınca silinir.</p>
+    <p>İstersen aşağıdaki kutudan arama yapabilirsin.</p>
+    <form id="pf" style="margin-top:18px"><div class="sbox"><span>🔎</span><input id="pq" type="search" placeholder="Gizlice ara" autocomplete="off"></div><button class="go" type="submit" aria-label="Git">→</button></form>
+  </div>
+</main>
+<script>
+(function(){
+  var cfg = {engine:"Google",search:"https://www.google.com/search?q=%s",bookmarks:[],history:[]};
+  try { if (window.Pusula) { var c = JSON.parse(window.Pusula.config()); if (c && c.search) cfg = c; } } catch (e) {}
+  var r = document.documentElement.style;
+  if (cfg.bg) {
+    r.setProperty("--bg",cfg.bg); r.setProperty("--surface",cfg.surface); r.setProperty("--field",cfg.field);
+    r.setProperty("--text",cfg.text); r.setProperty("--sub",cfg.sub); r.setProperty("--acc",cfg.accent); r.setProperty("--acc2",cfg.accent2);
+  }
+  var isPrivate = /[?&]private=1/.test(location.search);
+  if (isPrivate) {
+    r.setProperty("--bg","#150d2b"); r.setProperty("--surface","#241447"); r.setProperty("--field","#34205f");
+    r.setProperty("--text","#f3ecff"); r.setProperty("--sub","#b7a4e6"); r.setProperty("--acc","#a46bff"); r.setProperty("--acc2","#ff5cc8");
+    document.getElementById("home").hidden = true; document.getElementById("priv").hidden = false;
+  }
+  var h = new Date().getHours();
+  var greet = h < 5 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar";
+  var day = ""; try { day = new Date().toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"}); } catch (e) {}
+  document.getElementById("hello").textContent = greet + (day ? " · " + day : "");
+  document.getElementById("q").placeholder = cfg.engine + " ile ara veya adres yaz";
+
+  function go(text){
+    text = (text || "").trim();
+    if (!text) return;
+    if (/^https?:\/\//i.test(text)) { location.href = text; return; }
+    if (!/\s/.test(text) && /^([a-z0-9-]+\.)+[a-z]{2,}([:\/?#].*)?$/i.test(text)) { location.href = "https://" + text; return; }
+    location.href = cfg.search.replace("%s", encodeURIComponent(text));
+  }
+  document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
+  document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
+
+  var G = ["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
+  var pins = (cfg.pins && cfg.pins.length >= 0 && Array.isArray(cfg.pins)) ? cfg.pins : [
+    {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
+    {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
+    {t:"Müzik",u:"https://music.youtube.com/",e:"🎵",g:2},
+    {t:"Haberler",u:"https://news.google.com/?hl=tr",e:"📰",g:3},
+    {t:"Harita",u:"https://maps.google.com/",e:"🗺️",g:4},
+    {t:"Wikipedia",u:"https://tr.wikipedia.org/",e:"📚",g:5},
+    {t:"Çeviri",u:"https://translate.google.com/",e:"🌐",g:6}
+  ];
+  function save(){ try { if (window.Pusula && window.Pusula.savePins) window.Pusula.savePins(JSON.stringify(pins)); } catch (e) {} }
+  function tile(label, url, icon, bg){
+    var a = document.createElement("a"); a.className = "t"; a.href = url;
+    var i = document.createElement("i"); i.style.background = bg; i.textContent = icon;
+    var s = document.createElement("span"); s.textContent = label;
+    a.appendChild(i); a.appendChild(s); return a;
+  }
+  var g = document.getElementById("pins");
+  var suppress = false;
+
+  // Simge girilmemişse sitenin kendi logosunu çeker; bulunamazsa harf kalır
+  function favicon(a, u){
+    var host = ""; try { host = new URL(u).hostname; } catch (e) { return; }
+    if (!host) return;
+    var c = ["https://" + host + "/apple-touch-icon.png",
+             "https://" + host + "/favicon.ico",
+             "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=" + encodeURIComponent("https://" + host) + "&size=128"];
+    var box = a.querySelector("i"), k = 0, img = new Image();
+    img.referrerPolicy = "no-referrer";
+    function next(){ k++; if (k < c.length) img.src = c[k]; }
+    img.onload = function(){
+      if (img.naturalWidth < 16) { next(); return; }
+      var big = img.naturalWidth >= 96;
+      box.textContent = "";
+      box.style.background = "#fff";
+      img.style.cssText = big ? "width:100%;height:100%;object-fit:cover;border-radius:19px" : "width:34px;height:34px;object-fit:contain";
+      box.appendChild(img);
+    };
+    img.onerror = next;
+    img.src = c[0];
+  }
+
+  function render(){
+    g.innerHTML = "";
+    pins.forEach(function(p, n){
+      var hasE = !!(p.e && String(p.e).trim());
+      var a = tile(p.t, p.u, hasE ? p.e : (p.t||"?").charAt(0).toUpperCase(), G[(p.g == null ? n : p.g) % G.length]);
+      if (!hasE) favicon(a, p.u);
+      a.dataset.n = n;
+      attachDrag(a);
+      g.appendChild(a);
+    });
+    var plus = tile("Ekle", "#", "+", "none");
+    plus.classList.add("add");
+    plus.addEventListener("click", function(e){ e.preventDefault(); openEditor(-1); });
+    g.appendChild(plus);
+  }
+
+  function closeSheet(){ var o = document.getElementById("ov"); if (o) o.remove(); }
+  function sheet(html){
+    closeSheet();
+    var o = document.createElement("div"); o.className = "sheet-bg"; o.id = "ov";
+    o.innerHTML = '<div class="sheet">' + html + '</div>';
+    var t0 = Date.now();
+    o.addEventListener("click", function(e){ if (e.target === o && Date.now() - t0 > 600) closeSheet(); });
+    document.body.appendChild(o);
+    return o;
+  }
+  function fixUrl(u){
+    u = (u || "").trim();
+    if (!u) return "";
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
+  }
+  function esc(x){ return String(x == null ? "" : x).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  function openEditor(idx){
+    var p = idx >= 0 ? pins[idx] : {t:"",u:"",e:""};
+    var o = sheet('<h3>' + (idx >= 0 ? "Kısayolu düzenle" : "Yeni kısayol") + '</h3>' +
+      '<label>Ad</label><input id="fe_t" value="' + esc(p.t) + '" placeholder="Örn. Wikipedia">' +
+      '<label>Adres</label><input id="fe_u" value="' + esc(p.u) + '" placeholder="Örn. tr.wikipedia.org" autocapitalize="off">' +
+      '<label>Simge (boş bırakırsan sitenin kendi logosu kullanılır)</label><input id="fe_e" value="' + esc(p.e) + '" maxlength="4" placeholder="📚">' +
+      '<div class="btns"><button id="fe_c">İptal</button><button class="pri" id="fe_s">Kaydet</button></div>');
+    o.querySelector("#fe_c").onclick = closeSheet;
+    o.querySelector("#fe_s").onclick = function(){
+      var t = o.querySelector("#fe_t").value.trim();
+      var u = fixUrl(o.querySelector("#fe_u").value);
+      var e = o.querySelector("#fe_e").value.trim();
+      if (!u) { o.querySelector("#fe_u").focus(); return; }
+      if (!t) t = u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
+      if (idx >= 0) { pins[idx].t = t; pins[idx].u = u; pins[idx].e = e; }
+      else pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});
+      save(); closeSheet(); render();
+    };
+  }
+
+  function openActions(idx){
+    var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin-top:4px"><button id="ac_e">Düzenle</button><button class="dng" id="ac_d">Sil</button></div>' +
+      '<div class="btns" style="margin-top:10px"><button id="ac_c">Kapat</button></div>');
+    o.querySelector("#ac_c").onclick = closeSheet;
+    o.querySelector("#ac_e").onclick = function(){ closeSheet(); openEditor(idx); };
+    o.querySelector("#ac_d").onclick = function(){ pins.splice(idx, 1); save(); closeSheet(); render(); };
+  }
+
+  function attachDrag(a){
+    var timer = null, dragging = false, sx = 0, sy = 0, moved = false;
+    a.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+    a.addEventListener("click", function(e){ if (suppress) { e.preventDefault(); e.stopPropagation(); } });
+    a.addEventListener("touchstart", function(e){
+      var t = e.touches[0]; sx = t.clientX; sy = t.clientY; moved = false; dragging = false;
+      clearTimeout(timer);
+      timer = setTimeout(function(){ dragging = true; suppress = true; a.classList.add("drag"); try { navigator.vibrate && navigator.vibrate(15); } catch (x) {} }, 420);
+    }, {passive:true});
+    a.addEventListener("touchmove", function(e){
+      var t = e.touches[0];
+      if (!dragging) {
+        if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) clearTimeout(timer);
+        return;
+      }
+      e.preventDefault();
+      if (Math.abs(t.clientX - sx) > 6 || Math.abs(t.clientY - sy) > 6) moved = true;
+      a.style.pointerEvents = "none";
+      var el = document.elementFromPoint(t.clientX, t.clientY);
+      a.style.pointerEvents = "";
+      var tgt = el && el.closest ? el.closest("a.t") : null;
+      if (tgt && tgt !== a && !tgt.classList.contains("add") && tgt.parentNode === g) {
+        var kids = Array.prototype.slice.call(g.children);
+        if (kids.indexOf(a) < kids.indexOf(tgt)) g.insertBefore(a, tgt.nextSibling); else g.insertBefore(a, tgt);
+      }
+    }, {passive:false});
+    function end(e){
+      clearTimeout(timer);
+      if (!dragging) return;
+      try { if (e && e.cancelable) e.preventDefault(); } catch (x) {}
+      dragging = false; a.classList.remove("drag");
+      if (moved) {
+        var order = [];
+        Array.prototype.forEach.call(g.children, function(c){ if (c.dataset.n != null && c.dataset.n !== "") order.push(pins[+c.dataset.n]); });
+        pins = order; save(); render();
+      } else {
+        openActions(+a.dataset.n);
+      }
+      setTimeout(function(){ suppress = false; }, 350);
+    }
+    a.addEventListener("touchend", end);
+    a.addEventListener("touchcancel", end);
+  }
+  render();
+
+  var grads = ["linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#a55eea,#6c3fc8)","linear-gradient(135deg,#fd79a8,#d63384)","linear-gradient(135deg,#5f7cff,#3949ab)","linear-gradient(135deg,#ff9f43,#e17055)"];
+  function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./,""); } catch (e) { return u; } }
+  var bms = cfg.bookmarks || [];
+  if (bms.length) {
+    document.getElementById("bmWrap").hidden = false;
+    var bg = document.getElementById("bms");
+    bms.forEach(function(b,n){ var host = hostOf(b.u); bg.appendChild(tile((b.t && b.t.length < 14) ? b.t : host, b.u, host.charAt(0).toUpperCase(), grads[n % grads.length])); });
+  }
+  var hs = cfg.history || [];
+  if (hs.length) {
+    document.getElementById("hsWrap").hidden = false;
+    var hl = document.getElementById("hs");
+    hs.forEach(function(x,n){
+      var a = document.createElement("a"); a.className = "row"; a.href = x.u;
+      var d = document.createElement("span"); d.className = "d"; d.style.background = grads[n % grads.length]; d.textContent = hostOf(x.u).charAt(0).toUpperCase();
+      var w = document.createElement("div"); w.style.minWidth = "0";
+      var b = document.createElement("b"); b.textContent = x.t || hostOf(x.u);
+      var s = document.createElement("small"); s.textContent = hostOf(x.u);
+      w.appendChild(b); w.appendChild(s); a.appendChild(d); a.appendChild(w); hl.appendChild(a);
+    });
+  }
+})();
+</script>
+</body>
+</html>
