@@ -1690,6 +1690,7 @@ jobs:
                   val s = web.settings
                   s.javaScriptEnabled = true
                   s.domStorageEnabled = true
+                  try { s.databaseEnabled = true } catch (_: Exception) { }
                   s.mediaPlaybackRequiresUserGesture = false
                   s.setSupportMultipleWindows(true)
                   s.javaScriptCanOpenWindowsAutomatically = false
@@ -1702,6 +1703,13 @@ jobs:
                   s.allowContentAccess = false
                   s.setGeolocationEnabled(false)
                   s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                  s.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+                  try { if (Build.VERSION.SDK_INT >= 26) s.safeBrowsingEnabled = true } catch (_: Exception) { }
+                  try {
+                      val cm = android.webkit.CookieManager.getInstance()
+                      cm.setAcceptCookie(true)
+                      cm.setAcceptThirdPartyCookies(web, true)
+                  } catch (_: Exception) { }
 
                   val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), "")
                   s.userAgentString = ua
@@ -1892,7 +1900,10 @@ jobs:
                   val t = tabs[index]
                   val wasCurrent = index == cur
                   if (wasCurrent) { content.removeView(t.web); shown = null }
-                  t.web.stopLoading(); t.web.clearHistory(); t.web.clearCache(true); t.web.destroy()
+                  t.web.stopLoading()
+                  try { t.web.clearHistory() } catch (_: Exception) { }
+                  // clearCache(true) diğer sekmelerin oturumunu/zor yüklemeyi bozabiliyor — yok
+                  try { t.web.destroy() } catch (_: Exception) { }
                   tabs.removeAt(index)
                   if (t.incognito) {
                       CookieManager.getInstance().removeAllCookies(null)
@@ -2570,6 +2581,8 @@ jobs:
 
                   override fun onPageFinished(view: WebView?, url: String?) {
                       tab.progress = 100
+                      tab.networkRetryUsed = false
+                      tab.errorLoading = false
                       if (tab.silent) handler.postDelayed({ revealSilent(tab) }, 350)
                       val u = url ?: return
                       if (u.startsWith("http") && !tab.incognito) {
@@ -2597,18 +2610,65 @@ jobs:
                       if (view == null || request == null || error == null) return
                       if (!request.isForMainFrame) return
                       val desc = error.description?.toString() ?: ""
-                      if (desc.contains("ERR_ABORTED")) return
+                      if (desc.contains("ERR_ABORTED") || desc.contains("ERR_BLOCKED_BY_ORB")) return
                       val failing = request.url.toString()
-                      showError(view, tab, failing, desc)
+                      val code = try { error.errorCode } catch (_: Exception) { 0 }
+                      val transient = code == android.webkit.WebViewClient.ERROR_HOST_LOOKUP ||
+                          code == android.webkit.WebViewClient.ERROR_CONNECT ||
+                          code == android.webkit.WebViewClient.ERROR_TIMEOUT ||
+                          code == android.webkit.WebViewClient.ERROR_IO ||
+                          code == android.webkit.WebViewClient.ERROR_FAILED_SSL_HANDSHAKE ||
+                          desc.contains("ERR_CONNECTION") || desc.contains("ERR_NAME_NOT_RESOLVED") ||
+                          desc.contains("ERR_TIMED_OUT") || desc.contains("ERR_NETWORK_CHANGED")
+                      if (transient && !tab.networkRetryUsed) {
+                          tab.networkRetryUsed = true
+                          handler.postDelayed({
+                              try {
+                                  if (tabs.any { it === tab }) view.loadUrl(failing)
+                              } catch (_: Exception) { }
+                          }, 1200L)
+                          return
+                      }
+                      val msg = when {
+                          code == android.webkit.WebViewClient.ERROR_HOST_LOOKUP -> "Site bulunamadı (DNS). VPN veya ağı kontrol et."
+                          code == android.webkit.WebViewClient.ERROR_CONNECT -> "Bağlantı kurulamadı. VPN/ağ kopmuş olabilir."
+                          code == android.webkit.WebViewClient.ERROR_TIMEOUT -> "Bağlantı zaman aşımı. Tekrar dene."
+                          code == android.webkit.WebViewClient.ERROR_FAILED_SSL_HANDSHAKE -> "HTTPS el sıkışması başarısız (sertifika/VPN)."
+                          else -> if (desc.isNotBlank()) desc else "Sayfa yüklenemedi"
+                      }
+                      showError(view, tab, failing, msg)
                   }
 
+                  override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: android.webkit.WebResourceResponse?) {
+                      if (view == null || request == null || response == null) return
+                      if (!request.isForMainFrame) return
+                      val code = response.statusCode
+                      if (code < 500) return
+                      showError(view, tab, request.url.toString(), "Sunucu hatası HTTP $code — site geçici yanıt vermiyor")
+                  }
+
+                  
                   override fun onReceivedSslError(view: WebView?, h: android.webkit.SslErrorHandler?, error: android.net.http.SslError?) {
+                      // Chrome gibi: geçersiz sertifikada devam etme
                       h?.cancel()
                       if (view == null || error == null) return
                       val failing = error.url ?: return
-                      if (failing.substringBefore('#').trimEnd('/') == tab.url.substringBefore('#').trimEnd('/')) {
-                          showError(view, tab, failing, "Güvenli bağlantı kurulamadı (sertifika hatası)")
+                      try {
+                          val fh = android.net.Uri.parse(failing).host
+                          val ph = android.net.Uri.parse(tab.url).host
+                          if (fh != null && ph != null && !fh.equals(ph, true)) {
+                              val samePage = failing.substringBefore('#').trimEnd('/').equals(tab.url.substringBefore('#').trimEnd('/'), true)
+                              if (!samePage) return
+                          }
+                      } catch (_: Exception) { }
+                      val reason = when (error.primaryError) {
+                          android.net.http.SslError.SSL_EXPIRED -> "Sertifika süresi dolmuş"
+                          android.net.http.SslError.SSL_IDMISMATCH -> "Sertifika bu siteye ait değil"
+                          android.net.http.SslError.SSL_UNTRUSTED -> "Sertifika güvenilir değil (VPN ara sertifikası olabilir)"
+                          android.net.http.SslError.SSL_DATE_INVALID -> "Cihaz tarihi hatalı olabilir"
+                          else -> "Güvenli bağlantı (HTTPS) kurulamadı"
                       }
+                      showError(view, tab, failing, reason)
                   }
 
                   override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
@@ -8787,4 +8847,4 @@ jobs:
         with:
           name: Pusula-APK
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error  
+          if-no-files-found: error 
