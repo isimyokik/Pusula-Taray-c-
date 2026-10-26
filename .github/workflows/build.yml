@@ -1067,6 +1067,7 @@ jobs:
                       addAction(PlaybackService.ACTION_OPEN)
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+                  handler.postDelayed({ try { toast("Rota sürüm kontrol: v12") } catch (_: Exception) { } }, 1500)
                   startBrowsing()
                   addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }
                   handler.removeCallbacks(mediaStatePoll)
