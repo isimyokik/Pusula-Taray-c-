@@ -5447,8 +5447,7 @@ jobs:
                       "function clean(){\n" +
                       "if(!pg)return;\n" +
                       "peekOff();\n" +
-                      "['transition','will-change','overflow'].forEach(function(k){pg.style.removeProperty(k);});\n" +
-                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "['transform','transition','border-radius','will-change','overflow','opacity'].forEach(function(k){pg.style.removeProperty(k);});\n" +
                       "busy=false;\n" +
                       "}\n" +
                       "function springBack(){\n" +
@@ -5468,15 +5467,21 @@ jobs:
                       "}\n" +
                       "function afterDown(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
                       "pg.style.removeProperty('transform');\n" +
                       "pg.style.removeProperty('border-radius');\n" +
                       "document.documentElement.classList.add('rota-noanim');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "pg.style.removeProperty('border-radius');\n" +
                       "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n" +
                       "function success(){\n" +
+                      "pg.style.removeProperty('opacity');\n" +
                       "clean();\n" +
                       "}\n" +
                       "function fail(){\n" +
                       "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "pg.style.removeProperty('opacity');\n" +
                       "void pg.offsetWidth;\n" +
                       "showDebug();\n" +
                       "springBack();\n" +
@@ -5490,9 +5495,9 @@ jobs:
                       "(function poll(){\n" +
                       "var el=Date.now()-t0;\n" +
                       "if(!openNow()){success();return;}\n" +
-                      "if(layoutSig()!==sig0){if(el>=1200){success();return;}}\n" +
-                      "else if(el>=700){next();return;}\n" +
-                      "setTimeout(poll,50);\n" +
+                      "if(layoutSig()!==sig0){if(el>=1800){success();return;}}\n" +
+                      "else if(el>=1000){next();return;}\n" +
+                      "setTimeout(poll,60);\n" +
                       "})();\n" +
                       "}\n" +
                       "next();\n" +
@@ -5553,6 +5558,31 @@ jobs:
                       "setOff(0);\n" +
                       "setTimeout(cleanAll,560);\n" +
                       "}\n" +
+                      "function releaseHold(){\n" +
+                      "if(pg){['transform','transition','will-change','opacity'].forEach(function(k){pg.style.removeProperty(k);});}\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "}\n" +
+                      "function holdClosed(){\n" +
+                      "peek2Off();\n" +
+                      "busy=false;\n" +
+                      "var t1=Date.now(),seenClosed=false;\n" +
+                      "(function w(){\n" +
+                      "try{\n" +
+                      "if(!pg){return;}\n" +
+                      "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
+                      "var oa=!!(l&&l.hasAttribute('player-page-open_'));\n" +
+                      "var r=pg.getBoundingClientRect(),H=window.innerHeight;\n" +
+                      "var closedNow=(!oa&&(r.height===0||r.top>=H*0.5));\n" +
+                      "if(!seenClosed){\n" +
+                      "if(closedNow)seenClosed=true;\n" +
+                      "else if(Date.now()-t1>2500){releaseHold();return;}\n" +
+                      "}else if(oa||(r.height>0&&r.top<H*0.5)){\n" +
+                      "releaseHold();return;\n" +
+                      "}\n" +
+                      "}catch(z){releaseHold();return;}\n" +
+                      "setTimeout(w,40);\n" +
+                      "})();\n" +
+                      "}\n" +
                       "function closeDown(v){\n" +
                       "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
                       "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
@@ -5569,7 +5599,7 @@ jobs:
                       "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
                       "var t0=Date.now();\n" +
                       "(function poll(){\n" +
-                      "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n" +
+                      "if(!pageOpen()){holdClosed();return;}\n" +
                       "if(Date.now()-t0>1500){\n" +
                       "document.documentElement.classList.remove('rota-noanim');\n" +
                       "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
