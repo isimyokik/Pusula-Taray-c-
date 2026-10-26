@@ -889,12 +889,16 @@ jobs:
                           handler.removeCallbacks(backgroundMediaPump)
                           // Bildirimden kapatınca PiP penceresi de kapansın (tersi geçerli değil: PiP ✕ bildirime dokunmaz)
                           if (isInPictureInPictureMode) {
-                              try {
-                                  (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).moveTaskToFront(taskId, 0)
-                              } catch (_: Exception) { }
+                              // PiP ✕ gibi: önce pencereyi doğrudan gizle; olmazsa büyütüp arka plana at
+                              try { moveTaskToBack(true) } catch (_: Exception) { }
                               handler.postDelayed({
-                                  try { if (!isInPictureInPictureMode) moveTaskToBack(true) } catch (_: Exception) { }
-                              }, 600)
+                                  if (isInPictureInPictureMode) {
+                                      try { (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).moveTaskToFront(taskId, 0) } catch (_: Exception) { }
+                                      handler.postDelayed({
+                                          try { if (!isInPictureInPictureMode) moveTaskToBack(true) } catch (_: Exception) { }
+                                      }, 600)
+                                  }
+                              }, 450)
                           }
                           return
                       }
