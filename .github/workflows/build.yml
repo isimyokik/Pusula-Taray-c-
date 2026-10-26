@@ -5407,7 +5407,7 @@ jobs:
                       "try{\n" +
                       "if(!document.getElementById('__rota_peek')){\n" +
                       "var s=document.createElement('style');s.id='__rota_peek';\n" +
-                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *:not(ytmusic-player-bar):not(ytmusic-player-bar *):not(.ytmusic-player-bar):not([id*=player-bar]){transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
+                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
                       "document.documentElement.appendChild(s);\n" +
                       "}\n" +
                       "document.documentElement.classList.add('rota-peek');\n" +
@@ -5461,35 +5461,21 @@ jobs:
                       "}\n" +
                       "function commit(v){\n" +
                       "busy=true;busyT=Date.now();\n" +
-                      "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
-                      "var d=Math.max(170,Math.min(340,left/Math.max(v,0.9)));\n" +
-                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
+                      "var H=window.innerHeight;\n" +
+                      "pg.style.setProperty('transition','transform 180ms cubic-bezier(.2,.7,.3,1)','important');\n" +
                       "setOff(H);\n" +
-                      "setTimeout(afterDown,d);\n" +
-                      "}\n" +
-                      "function afterDown(){\n" +
-                      "pg.style.setProperty('transition','none','important');\n" +
-                      "setOff(window.innerHeight);\n" +
                       "pg.style.setProperty('pointer-events','none','important');\n" +
-                      "var tries=[tryNative,tryLayout],i=0;\n" +
-                      "function success(){clean();}\n" +
-                      "function fail(){try{tryLayout();}catch(z){}clean();}\n" +
-                      "function next(){\n" +
-                      "if(i>=tries.length){fail();return;}\n" +
-                      "var ok=false;\n" +
-                      "try{ok=tries[i++]();}catch(z){}\n" +
-                      "if(!ok){next();return;}\n" +
-                      "var t0=Date.now();\n" +
-                      "(function poll(){\n" +
-                      "if(!openNow()){success();return;}\n" +
-                      "if(Date.now()-t0>=450){next();return;}\n" +
-                      "setTimeout(poll,40);\n" +
-                      "})();\n" +
+                      "setTimeout(function(){\n" +
+                      "try{tryClick();}catch(z){}\n" +
+                      "setTimeout(function(){\n" +
+                      "try{if(openNow())tryNative();}catch(z){}\n" +
+                      "setTimeout(clean,80);\n" +
+                      "},60);\n" +
+                      "},180);\n" +
                       "}\n" +
-                      "next();\n" +
-                      "}\n" +
+                      "function afterDown(){clean();}\n" +
                       "var armed=true,sawClosed=false,busy=false,busyT=0,locked=false,tr=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
-                      "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *:not(ytmusic-player-bar):not(ytmusic-player-bar *):not(.ytmusic-player-bar):not([id*=player-bar]){transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
+                      "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
                       "function rubber(d){if(d<=0)return 0;var R=window.innerHeight*1.1;return R*(1-Math.exp(-d/R));}\n" +
                       "function setOff(v){if(!pg)return;pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');}\n" +
                       "var pk2=[];\n" +
