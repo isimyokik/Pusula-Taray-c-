@@ -7,7 +7,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      - name: 1-Gradle iskelet
+      - name: Projeyi olustur
         run: |
           rm -rf app build settings.gradle.kts build.gradle.kts gradle.properties
           mkdir -p app app/src/main app/src/main/assets app/src/main/java/com/pusula/browser app/src/main/res/drawable app/src/main/res/xml app/src/main/res/values app/src/main/res/values-night
@@ -31,7 +31,7 @@ jobs:
                   gradlePluginPortal()
               }
           }
-          
+
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
@@ -39,7 +39,7 @@ jobs:
                   mavenCentral()
               }
           }
-          
+
           rootProject.name = "Pusula"
           include(":app")
           EOF
@@ -48,11 +48,11 @@ jobs:
               id("com.android.application")
               id("org.jetbrains.kotlin.android")
           }
-          
+
           android {
               namespace = "com.pusula.browser"
               compileSdk = 35
-          
+
               defaultConfig {
                   applicationId = "com.pusula.browser"
                   minSdk = 24
@@ -60,13 +60,13 @@ jobs:
                   versionCode = 1
                   versionName = "2.1"
               }
-          
+
               buildTypes {
                   release {
                       isMinifyEnabled = false
                   }
               }
-          
+
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
@@ -75,7 +75,7 @@ jobs:
                   jvmTarget = "17"
               }
           }
-          
+
           dependencies {
               implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.appcompat:appcompat:1.7.0")
@@ -88,22 +88,22 @@ jobs:
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-          
+
               <uses-permission android:name="android.permission.REORDER_TASKS" />
-          
+
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
               <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
-          
+
               <application
                   android:allowBackup="false"
                   android:icon="@drawable/ic_launcher"
                   android:label="@string/app_name"
                   android:theme="@style/Theme.Pusula"
                   android:usesCleartextTraffic="true">
-          
+
                   <provider
                       android:name="androidx.core.content.FileProvider"
                       android:authorities="com.pusula.browser.files"
@@ -113,19 +113,19 @@ jobs:
                           android:name="android.support.FILE_PROVIDER_PATHS"
                           android:resource="@xml/file_paths" />
                   </provider>
-          
+
                   <meta-data
                       android:name="com.google.android.gms.car.application"
                       android:resource="@xml/automotive_app_desc" />
                   <meta-data
                       android:name="com.google.android.gms.car.notification.SmallIcon"
                       android:resource="@drawable/ic_notif" />
-          
+
                   <service
                       android:name=".PlaybackService"
                       android:exported="false"
                       android:foregroundServiceType="mediaPlayback" />
-          
+
                                     <service
                       android:name=".RotaMediaBrowserService"
                       android:exported="true"
@@ -136,8 +136,8 @@ jobs:
                           <action android:name="android.media.browse.MediaBrowserService" />
                       </intent-filter>
                   </service>
-          
-          
+
+
                   <activity
                       android:name=".MainActivity"
                       android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
@@ -173,7 +173,7 @@ jobs:
                           <data android:scheme="https" />
                       </intent-filter>
                   </activity>
-          
+
                   <activity
                       android:name=".DocumentViewerActivity"
                       android:exported="false"
@@ -186,7 +186,7 @@ jobs:
                   android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
                   android:theme="@style/Theme.Pusula" />
               </application>
-          
+
               <queries>
                   <package android:name="com.google.android.projection.gearhead" />
                   <package android:name="com.google.android.gms" />
@@ -296,7 +296,7 @@ jobs:
             var day = ""; try { day = new Date().toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"}); } catch (e) {}
             document.getElementById("hello").textContent = greet + (day ? " · " + day : "");
             document.getElementById("q").placeholder = cfg.engine + " ile ara veya adres yaz";
-          
+
             function go(text){
               text = (text || "").trim();
               if (!text) return;
@@ -306,7 +306,7 @@ jobs:
             }
             document.getElementById("f").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("q").value); });
             document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
-          
+
             var G = ["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
             var pins = (cfg.pins && cfg.pins.length >= 0 && Array.isArray(cfg.pins)) ? cfg.pins : [
               {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
@@ -326,7 +326,7 @@ jobs:
             }
             var g = document.getElementById("pins");
             var suppress = false;
-          
+
             // Simge girilmemişse sitenin kendi logosunu çeker; bulunamazsa harf kalır
             function favicon(a, u){
               var host = ""; try { host = new URL(u).hostname; } catch (e) { return; }
@@ -348,7 +348,7 @@ jobs:
               img.onerror = next;
               img.src = c[0];
             }
-          
+
             function render(){
               g.innerHTML = "";
               pins.forEach(function(p, n){
@@ -364,7 +364,7 @@ jobs:
               plus.addEventListener("click", function(e){ e.preventDefault(); openEditor(-1); });
               g.appendChild(plus);
             }
-          
+
             function closeSheet(){ var o = document.getElementById("ov"); if (o) o.remove(); }
             function sheet(html){
               closeSheet();
@@ -382,7 +382,7 @@ jobs:
               return u;
             }
             function esc(x){ return String(x == null ? "" : x).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
-          
+
             function openEditor(idx){
               var p = idx >= 0 ? pins[idx] : {t:"",u:"",e:""};
               var o = sheet('<h3>' + (idx >= 0 ? "Kısayolu düzenle" : "Yeni kısayol") + '</h3>' +
@@ -402,7 +402,7 @@ jobs:
                 save(); closeSheet(); render();
               };
             }
-          
+
             function openActions(idx){
               var o = sheet('<h3>' + esc(pins[idx].t) + '</h3><div class="btns" style="margin-top:4px"><button id="ac_e">Düzenle</button><button class="dng" id="ac_d">Sil</button></div>' +
                 '<div class="btns" style="margin-top:10px"><button id="ac_c">Kapat</button></div>');
@@ -410,7 +410,7 @@ jobs:
               o.querySelector("#ac_e").onclick = function(){ closeSheet(); openEditor(idx); };
               o.querySelector("#ac_d").onclick = function(){ pins.splice(idx, 1); save(); closeSheet(); render(); };
             }
-          
+
             function attachDrag(a){
               var timer = null, dragging = false, sx = 0, sy = 0, moved = false;
               a.addEventListener("contextmenu", function(e){ e.preventDefault(); });
@@ -455,7 +455,7 @@ jobs:
               a.addEventListener("touchcancel", end);
             }
             render();
-          
+
             var grads = ["linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#a55eea,#6c3fc8)","linear-gradient(135deg,#fd79a8,#d63384)","linear-gradient(135deg,#5f7cff,#3949ab)","linear-gradient(135deg,#ff9f43,#e17055)"];
             function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./,""); } catch (e) { return u; } }
             var bms = cfg.bookmarks || [];
@@ -482,11 +482,9 @@ jobs:
           </body>
           </html>
           EOF
-      - name: 2-MainActivity
-        run: |
           cat > app/src/main/java/com/pusula/browser/MainActivity.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.annotation.SuppressLint
           import android.app.Dialog
           import android.app.PendingIntent
@@ -567,9 +565,9 @@ jobs:
           import org.json.JSONArray
           import org.json.JSONObject
           import java.io.ByteArrayInputStream
-          
+
           class MainActivity : AppCompatActivity() {
-          
+
               private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
                   var title: String = "Yeni Sekme"
                   var url: String = ""
@@ -591,22 +589,20 @@ jobs:
                   var errorLoading: Boolean = false
                   var fromPopup: Boolean = false
               }
-          
+
               private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
-          
+
               /** Arka plana atılınca WebView'a "hâlâ görünüyorum" dedirtir; YouTube sesi kesilmez. */
               private class BgWebView(c: Context) : WebView(c) {
                   override fun onWindowVisibilityChanged(visibility: Int) {
                       if (visibility != View.GONE) super.onWindowVisibilityChanged(View.VISIBLE)
                   }
               }
-          
+
               private val tabs = ArrayList<BTab>()
               private var cur = -1
               private var shown: WebView? = null
               private var miniTab: BTab? = null
-              /** Auto katalog: gizli WebView (sekmeye eklenmez) */
-              private var autoMusicWeb: android.webkit.WebView? = null
               private var miniOverlay: FrameLayout? = null
               private var miniPlayBtn: TextView? = null
               private var mdOld: BTab? = null
@@ -627,12 +623,12 @@ jobs:
               private var miniTyT = 0f
               private var mdBlur: android.widget.ImageView? = null
               private var mdBack = "https://m.youtube.com/"
-          
+
               private lateinit var prefs: Prefs
               private lateinit var loader: WebViewAssetLoader
               private val handler = Handler(Looper.getMainLooper())
               private var appInBackground = false
-          
+
               private var hasMedia = false
               private var lastPlaying = false
               private var mediaDismissedUntil = 0L
@@ -646,7 +642,7 @@ jobs:
               private lateinit var dockBar: LinearLayout
               private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
               private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-          
+
               private val mediaStatePoll = object : Runnable {
                   override fun run() {
                       pollMedia()
@@ -654,7 +650,7 @@ jobs:
                       handler.postDelayed(this, 1000L)
                   }
               }
-          
+
               /** Başlık ve sanatçıdan "YouTube Music" yazısını temizler. */
               private fun cleanMeta(s: String): String {
                   var r = s
@@ -663,71 +659,12 @@ jobs:
                   r = Regex("\\bYouTube Music\\b", RegexOption.IGNORE_CASE).replace(r, "")
                   return r.trim()
               }
-          
-              private var catalogPollTick = 0
-          
+
               private fun pollMedia() {
-                  val t = miniTab ?: tabs.getOrNull(cur)
-                  try {
-                      val hw = autoMusicWeb
-                      // Auto gizli web + görünür sekme: gizliyi öncelikli oku (çalma kaynağı)
-                      if (hw != null && (hw.url ?: "").contains("youtube")) {
-                          hw.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) }
-                      } else if (t != null) {
-                          t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) }
-                      }
-                  } catch (_: Exception) { }
-                  if (t == null && autoMusicWeb == null) return
-                  catalogPollTick++
-                  if (catalogPollTick % 3 == 0) {
-                      try {
-                          if (prefs.autoCatalog.isBlank() || catalogPollTick % 12 == 0) {
-                              ensureAutoMusicLoaded()
-                          }
-                          val hw = autoMusicWeb
-                          if (hw != null) {
-                              val u = hw.url ?: ""
-                              if (u.contains("music.youtube.com")) {
-                                  hw.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
-                              }
-                          } else {
-                              val tab = t
-                              if (tab != null) {
-                                  val u = tab.web.url ?: ""
-                                  if (u.contains("music.youtube.com")) {
-                                      tab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
-                                  }
-                              }
-                          }
-                      } catch (_: Exception) { }
-                  }
+                  val t = miniTab ?: tabs.getOrNull(cur) ?: return
+                  try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
               }
-          
-              private fun onMusicCatalog(raw: String?) {
-                  try {
-                      if (raw.isNullOrBlank() || raw == "null") return
-                      val inner = try { JSONArray("[$raw]").getString(0) } catch (_: Exception) { raw.trim().trim('"') }
-                      if (inner.isBlank() || inner == "{}") return
-                      val o = JSONObject(inner)
-                      val pl = o.optJSONArray("playlists") ?: JSONArray()
-                      val sg = o.optJSONArray("songs") ?: JSONArray()
-                      if (pl.length() == 0 && sg.length() == 0) return
-                      // Öncekinden daha zenginse veya eşit değilse kaydet
-                      val prev = prefs.autoCatalog
-                      if (inner == prev) return
-                      var prevPl = 0; var prevSg = 0
-                      try {
-                          val po = JSONObject(prev)
-                          prevPl = po.optJSONArray("playlists")?.length() ?: 0
-                          prevSg = po.optJSONArray("songs")?.length() ?: 0
-                      } catch (_: Exception) { }
-                      // Daha az sonuçla ezme (geçici boş tarama)
-                      if (prev.isNotBlank() && pl.length() + sg.length() < prevPl + prevSg && pl.length() + sg.length() < 3) return
-                      prefs.autoCatalog = inner
-                      RotaMediaBrowserService.notifyCatalogChanged()
-                  } catch (_: Exception) { }
-              }
-          
+
               private fun onMediaState(raw: String?) {
                   var has = false
                   var playing = false
@@ -768,27 +705,16 @@ jobs:
                       sentPos = pos; sentAt = now; sentPlaying = playing
                       PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
                   }
-                  // Auto medya = telefon medya birebir (başlık, kapak, play/pause, süre)
-                  if (has) {
-                      RotaMediaBrowserService.updateNowPlaying(
-                          title.ifBlank { lastTitle },
-                          artist.ifBlank { lastArtist },
-                          artUrl.ifBlank { lastArtUrl },
-                          playing,
-                          pos,
-                          if (dur > 0) dur else lastDur.coerceAtLeast(0L)
-                      )
-                  }
                   // PiP düğme simgesi oynat/duraklat durumuna göre güncellensin
                   if (playChanged && isInPictureInPictureMode) updatePipActions()
               }
-          
+
               private fun seekRelJs(d: Int): String =
                   "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
                   "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
                   "if(v){var t=v.currentTime+(" + d + ");var mx=isFinite(v.duration)?v.duration:1e9;v.currentTime=Math.max(0,Math.min(mx,t));}" +
                   "if(window.__pipFlash)window.__pipFlash();}catch(e){}})();"
-          
+
               private fun pipAction(code: Int, icon: Int, label: String, action: String): android.app.RemoteAction {
                   val pi = PendingIntent.getBroadcast(
                       this, code,
@@ -797,7 +723,7 @@ jobs:
                   )
                   return android.app.RemoteAction(android.graphics.drawable.Icon.createWithResource(this, icon), label, label, pi)
               }
-          
+
               /** YouTube küçült (PiP) — yalnızca menüden. */
               private fun enterPip() {
                   if (Build.VERSION.SDK_INT < 26) { toast("Bu Android sürümü küçük pencereyi desteklemiyor"); return }
@@ -809,7 +735,7 @@ jobs:
                   }
                   enterPipWith(android.util.Rational(16, 9))
               }
-          
+
               /** Mini/PiP geçişlerinden sonra WebView kayma-ölçek kalmasın. */
               private fun resetWebLayout(w: WebView) {
                   try {
@@ -830,13 +756,13 @@ jobs:
                       w.requestLayout()
                   } catch (_: Exception) { }
               }
-          
+
               private fun enterPipWith(ratio: android.util.Rational) {
                   try {
                       enterPictureInPictureMode(buildPipParams(ratio))
                   } catch (_: Exception) { toast("Küçük pencere açılamadı") }
               }
-          
+
               private fun buildPipParams(ratio: android.util.Rational = android.util.Rational(16, 9)): android.app.PictureInPictureParams {
                   val b = android.app.PictureInPictureParams.Builder().setAspectRatio(ratio)
                   val acts = ArrayList<android.app.RemoteAction>()
@@ -849,12 +775,12 @@ jobs:
                   b.setActions(acts)
                   return b.build()
               }
-          
+
               private fun updatePipActions() {
                   if (Build.VERSION.SDK_INT < 26 || !isInPictureInPictureMode) return
                   try { setPictureInPictureParams(buildPipParams()) } catch (_: Exception) { }
               }
-          
+
               private fun onPipChanged(pip: Boolean) {
                   topBar.visibility = if (pip || barHidden) View.GONE else View.VISIBLE
                   root.setBackgroundColor(if (pip) Color.BLACK else cBg)
@@ -881,26 +807,26 @@ jobs:
                       }, 250)
                   }
               }
-          
+
               private var isResumedNow = false
               private var pipExitPending = false
-          
+
               private fun runPipExit() {
                   run {
                       // PiP kapandı (büyütme): tek temiz yol
                       val playing = lastPlaying
                       val wasMini = pipFromMini
                       pipFromMini = false
-          
+
                       // 1) WebView kayma/ölçek sıfır
                       currentWeb()?.let { resetWebLayout(it) }
-          
+
                       // 2) PiP + mini stilleri bir kez kaldır
                       for (t in tabs) {
                           try { t.web.evaluateJavascript(PIP_OFF_JS, null) } catch (_: Exception) { }
                           try { t.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
                       }
-          
+
                       // 3) Layout oturunca bir kez daha sıfırla + recover (oynatmayı bozmadan)
                       handler.postDelayed({
                           if (isInPictureInPictureMode) return@postDelayed
@@ -914,7 +840,7 @@ jobs:
                           currentWeb()?.let { resetWebLayout(it) }
                           normalizeView(tabs.getOrNull(cur))
                       }, 700)
-          
+
                       // 4) PiP ✕ ile kapanınca medya durumuna dokunma: duraklatılmışsa öyle kalır, çalıyorsa çalmaya devam eder
                       if (playing && prefs.bgPlay) {
                           // Çalıyorsa işareti koru (✕ ile arka plan / büyütünce devam)
@@ -926,7 +852,7 @@ jobs:
                               } catch (_: Exception) { }
                           }, 300)
                       }
-          
+
                       if (hasMedia) {
                           PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                       }
@@ -937,7 +863,7 @@ jobs:
                       reapplyInsetsLater()
                   }
               }
-          
+
               override fun onConfigurationChanged(newConfig: Configuration) {
                   super.onConfigurationChanged(newConfig)
                   if (isInPictureInPictureMode) return
@@ -947,7 +873,7 @@ jobs:
                       else currentWeb()?.evaluateJavascript(PORTRAIT_VIDEO_JS, null)
                   } catch (_: Exception) { }
               }
-          
+
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
@@ -1006,14 +932,12 @@ jobs:
                       }
                       if (act == PlaybackService.ACTION_SEARCH) {
                           val q = intent.getStringExtra("q")?.trim().orEmpty()
-                          val autoplay = intent.getBooleanExtra("autoplay", true)
-                          if (q.isNotEmpty()) openFromAuto("https://music.youtube.com/search?q=" + Uri.encode(q), autoplay)
+                          if (q.isNotEmpty()) openTab("https://music.youtube.com/search?q=" + Uri.encode(q), appMode = true)
                           return
                       }
                       if (act == PlaybackService.ACTION_OPEN) {
                           val u = intent.getStringExtra("url")?.trim().orEmpty()
-                          val autoplay = intent.getBooleanExtra("autoplay", true)
-                          if (u.startsWith("http")) openFromAuto(u, autoplay)
+                          if (u.startsWith("http")) openTab(u, appMode = true)
                           return
                       }
                       val js = when (act) {
@@ -1030,8 +954,6 @@ jobs:
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
                       }
-                      // Android Auto gizli WebView (asıl çalma kaynağı)
-                      try { autoMusicWeb?.evaluateJavascript(js, null) } catch (_: Exception) { }
                       if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
                           lastPlaying = when (act) {
                               PlaybackService.ACTION_PAUSE -> false
@@ -1046,7 +968,7 @@ jobs:
                       }
                   }
               }
-          
+
               private val backgroundMediaPump = object : Runnable {
                   override fun run() {
                       if (!appInBackground || !prefs.bgPlay) return
@@ -1055,7 +977,7 @@ jobs:
                       handler.postDelayed(this, 1200L)
                   }
               }
-          
+
               private lateinit var root: LinearLayout
               private lateinit var content: FrameLayout
               private lateinit var fullscreen: FrameLayout
@@ -1067,7 +989,7 @@ jobs:
               private lateinit var findBar: LinearLayout
               private lateinit var findInput: EditText
               private lateinit var findCount: TextView
-          
+
               private var dark = false
               private var cBg = 0
               private var cSurface = 0
@@ -1081,7 +1003,7 @@ jobs:
               private var barHidden = false
               private var barAccum = 0
               private var barIgnoreUntil = 0L
-          
+
               private fun setBarShown(show: Boolean) {
                   // Ana ekran kısayolundan açılan sekmede çubuk hiç görünmez (uygulama gibi tam ekran)
                   val hide = !show || tabs.getOrNull(cur)?.appMode == true
@@ -1091,7 +1013,7 @@ jobs:
                   barIgnoreUntil = android.os.SystemClock.uptimeMillis() + 450L
                   topBar.visibility = if (hide) View.GONE else View.VISIBLE
               }
-          
+
               /** Çubuk, sayfanın bir parçası gibi davranır: kendi yönüne kayınca gizlenir, ters yöne kayınca geri gelir. */
               private fun onPageScroll(tab: BTab, y: Int, oldY: Int) {
                   if (tabs.getOrNull(cur) !== tab) return
@@ -1106,13 +1028,13 @@ jobs:
                   if (barAccum > dp(48)) setBarShown(false)
                   else if (barAccum < -dp(48)) setBarShown(true)
               }
-          
+
               private var customView: View? = null
               private var customCb: WebChromeClient.CustomViewCallback? = null
               private var fileCb: ValueCallback<Array<Uri>>? = null
               private var startUrl: String? = null
               private var startAppMode = false
-          
+
               private val fileLauncher =
                   registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
                       fileCb?.onReceiveValue(
@@ -1120,29 +1042,29 @@ jobs:
                       )
                       fileCb = null
                   }
-          
+
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   prefs = Prefs(this)
                   loader = WebViewAssetLoader.Builder()
                       .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
                       .build()
-          
+
                   loadPalette()
-          
+
                   WindowCompat.setDecorFitsSystemWindows(window, false)
                   buildUi()
                   val bars = WindowInsetsControllerCompat(window, window.decorView)
                   bars.isAppearanceLightStatusBars = !dark
                   bars.isAppearanceLightNavigationBars = !dark
-          
+
                   startUrl = intent?.dataString
                   startAppMode = intent?.getBooleanExtra("pusula_app", false) == true
-          
+
                   onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                       override fun handleOnBackPressed() { handleBack() }
                   })
-          
+
                   val mediaFilter = IntentFilter().apply {
                       addAction(PlaybackService.ACTION_CLOSE)
                       addAction(PlaybackService.ACTION_PLAY)
@@ -1159,8 +1081,6 @@ jobs:
                       addAction(PlaybackService.ACTION_OPEN)
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
-                  handleAutoIntent(intent)
-                  handler.postDelayed({ ensureAutoMusicLoaded() }, 2500L)
                   startBrowsing()
                   addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }
                   handler.removeCallbacks(mediaStatePoll)
@@ -1171,7 +1091,7 @@ jobs:
                       notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                   }
               }
-          
+
               override fun onWindowFocusChanged(hasFocus: Boolean) {
                   super.onWindowFocusChanged(hasFocus)
                   if (hasFocus && !isInPictureInPictureMode) reapplyInsetsLater()
@@ -1179,134 +1099,13 @@ jobs:
                       try { currentWeb()?.evaluateJavascript("if(window.__pipFlash)window.__pipFlash();", null) } catch (_: Exception) { }
                   }
               }
-          
+
               override fun onNewIntent(intent: Intent) {
                   super.onNewIntent(intent)
-                  setIntent(intent)
-                  handleAutoIntent(intent)
+                  val u = intent.dataString ?: return
+                  openTab(u, appMode = intent.getBooleanExtra("pusula_app", false))
               }
-          
-              private fun handleAutoIntent(intent: Intent?) {
-                  if (intent == null) return
-                  if (intent.getBooleanExtra("ensure_music", false)) {
-                      ensureAutoMusicLoaded()
-                  }
-                  val fromAuto = intent.action == PlaybackService.ACTION_OPEN ||
-                      intent.action == PlaybackService.ACTION_SEARCH
-                  val url = when {
-                      intent.action == PlaybackService.ACTION_SEARCH -> {
-                          val q = intent.getStringExtra("q")?.trim().orEmpty()
-                          if (q.isNotEmpty()) "https://music.youtube.com/search?q=" + Uri.encode(q) else ""
-                      }
-                      intent.action == PlaybackService.ACTION_OPEN ->
-                          intent.getStringExtra("url")?.trim().orEmpty()
-                      else -> intent.dataString?.trim().orEmpty()
-                  }
-                  if (!url.startsWith("http")) return
-                  val autoplay = intent.getBooleanExtra("autoplay", fromAuto)
-                  openFromAuto(url, autoplay)
-              }
-          
-              private fun openFromAuto(url: String, autoplay: Boolean) {
-                  if (!url.startsWith("http")) return
-                  try {
-                      ensureAutoMusicLoaded()
-                      try { autoMusicWeb?.loadUrl(url) } catch (_: Exception) { }
-                      // Telefon ön plandaysa görünür sekmede de aç (debug / kullanıcı bakıyorsa)
-                      if (isResumedNow) {
-                          try {
-                              val existing = tabs.indexOfFirst { t ->
-                                  val u = t.web.url ?: return@indexOfFirst false
-                                  u == url || (url.length > 20 && u.startsWith(url.take(url.length.coerceAtMost(60))))
-                              }
-                              if (existing >= 0) switchTo(existing)
-                              else openTab(url, appMode = true)
-                          } catch (_: Exception) { }
-                      }
-                  } catch (_: Exception) {
-                      try { autoMusicWeb?.loadUrl(url) } catch (_: Exception) { }
-                  }
-                  if (autoplay) {
-                      scheduleForcePlay()
-                      // MediaSession play komutu
-                      handler.postDelayed({
-                          try {
-                              sendBroadcast(Intent(PlaybackService.ACTION_PLAY).setPackage(packageName))
-                          } catch (_: Exception) { }
-                      }, 2500L)
-                  }
-              }
-          
-              private fun scheduleForcePlay() {
-                  val delays = longArrayOf(700L, 1500L, 2800L, 4500L, 7000L)
-                  for (d in delays) {
-                      handler.postDelayed({
-                          try {
-                              autoMusicWeb?.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null)
-                              (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null)
-                          } catch (_: Exception) { }
-                      }, d)
-                  }
-              }
-          
-          
-              /** Auto: YT Music gizli WebView — sekmeye eklenmez; ana sayfayı tarar */
-              private fun ensureAutoMusicLoaded() {
-                  try {
-                      val existing = autoMusicWeb
-                      if (existing != null) {
-                          val u = existing.url ?: ""
-                          if (!u.contains("music.youtube.com") || u.contains("/watch")) {
-                              try { existing.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
-                          } else {
-                              try {
-                                  existing.evaluateJavascript(
-                                      "(function(){try{var a=document.scrollingElement||document.body;if(a){a.scrollTop=Math.min(a.scrollTop+600,a.scrollHeight);}window.scrollBy(0,400);}catch(e){}})();",
-                                      null
-                                  )
-                              } catch (_: Exception) { }
-                          }
-                          injectAutoMusicScripts(existing)
-                          return
-                      }
-                      val web = BgWebView(this)
-                      val s = web.settings
-                      s.javaScriptEnabled = true
-                      s.domStorageEnabled = true
-                      s.mediaPlaybackRequiresUserGesture = false
-                      s.loadsImagesAutomatically = true
-                      try {
-                          s.userAgentString = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), "")
-                      } catch (_: Exception) { }
-                      web.layoutParams = android.widget.FrameLayout.LayoutParams(2, 2)
-                      web.alpha = 0f
-                      web.visibility = android.view.View.VISIBLE
-                      try {
-                          (findViewById<android.view.ViewGroup>(android.R.id.content))?.addView(web)
-                      } catch (_: Exception) { }
-                      autoMusicWeb = web
-                      try { web.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
-                      handler.postDelayed({ injectAutoMusicScripts(web) }, 1500L)
-                      handler.postDelayed({ injectAutoMusicScripts(web) }, 4000L)
-                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 5000L)
-                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 10000L)
-                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 16000L)
-                  } catch (_: Exception) { }
-              }
-          
-              private fun injectAutoMusicScripts(web: android.webkit.WebView) {
-                  try {
-                      if (prefs.adBlock) {
-                          try { web.evaluateJavascript(STABLE_AD_BLOCKER_JS, null) } catch (_: Exception) { }
-                      }
-                      try { web.evaluateJavascript(MEDIA_HOOK_JS, null) } catch (_: Exception) { }
-                  } catch (_: Exception) { }
-              }
-          
-          
-          
-          
-          
+
               override fun onPause() {
                   super.onPause()
                   isResumedNow = false
@@ -1342,7 +1141,7 @@ jobs:
                       shown?.onPause()
                   }
               }
-          
+
               override fun onStop() {
                   super.onStop()
                   // PiP penceresi ✕ ile kapanınca da buraya gelinir (PiP bayrağı hâlâ true olabilir): arka planda çalma yolu çalışsın
@@ -1361,7 +1160,7 @@ jobs:
                       }
                   }
               }
-          
+
               /** Ana ekrana basınca YouTube videosu çalıyorsa kendiliğinden küçük pencereye geçer. */
               override fun onUserLeaveHint() {
                   super.onUserLeaveHint()
@@ -1369,14 +1168,14 @@ jobs:
                       enterPip()
                   }
               }
-          
+
               private fun youtubeVideoTab(): Boolean {
                   val u = tabs.getOrNull(cur)?.url ?: return false
                   val yt = (u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")
                   return yt && (u.contains("/watch") || u.contains("youtu.be/") || u.contains("/shorts"))
               }
-          
-          
+
+
               override fun onResume() {
                   super.onResume()
                   isResumedNow = true
@@ -1388,7 +1187,7 @@ jobs:
                   handler.removeCallbacks(backgroundMediaPump)
                   shown?.onResume()
               }
-          
+
               override fun onDestroy() {
                   try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
                   handler.removeCallbacks(backgroundMediaPump)
@@ -1406,7 +1205,7 @@ jobs:
                   for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
                   super.onDestroy()
               }
-          
+
               private fun loadPalette() {
                   val pal = Themes.get(prefs.theme)
                   dark = pal.dark
@@ -1415,7 +1214,7 @@ jobs:
                   cAccent = pal.accent; cAccent2 = pal.accent2
                   window.setBackgroundDrawable(ColorDrawable(cBg))
               }
-          
+
               /** Temayı uygulamadan çıkmadan, sekmeleri koruyarak uygular. */
               private fun applyTheme() {
                   if (customView != null) hideCustom()
@@ -1437,7 +1236,7 @@ jobs:
                   }
                   syncUi()
               }
-          
+
               private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
               private fun shape(color: Int, radiusDp: Int): GradientDrawable {
                   val g = GradientDrawable()
@@ -1447,7 +1246,7 @@ jobs:
               }
               private fun ripple(content: Drawable?): RippleDrawable =
                   RippleDrawable(ColorStateList.valueOf(0x33888888), content, ColorDrawable(Color.WHITE))
-          
+
               private fun iconBtn(res: Int, desc: String, onClick: (View) -> Unit): ImageButton {
                   val b = ImageButton(this)
                   b.setImageResource(res)
@@ -1458,7 +1257,7 @@ jobs:
                   b.setOnClickListener { v -> onClick(v) }
                   return b
               }
-          
+
               private fun textBtn(label: String, onClick: () -> Unit): TextView {
                   val t = TextView(this)
                   t.text = label
@@ -1469,17 +1268,17 @@ jobs:
                   t.setOnClickListener { onClick() }
                   return t
               }
-          
+
               private fun buildUi() {
                   val match = ViewGroup.LayoutParams.MATCH_PARENT
                   val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
-          
+
                   root = LinearLayout(this)
                   root.orientation = LinearLayout.VERTICAL
                   root.setBackgroundColor(cBg)
                   root.isFocusable = true
                   root.isFocusableInTouchMode = true
-          
+
                   barHidden = false
                   topBar = object : LinearLayout(this@MainActivity) {
                       private var sy = 0f
@@ -1508,7 +1307,7 @@ jobs:
                   topBar.gravity = Gravity.CENTER_VERTICAL
                   topBar.setPadding(dp(10), dp(8), dp(10), dp(8))
                   topBar.setBackgroundColor(cBg)
-          
+
                   privateBadge = TextView(this)
                   privateBadge.text = "🕶 GİZLİ"
                   privateBadge.textSize = 11f
@@ -1521,13 +1320,13 @@ jobs:
                   val blp = LinearLayout.LayoutParams(wrap, dp(32))
                   blp.rightMargin = dp(8)
                   topBar.addView(privateBadge, blp)
-          
+
                   val pill = LinearLayout(this)
                   pill.orientation = LinearLayout.HORIZONTAL
                   pill.gravity = Gravity.CENTER_VERTICAL
                   pill.background = shape(cSurface, 26)
                   pill.elevation = dp(4).toFloat()
-          
+
                   urlField = EditText(this)
                   urlField.hint = "Ara veya adres yaz"
                   urlField.setHintTextColor(cSub)
@@ -1549,10 +1348,10 @@ jobs:
                   }
                   pill.addView(urlField, LinearLayout.LayoutParams(0, dp(50), 1f))
                   pill.addView(iconBtn(R.drawable.ic_reload, "Yenile") { reloadCurrent() }, LinearLayout.LayoutParams(dp(38), dp(50)))
-          
+
                   backBtn = iconBtn(R.drawable.ic_back, "Geri") { goBack() }
                   val menuBtn = iconBtn(R.drawable.ic_menu, "Menü") { v -> showMenu(v) }
-          
+
                   val tabsWrap = FrameLayout(this)
                   tabsWrap.background = ripple(null)
                   tabsWrap.contentDescription = "Sekmeler"
@@ -1567,18 +1366,18 @@ jobs:
                   tcBg.setStroke(dp(2), cIcon)
                   tabCount.background = tcBg
                   tabsWrap.addView(tabCount, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
-          
+
                   pill.addView(backBtn, LinearLayout.LayoutParams(dp(40), dp(50)))
                   pill.addView(tabsWrap, LinearLayout.LayoutParams(dp(40), dp(50)))
                   pill.addView(menuBtn, LinearLayout.LayoutParams(dp(40), dp(50)))
                   topBar.addView(pill, LinearLayout.LayoutParams(0, dp(50), 1f))
-          
+
                   progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
                   progress.max = 100
                   progress.progressTintList = ColorStateList.valueOf(cAccent)
                   progress.progressBackgroundTintList = ColorStateList.valueOf(cBg)
                   progress.visibility = View.INVISIBLE
-          
+
                   content = FrameLayout(this)
                   content.setBackgroundColor(cBg)
                   if (!prefs.barBottom) {
@@ -1586,7 +1385,7 @@ jobs:
                       root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
                   }
                   root.addView(content, LinearLayout.LayoutParams(match, 0, 1f))
-          
+
                   findBar = LinearLayout(this)
                   findBar.orientation = LinearLayout.HORIZONTAL
                   findBar.gravity = Gravity.CENTER_VERTICAL
@@ -1621,18 +1420,18 @@ jobs:
                       root.addView(progress, LinearLayout.LayoutParams(match, dp(3)))
                       root.addView(topBar, LinearLayout.LayoutParams(match, wrap))
                   }
-          
+
                   dockBar = LinearLayout(this)
-          
+
                   fullscreen = FrameLayout(this)
                   fullscreen.setBackgroundColor(Color.BLACK)
                   fullscreen.visibility = View.GONE
-          
+
                   val frame = FrameLayout(this)
                   frame.addView(root, FrameLayout.LayoutParams(match, match))
                   frame.addView(fullscreen, FrameLayout.LayoutParams(match, match))
                   setContentView(frame)
-          
+
                   ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
                       val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
                       v.setPadding(b.left, b.top, b.right, b.bottom)
@@ -1641,7 +1440,7 @@ jobs:
                   root.requestFocus()
                   updateTabCount()
               }
-          
+
               private fun startBrowsing() {
                   if (tabs.isEmpty()) {
                       when (prefs.startMode) {
@@ -1671,9 +1470,9 @@ jobs:
                   val sa = startAppMode; startAppMode = false
                   if (s != null) openTab(s, appMode = sa)
               }
-          
+
               private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
-          
+
               @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
               private fun createTab(incognito: Boolean = false): BTab {
                   val web = BgWebView(this)
@@ -1694,17 +1493,17 @@ jobs:
                   s.allowContentAccess = false
                   s.setGeolocationEnabled(false)
                   s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-          
+
                   val ua = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), "")
                   s.userAgentString = ua
                   tab.mobileUa = ua
                   web.addJavascriptInterface(bridge, "Pusula")
-          
+
                   syncScripts(tab)
                   if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                       try { WebViewCompat.addDocumentStartJavaScript(web, MEDIA_HOOK_JS, setOf("*")) } catch (_: Exception) { }
                   }
-          
+
                   web.setFindListener { active, total, _ ->
                       if (tabs.getOrNull(cur) === tab) {
                           findCount.text = if (total == 0) "0" else "${active + 1}/$total"
@@ -1792,7 +1591,7 @@ jobs:
                   updateTabCount()
                   return tab
               }
-          
+
               private fun syncScripts(t: BTab) {
                   if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
                   try {
@@ -1805,14 +1604,14 @@ jobs:
                       else if (!prefs.bgPlay && t.keepScript != null) { t.keepScript?.remove(); t.keepScript = null }
                   } catch (_: Exception) { }
               }
-          
+
               /** Ayar değişince betikleri günceller ve açık sayfayı yeniler. */
               private fun settingsChanged() {
                   for (t in tabs) syncScripts(t)
                   val c = tabs.getOrNull(cur) ?: return
                   if (c.url.startsWith("http")) c.web.reload()
               }
-          
+
               private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false, appMode: Boolean = false): BTab? {
                   if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme açılabilir"); return null }
                   val t = createTab(incognito)
@@ -1823,7 +1622,7 @@ jobs:
                   if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL))
                   return t
               }
-          
+
               /** Ana ekran kısayolu: son uygulamalarda site adı ile ayrı görev gibi görünsün. */
               private fun applyAppTaskDescription(url: String?) {
                   try {
@@ -1840,7 +1639,7 @@ jobs:
                       }
                   } catch (_: Exception) { }
               }
-          
+
               private fun switchTo(i: Int) {
                   if (i !in tabs.indices) return
                   shown?.let {
@@ -1852,15 +1651,15 @@ jobs:
                           try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {}
                       }
                   }
-          
+
                   cur = i
                   val t = tabs[i]
                   shown = t.web
                   content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                   t.web.onResume()
-          
+
                   try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
-          
+
                   val ps = t.pendingState
                   val p = t.pendingUrl
                   if (ps != null) {
@@ -1878,7 +1677,7 @@ jobs:
                   topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg)
                   syncUi()
               }
-          
+
               private fun closeTab(index: Int) {
                   if (index !in tabs.indices) return
                   val t = tabs[index]
@@ -1896,9 +1695,9 @@ jobs:
                   else if (index < cur) cur--
                   updateTabCount()
               }
-          
+
               private fun miniPx(cssPx: Double): Float = (cssPx * resources.displayMetrics.density).toFloat()
-          
+
               /** p=0: tam ekran konumu, p=1: seçili köşedeki küçük konum. */
               private fun applyMini(p: Float) {
                   val t = (miniTab ?: mdOld) ?: return
@@ -1909,7 +1708,7 @@ jobs:
                   t.web.translationX = miniTx * q
                   t.web.translationY = (miniCy - mdTop) * q
               }
-          
+
               /** Görünmez yüklenen arka sayfayı açar ve flu görüntüyü kaldırır. */
               private fun revealSilent(t: BTab) {
                   if (!t.silent) return
@@ -1918,14 +1717,14 @@ jobs:
                   removeMiniBlur(380)
                   if (tabs.getOrNull(cur) === t) syncUi()
               }
-          
+
               private fun resumeMini(t: BTab) {
                   val js = "(function(){try{var v=document.querySelector('video');if(v&&v.paused&&window.__rotaWas)v.play();}catch(e){}})();"
                   for (d in longArrayOf(0L, 350L, 900L, 1800L)) {
                       handler.postDelayed({ try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { } }, d)
                   }
               }
-          
+
               private fun roundMini(t: BTab, on: Boolean) {
                   if (on) {
                       t.web.outlineProvider = object : android.view.ViewOutlineProvider() {
@@ -1939,7 +1738,7 @@ jobs:
                       t.web.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
                   }
               }
-          
+
               private fun animMini(from: Float, to: Float, ms: Long, end: () -> Unit) {
                   val a = android.animation.ValueAnimator.ofFloat(from, to)
                   a.duration = ms
@@ -1950,14 +1749,14 @@ jobs:
                   })
                   a.start()
               }
-          
+
               private fun removeMiniBlur(fadeMs: Long) {
                   val b = mdBlur ?: return
                   mdBlur = null
                   if (fadeMs <= 0L) { try { content.removeView(b) } catch (_: Exception) { }; return }
                   b.animate().alpha(0f).setDuration(fadeMs).withEndAction { try { content.removeView(b) } catch (_: Exception) { } }.start()
               }
-          
+
               /** Video aşağı çekilmeye başladı: video yalnızca oynatıcı kısmı olarak ayrılır, arka sayfa flulaştırılmış görüntüye döner (kasmasın). */
               private fun miniDragStart(bottomCss: Double, topCss: Double) {
                   if (mdOld != null) return
@@ -2017,7 +1816,7 @@ jobs:
                   mdLastT = android.os.SystemClock.uptimeMillis()
                   mdVel = 0f
               }
-          
+
               private fun miniDragMove(dyCss: Double) {
                   if (mdOld == null) return
                   val dy = miniPx(dyCss)
@@ -2027,7 +1826,7 @@ jobs:
                   mdLastDy = dy
                   mdLastT = now
               }
-          
+
               private fun miniDragEnd(dyCss: Double, cancel: Boolean) {
                   val old = mdOld ?: return
                   val dy = miniPx(dyCss)
@@ -2036,7 +1835,7 @@ jobs:
                   if (commit) animMini(p, 1f, 200) { commitMini() }
                   else animMini(p, 0f, 180) { abortMini(old) }
               }
-          
+
               private fun abortMini(old: BTab) {
                   mdOld = null
                   old.web.clipBounds = null
@@ -2045,7 +1844,7 @@ jobs:
                   resumeMini(old)
                   normalizeLater(old)
               }
-          
+
               private fun commitMini() {
                   val old = mdOld ?: return
                   mdOld = null
@@ -2077,7 +1876,7 @@ jobs:
                   syncUi()
                   // Küçük pencerede YouTube yazıları / kontroller gizlenir, video pencereyi doldurur
                   try { old.web.evaluateJavascript(YT_MINI_CSS_ON_JS, null) } catch (_: Exception) { }
-          
+
                   val mw = dp(210)
                   val ov = FrameLayout(this)
                   val tap = View(this)
@@ -2169,7 +1968,7 @@ jobs:
                   handler.postDelayed(miniPoll, 500)
                   resumeMini(old)
               }
-          
+
               /** Küçük pencereden PiP'e girilmişse, PiP'ten dönünce video büyük ekranda temiz bir görünümle, kaldığı saniyeden açılır. */
               private fun reopenAfterMiniPip(reload: Boolean) {
                   val t = tabs.getOrNull(cur) ?: return
@@ -2195,7 +1994,7 @@ jobs:
                       }
                   } catch (_: Exception) { }
               }
-          
+
               /** Geçişlerden (küçük pencere, PiP) sonra artık ölçek/kayma/yatay kaydırma kalmasın: sayfa sola kaymasın. */
               /** PiP/geçişlerden sonra sistem çubuğu boşlukları (üst/sol) bazen sıfırda kalıyor: ekran sol-üste kayar. Yeniden uygulanır. */
               private fun reapplyInsets() {
@@ -2209,11 +2008,11 @@ jobs:
                       }
                   } catch (_: Exception) { }
               }
-          
+
               private fun reapplyInsetsLater() {
                   for (d in longArrayOf(100L, 400L, 900L, 1800L)) handler.postDelayed({ reapplyInsets() }, d)
               }
-          
+
               private fun normalizeView(t: BTab?) {
                   if (t == null || t === miniTab || t === mdOld) return
                   val w = t.web
@@ -2228,13 +2027,13 @@ jobs:
                   if (w.scrollY in 1..dp(160) && t.url.contains("youtube.com/watch")) w.scrollTo(0, 0)
                   try { w.evaluateJavascript(FIX_HSCROLL_JS, null) } catch (_: Exception) { }
               }
-          
+
               private fun normalizeLater(t: BTab?) {
                   for (d in longArrayOf(0L, 300L, 1000L)) {
                       handler.postDelayed({ if (tabs.getOrNull(cur) === t) normalizeView(t) }, d)
                   }
               }
-          
+
               private fun checkAfterPip(attempt: Int) {
                   val t = tabs.getOrNull(cur) ?: return
                   if (isInPictureInPictureMode || miniTab != null) return
@@ -2252,7 +2051,7 @@ jobs:
                       }
                   } catch (_: Exception) { }
               }
-          
+
               /** Küçük pencerede video oynuyorsa arkadaki ön izlemeler durur; video duraklıysa ön izlemeler serbest. */
               private val miniPoll = object : Runnable {
                   override fun run() {
@@ -2271,7 +2070,7 @@ jobs:
                       handler.postDelayed(this, 700)
                   }
               }
-          
+
               /** Küçük penceredeki oynat/durdur düğmesinin simgesini videonun gerçek durumuna eşitler. */
               private fun miniSyncBtn() {
                   val mt = miniTab ?: return
@@ -2281,19 +2080,19 @@ jobs:
                       }
                   } catch (_: Exception) { }
               }
-          
+
               private fun previewsOff() {
                   handler.removeCallbacks(miniPoll)
                   for (t in tabs) { try { t.web.evaluateJavascript("window.__rotaNoPreview=false;", null) } catch (_: Exception) { } }
               }
-          
+
               /** Küçük oynatıcıya dokununca video tam ekran olur (yeni sekme olarak). */
               private fun expandMini(fromP: Float) {
                   val mt = miniTab ?: return
                   prepExpand(mt)
                   animMini(fromP, 0f, 200) { finishExpand(mt) }
               }
-          
+
               /** Animasyonsuz: küçük pencereyi hemen tam ekran video sekmesine çevirir (PiP'e girmeden önce kullanılır). */
               private fun expandMiniNow() {
                   val mt = miniTab ?: return
@@ -2302,14 +2101,14 @@ jobs:
                   finishExpand(mt)
                   resetWebLayout(mt.web)
               }
-          
+
               private fun prepExpand(mt: BTab) {
                   val ov = miniOverlay
                   miniOverlay = null
                   try { content.removeView(ov) } catch (_: Exception) { }
                   try { mt.web.evaluateJavascript(YT_MINI_CSS_OFF_JS, null) } catch (_: Exception) { }
               }
-          
+
               private fun finishExpand(mt: BTab) {
                   miniTab = null
                   mt.web.clipBounds = null
@@ -2343,7 +2142,7 @@ jobs:
                   normalizeLater(mt)
                   reapplyInsetsLater()
               }
-          
+
               /** Küçük oynatıcıyı kapatır (✕ ya da ön planda başka video açılınca). */
               private fun dismissMini() {
                   val mt = miniTab ?: return
@@ -2360,12 +2159,12 @@ jobs:
                   mt.web.animate().alpha(0f).setDuration(150).withEndAction { done() }.start()
                   ov?.animate()?.alpha(0f)?.setDuration(150)?.start()
               }
-          
-          
+
+    
               private fun updateTabCount() { tabCount.text = tabs.size.toString() }
-          
+
               private fun stateFile(i: Int) = java.io.File(filesDir, "tabstate_$i.bin")
-          
+
               private fun bundleToBytes(b: Bundle): ByteArray {
                   val p = android.os.Parcel.obtain()
                   try {
@@ -2375,7 +2174,7 @@ jobs:
                       p.recycle()
                   }
               }
-          
+
               private fun bytesToBundle(data: ByteArray): Bundle? {
                   val p = android.os.Parcel.obtain()
                   return try {
@@ -2388,11 +2187,11 @@ jobs:
                       p.recycle()
                   }
               }
-          
+
               private fun clearTabStates() {
                   filesDir.listFiles()?.forEach { if (it.name.startsWith("tabstate_")) it.delete() }
               }
-          
+
               /** Sekme adreslerini ve her sekmenin geri/ileri geçmişini kaydeder. */
               private fun saveTabs() {
                   if (tabs.isEmpty()) return
@@ -2420,16 +2219,16 @@ jobs:
                   }
                   prefs.saveTabs(urls, curSaved)
               }
-          
+
               private fun shownUrl(u: String): String =
                   if (u.isEmpty() || u.startsWith(ASSET_PREFIX)) ""
                   else u.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
-          
+
               private fun syncUrlText() {
                   val t = tabs.getOrNull(cur)
                   urlField.setText(if (t == null) "" else shownUrl(t.pendingUrl ?: t.url))
               }
-          
+
               private fun syncUi() {
                   val t = tabs.getOrNull(cur) ?: return
                   if (!urlField.hasFocus()) syncUrlText()
@@ -2437,7 +2236,7 @@ jobs:
                   refreshNav()
                   updateTabCount()
               }
-          
+
               private fun setLoadProgress(p: Int) {
                   progress.progress = p
                   val ct = tabs.getOrNull(cur)
@@ -2445,12 +2244,12 @@ jobs:
                                         else if (ct?.silent == true) View.INVISIBLE
                                         else if (p in 1..99) View.VISIBLE else View.INVISIBLE
               }
-          
+
               private fun refreshNav() {
                   val web = currentWeb()
                   backBtn.alpha = if (web != null && (web.canGoBack() || tabs.size > 1)) 1f else 0.35f
               }
-          
+
               private fun loadInCurrent(url: String) {
                   val t = tabs.getOrNull(cur) ?: return
                   t.pendingUrl = null
@@ -2458,18 +2257,18 @@ jobs:
                   applyHostUa(t, url)
                   t.web.loadUrl(url)
               }
-          
+
               private fun submitUrl() {
                   val text = urlField.text.toString()
                   loadInCurrent(resolveInput(text, Engines.get(prefs.engine)))
                   hideKeyboard(); urlField.clearFocus(); root.requestFocus()
               }
-          
+
               private fun goBack() {
                   val web = currentWeb() ?: return
                   if (web.canGoBack()) web.goBack() else if (tabs.size > 1) closeTab(cur)
               }
-          
+
               private fun goForward() { val web = currentWeb() ?: return; if (web.canGoForward()) web.goForward() }
               private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
               private fun reloadCurrent() {
@@ -2478,7 +2277,7 @@ jobs:
                   val eu = t.errorUrl
                   if (eu != null) { t.errorUrl = null; t.web.loadUrl(eu) } else t.web.reload()
               }
-          
+
               private fun handleBack() {
                   val web = currentWeb()
                   when {
@@ -2490,7 +2289,7 @@ jobs:
                       else -> finish()
                   }
               }
-          
+
               private fun shouldBlockAd(uri: Uri): Boolean {
                   val host = (uri.host ?: "").lowercase()
                   val path = (uri.encodedPath ?: "").lowercase()
@@ -2505,7 +2304,7 @@ jobs:
                       path.contains("/pagead/") || path.contains("/advertisement/") ||
                       path.contains("/api/stats/ads")
               }
-          
+
               private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
                   override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                       val uri = request?.url ?: return null
@@ -2514,7 +2313,7 @@ jobs:
                       }
                       return loader.shouldInterceptRequest(uri)
                   }
-          
+
                   override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                       val u = request?.url ?: return false
                       val scheme = u.scheme ?: return false
@@ -2544,7 +2343,7 @@ jobs:
                           }
                       }
                   }
-          
+
                   override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                       val u = url ?: ""
                       tab.bridge.trusted = u.startsWith(ASSET_PREFIX)
@@ -2553,13 +2352,13 @@ jobs:
                       if (tab.errorLoading) tab.errorLoading = false else tab.errorUrl = null
                       if (tabs.getOrNull(cur) === tab) { setBarShown(true); syncUi() }
                   }
-          
+
                   override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                       if (url != null && !url.startsWith("data:")) tab.url = url
                       if (miniTab != null && tab !== miniTab && url != null && url.contains("youtube.com/watch")) dismissMini()
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
-          
+
                   override fun onPageFinished(view: WebView?, url: String?) {
                       tab.progress = 100
                       if (tab.silent) handler.postDelayed({ revealSilent(tab) }, 350)
@@ -2584,7 +2383,7 @@ jobs:
                       }
                       if (tabs.getOrNull(cur) === tab) syncUi()
                   }
-          
+
                   override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                       if (view == null || request == null || error == null) return
                       if (!request.isForMainFrame) return
@@ -2593,7 +2392,7 @@ jobs:
                       val failing = request.url.toString()
                       showError(view, tab, failing, desc)
                   }
-          
+
                   override fun onReceivedSslError(view: WebView?, h: android.webkit.SslErrorHandler?, error: android.net.http.SslError?) {
                       h?.cancel()
                       if (view == null || error == null) return
@@ -2602,7 +2401,7 @@ jobs:
                           showError(view, tab, failing, "Güvenli bağlantı kurulamadı (sertifika hatası)")
                       }
                   }
-          
+
                   override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
                       if (tabs.none { it.web === view }) return false
                       val u = tab.url
@@ -2618,7 +2417,7 @@ jobs:
                       return true
                   }
               }
-          
+
               private fun makeChrome(tab: BTab): WebChromeClient = object : WebChromeClient() {
                   override fun onProgressChanged(view: WebView?, newProgress: Int) {
                       tab.progress = newProgress
@@ -2666,14 +2465,14 @@ jobs:
                       return true
                   }
               }
-          
+
               private fun hideCustom() {
                   val v = customView ?: return
                   fullscreen.removeView(v); fullscreen.visibility = View.GONE
                   customView = null; customCb?.onCustomViewHidden(); customCb = null
                   setBars(true)
               }
-          
+
               private fun setBars(show: Boolean) {
                   val c = WindowInsetsControllerCompat(window, window.decorView)
                   if (show) { c.show(WindowInsetsCompat.Type.systemBars()) }
@@ -2682,7 +2481,7 @@ jobs:
                       c.hide(WindowInsetsCompat.Type.systemBars())
                   }
               }
-          
+
               /** Dokunuşsuz (reklam) yönlendirmeler uygulama açamaz; dokunuşla gelenler önce sorulur. */
               private fun askExternal(url: String, tab: BTab, gesture: Boolean): Boolean {
                   if (prefs.adBlock && !gesture) {
@@ -2701,7 +2500,7 @@ jobs:
                       onNo = { closePopupIfEmpty(tab) })
                   return true
               }
-          
+
               /** Boş kalan açılır pencere sekmesini kapatır. */
               private fun closePopupIfEmpty(tab: BTab) {
                   handler.post {
@@ -2709,13 +2508,13 @@ jobs:
                       if (idx >= 0 && tabs.size > 1 && tab.fromPopup && tab.url.isEmpty()) closeTab(idx)
                   }
               }
-          
+
               private fun showError(view: WebView, tab: BTab, failing: String, desc: String) {
                   tab.errorUrl = failing
                   tab.errorLoading = true
                   view.loadDataWithBaseURL(failing, errorHtml(failing, desc), "text/html", "utf-8", failing)
               }
-          
+
               private fun errorHtml(url: String, desc: String): String {
                   val bg = String.format("#%06X", 0xFFFFFF and cBg)
                   val fg = String.format("#%06X", 0xFFFFFF and cText)
@@ -2725,7 +2524,7 @@ jobs:
                       "button{margin-top:12px;padding:12px 20px;border:0;border-radius:22px;background:#2f6bff;color:#fff;font-size:16px}" +
                       "</style></head><body><h1>Yüklenemedi</h1><p>${Html.escapeHtml(url)}</p><p>${Html.escapeHtml(desc)}</p><button onclick=\"$js\">Tekrar Dene</button></body></html>"
               }
-          
+
               /** PDF, Word, Excel, metin vb. uygulama içinde açılabilecek dosya mı? */
               private fun isViewableDocument(url: String, mime: String?, cd: String?): Boolean {
                   val m = (mime ?: "").lowercase()
@@ -2739,7 +2538,7 @@ jobs:
                       m.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".csv") ||
                       name.endsWith(".md") || name.endsWith(".json") || name.endsWith(".log") || name.endsWith(".xml")
               }
-          
+
               private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
                   val name = URLUtil.guessFileName(url, cd, mime)
                   val i = Intent(this, DocumentViewerActivity::class.java)
@@ -2748,7 +2547,7 @@ jobs:
                       .putExtra(DocumentViewerActivity.EXTRA_MIME, mime)
                   try { startActivity(i) } catch (_: Exception) { startDownload(url, null, cd, mime) }
               }
-          
+
               private fun mediaKind(url: String, mime: String?, cd: String?): String {
                   val m = (mime ?: "").lowercase()
                   val name = URLUtil.guessFileName(url, cd, mime).lowercase()
@@ -2765,7 +2564,7 @@ jobs:
                       else -> "file"
                   }
               }
-          
+
               /** Medya ve diğer dosyalar için indirme seçenekleri gösterir. */
               private fun promptDownload(url: String, ua: String?, cd: String?, mime: String?) {
                   if (!url.startsWith("http")) return
@@ -2780,7 +2579,7 @@ jobs:
                   bgd.setColor(cSurface)
                   bgd.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
                   col.background = bgd
-          
+
                   val title = TextView(this)
                   title.text = when (kind) {
                       "video" -> "Videoyu indir"
@@ -2793,14 +2592,14 @@ jobs:
                   title.setTextColor(cText)
                   title.setPadding(0, 0, 0, dp(6))
                   col.addView(title)
-          
+
                   val sub = TextView(this)
                   sub.text = name
                   sub.textSize = 13f
                   sub.setTextColor(cSub)
                   sub.setPadding(0, 0, 0, dp(14))
                   col.addView(sub)
-          
+
                   fun addOpt(label: String, forceMime: String? = null, forceExt: String? = null) {
                       val btn = textBtn(label) {
                           d.dismiss()
@@ -2819,7 +2618,7 @@ jobs:
                       lp.bottomMargin = dp(8)
                       col.addView(btn, lp)
                   }
-          
+
                   when (kind) {
                       "video" -> {
                           addOpt("En yüksek kalite (orijinal)", mime)
@@ -2838,16 +2637,16 @@ jobs:
                           addOpt("İndir", mime)
                       }
                   }
-          
+
                   val cancel = textBtn("İptal") { d.dismiss() }
                   cancel.setTextColor(cSub)
                   cancel.gravity = Gravity.CENTER
                   col.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
-          
+
                   sheetWindow(d, col, false)
                   d.show()
               }
-          
+
               /** Sekme başlığından temiz dosya adı (videoplayback yazmasın). */
               private fun mediaFileBase(): String {
                   val t = tabs.getOrNull(cur)
@@ -2864,7 +2663,7 @@ jobs:
                   if (title.isBlank()) title = "medya"
                   return title
               }
-          
+
               private fun startDownload(url: String, ua: String?, cd: String?, mime: String?, forcedName: String? = null) {
                   if (!url.startsWith("http")) return
                   try {
@@ -2922,13 +2721,13 @@ jobs:
                       toast("$kind: $name")
                   } catch (_: Exception) { toast("İndirilemedi") }
               }
-          
+
               private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
               private fun hideKeyboard() {
                   val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                   imm.hideSoftInputFromWindow(root.windowToken, 0)
               }
-          
+
               private fun sheetWindow(d: Dialog, view: View, full: Boolean, top: Boolean = false) {
                   d.requestWindowFeature(Window.FEATURE_NO_TITLE)
                   d.setContentView(view)
@@ -2939,7 +2738,7 @@ jobs:
                       if (!full && top) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
                   }
               }
-          
+
               /** Adres çubuğu: altta yukarı=aç aşağı=kapa; üstte aşağı=aç yukarı=kapa. */
               private fun attachBarDrawerGesture(target: View) {
                   var startY = 0f
@@ -2985,7 +2784,7 @@ jobs:
                       }
                   }
               }
-          
+
               private fun addCurrentToHomeScreen() {
                   val t = tabs.getOrNull(cur) ?: return
                   val url = t.url
@@ -3022,7 +2821,7 @@ jobs:
                       pinShortcut(url, title, launch, null)
                   }
               }
-          
+
               /** Sitenin kendi simgesini indirir: sayfadaki link, /apple-touch-icon.png, /favicon.ico, sonra WebView simgesi. */
               private fun fetchSiteIcon(pageUrl: String, jsIcon: String, wvFav: Bitmap?): Bitmap? {
                   val host = try { Uri.parse(pageUrl).host ?: "" } catch (_: Exception) { "" }
@@ -3056,7 +2855,7 @@ jobs:
                   if (wvFav != null && (b == null || b.width < 32) && wvFav.width > (b?.width ?: 0)) best = wvFav
                   return best
               }
-          
+
               /** Simgeyi launcher'ın maskesine uyacak şekilde ortalayıp kenarlara kendi arka plan rengini verir. */
               private fun toShortcutBitmap(src: Bitmap): Bitmap {
                   val size = 432
@@ -3072,7 +2871,7 @@ jobs:
                   cv.drawBitmap(scaled, (size - w) / 2f, (size - h) / 2f, null)
                   return out
               }
-          
+
               private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
                   try {
                       val shaped = icon?.let { try { toShortcutBitmap(it) } catch (_: Exception) { null } }
@@ -3113,7 +2912,7 @@ jobs:
                       toast("Ana ekrana eklenemedi")
                   }
               }
-          
+
               private fun showMenu(@Suppress("UNUSED_PARAMETER") anchor: View) {
                   val t = tabs.getOrNull(cur) ?: return
                   val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
@@ -3149,7 +2948,7 @@ jobs:
                   }
                   menuDialog = d
                   d.setOnDismissListener { if (menuDialog === d) menuDialog = null }
-          
+
                   fun row(icon: String, label: String, trailing: String? = null, act: () -> Unit): View {
                       val r = LinearLayout(this)
                       r.orientation = LinearLayout.HORIZONTAL
@@ -3178,13 +2977,13 @@ jobs:
                       r.setOnClickListener { d.dismiss(); act() }
                       return r
                   }
-          
+
                   fun sep(): View {
                       val v = View(this)
                       v.setBackgroundColor(cField)
                       return v
                   }
-          
+
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
                   val statusH = run {
@@ -3199,13 +2998,13 @@ jobs:
                   bgd.cornerRadii = if (sheetAtTop) floatArrayOf(0f, 0f, 0f, 0f, rad, rad, rad, rad)
                                     else floatArrayOf(rad, rad, rad, rad, 0f, 0f, 0f, 0f)
                   col.background = bgd
-          
+
                   val handle = View(this)
                   handle.background = shape(cField, 3)
                   if (!sheetAtTop) col.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
                       gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(6); bottomMargin = dp(10)
                   })
-          
+
                   // Üst aksiyonlar
                   col.addView(row(if (marked) "⭐" else "☆", if (marked) "Yer iminden kaldır" else "Yer imlerine ekle") {
                       prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
@@ -3216,11 +3015,11 @@ jobs:
                   col.addView(row("🔍", "Sayfada bul") { openFind() })
                   col.addView(row("➕", "Yeni sekme") { openTab(null) })
                   col.addView(row("🕶️", "Gizli sekme") { openTab(null, true, true) })
-          
+
                   col.addView(sep(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
                       topMargin = dp(6); bottomMargin = dp(10); leftMargin = dp(12); rightMargin = dp(12)
                   })
-          
+
                   // Hızlı erişim kutuları (Geçmiş / Yer imleri / İndirilenler / Paylaş)
                   val quick = LinearLayout(this)
                   quick.orientation = LinearLayout.HORIZONTAL
@@ -3257,18 +3056,18 @@ jobs:
                   quick.addView(qBtn("📤", "Paylaş") { shareCurrent() },
                       LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                   col.addView(quick)
-          
+
                   col.addView(sep(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
                       topMargin = dp(4); bottomMargin = dp(6); leftMargin = dp(12); rightMargin = dp(12)
                   })
-          
+
                   col.addView(row("🎨", "Tema") { chooseTheme { } })
                   col.addView(row("⚙️", "Ayarlar") { showSettings() })
-          
+
                   if (sheetAtTop) col.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
                       gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(10); bottomMargin = dp(6)
                   })
-          
+
                   // Çekmece parmağı takip eder: adres çubuğu altaysa aşağı, üstteyse yukarı sürükleyince kapanır
                   val swipeWrap = object : FrameLayout(this@MainActivity) {
                       private var sy = 0f
@@ -3345,7 +3144,7 @@ jobs:
                   })
                   d.show()
               }
-          
+
               /** Videoya uzun basınca sağda/solda kısa ömürlü "İndir" chip'i gösterir. */
               private fun showVideoDownloadChip(web: WebView) {
                   try {
@@ -3369,7 +3168,7 @@ jobs:
                       downloadCurrentMedia()
                   }
               }
-          
+
               /**
                * YouTube: SaveFrom arayüzüne yönlendirmeden arka planda link çeker,
                * kendi kalite menümüzde "İndir" sunar.
@@ -3381,7 +3180,7 @@ jobs:
               private var playlistIndex: Int = 0
               private var playlistRunning: Boolean = false
               private var playlistAudioOnly: Boolean = false
-          
+
               private fun showDlSearching() {
                   if (dlSearchDialog?.isShowing == true) return
                   val d = Dialog(this)
@@ -3404,12 +3203,12 @@ jobs:
                   dlSearchDialog = d
                   d.show()
               }
-          
+
               private fun hideDlSearching() {
                   try { dlSearchDialog?.dismiss() } catch (_: Exception) {}
                   dlSearchDialog = null
               }
-          
+
               private fun downloadCurrentMedia() {
                   val t = tabs.getOrNull(cur) ?: return
                   val page = t.url
@@ -3441,11 +3240,11 @@ jobs:
                       } catch (_: Exception) { toast("İndirme başlatılamadı") }
                       return
                   }
-          
+
                   val listId = try { Uri.parse(page).getQueryParameter("list") } catch (_: Exception) { null }
                   offerYtDownloadMenu(page, listId)
               }
-          
+
               private fun offerYtDownloadMenu(page: String, listId: String?) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -3456,7 +3255,7 @@ jobs:
                   bgd.setColor(cSurface)
                   bgd.cornerRadii = floatArrayOf(rr, rr, rr, rr, 0f, 0f, 0f, 0f)
                   col.background = bgd
-          
+
                   val title = TextView(this)
                   title.text = "Ne indirilsin?"
                   title.textSize = 18f
@@ -3464,7 +3263,7 @@ jobs:
                   title.setTextColor(cText)
                   title.setPadding(0, 0, 0, dp(12))
                   col.addView(title)
-          
+
                   fun addBtn(label: String, act: () -> Unit) {
                       val btn = textBtn(label) { d.dismiss(); act() }
                       btn.setTextColor(cText)
@@ -3475,14 +3274,14 @@ jobs:
                       lp.bottomMargin = dp(8)
                       col.addView(btn, lp)
                   }
-          
+
                   addBtn("Bu video MP4") { downloadSingleDirect(page, audioOnly = false) }
                   addBtn("Bu video MP3") { downloadSingleDirect(page, audioOnly = true) }
                   if (!listId.isNullOrBlank()) {
                       addBtn("Listeden seç (MP4)") { loadPlaylistPicker(page, listId, audioOnly = false) }
                       addBtn("Listeden seç (MP3)") { loadPlaylistPicker(page, listId, audioOnly = true) }
                   }
-          
+
                   val cancel = textBtn("İptal") { d.dismiss() }
                   cancel.setTextColor(cSub)
                   cancel.gravity = Gravity.CENTER
@@ -3490,7 +3289,7 @@ jobs:
                   sheetWindow(d, col, false)
                   d.show()
               }
-          
+
               /** Liste kuyruğu ile aynı yol — seçenek menüsü / bekleme yok, direkt indir. */
               private fun downloadSingleDirect(page: String, audioOnly: Boolean) {
                   val id = videoIdOf(page) ?: run {
@@ -3499,7 +3298,7 @@ jobs:
                   }
                   fetchVideoTitle(id) { t -> downloadSingleTitled(page, audioOnly, id, t) }
               }
-          
+
               /** Videonun gerçek başlığını YouTube'dan alır; olmazsa oynatıcıdan dener. */
               private fun fetchVideoTitle(id: String, onDone: (String?) -> Unit) {
                   Thread {
@@ -3534,14 +3333,14 @@ jobs:
                       }
                   }.start()
               }
-          
+
               private fun downloadSingleTitled(page: String, audioOnly: Boolean, id: String, ytTitle: String?) {
                   val title = ytTitle?.takeIf {
                       it.isNotBlank() && !it.equals("YouTube", true) && !it.equals("YouTube Music", true)
                   } ?: "video_$id"
                   val base = safeFileName(title, id)
                   val watch = "https://www.youtube.com/watch?v=$id"
-          
+
                   fun isAudio(label: String, url: String): Boolean {
                       val t = "$label $url".lowercase()
                       return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
@@ -3568,7 +3367,7 @@ jobs:
                           else -> toast("İndirme linki alınamadı")
                       }
                   }
-          
+
                   // 1) Açık sayfadan hızlı
                   val t = tabs.getOrNull(cur)
                   try {
@@ -3594,7 +3393,7 @@ jobs:
                       }
                   }
               }
-          
+
               /** Liste videolarını getir → tikli seçim ekranı (henüz indirmez). */
               private fun loadPlaylistPicker(page: String, listId: String, audioOnly: Boolean) {
                   if (playlistRunning) {
@@ -3716,9 +3515,9 @@ jobs:
                       fetchPlaylistItemsInnertube(listId) { onItems(it) }
                   }
               }
-          
+
               data class PlItem(val id: String, val title: String, val thumb: String, val duration: String = "")
-          
+
               private fun parsePlaylistItems(raw: String?): List<PlItem> {
                   if (raw.isNullOrBlank() || raw == "null") return emptyList()
                   return try {
@@ -3743,7 +3542,7 @@ jobs:
                       out
                   } catch (_: Exception) { emptyList() }
               }
-          
+
               private fun fetchPlaylistItemsInnertube(listId: String, onDone: (List<PlItem>) -> Unit) {
                   Thread {
                       val items = ArrayList<PlItem>()
@@ -3822,7 +3621,7 @@ jobs:
                       handler.post { onDone(items.take(50)) }
                   }.start()
               }
-          
+
               /** Tikli liste: tümünü seç / tek tek / indirmeyi başlat. */
               private fun showPlaylistPicker(items: List<PlItem>, audioOnly: Boolean) {
                   val selected = BooleanArray(items.size) { true }
@@ -3831,7 +3630,7 @@ jobs:
                   rootV.orientation = LinearLayout.VERTICAL
                   rootV.setBackgroundColor(cBg)
                   rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
-          
+
                   val head = LinearLayout(this)
                   head.orientation = LinearLayout.HORIZONTAL
                   head.gravity = Gravity.CENTER_VERTICAL
@@ -3845,17 +3644,17 @@ jobs:
                   close.setTextColor(cSub)
                   head.addView(close)
                   rootV.addView(head)
-          
+
                   val selectAll = textBtn("Tümünü seç / kaldır") { }
                   selectAll.setTextColor(cAccent)
                   selectAll.setTypeface(null, Typeface.BOLD)
                   rootV.addView(selectAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
-          
+
                   val scroll = ScrollView(this)
                   val listCol = LinearLayout(this)
                   listCol.orientation = LinearLayout.VERTICAL
                   listCol.setPadding(0, dp(8), 0, dp(12))
-          
+
                   val checks = ArrayList<android.widget.CheckBox>()
                   for (i in items.indices) {
                       val item = items[i]
@@ -3864,14 +3663,14 @@ jobs:
                       row.gravity = Gravity.CENTER_VERTICAL
                       row.setPadding(dp(8), dp(8), dp(10), dp(8))
                       row.background = shape(cSurface, 14)
-          
+
                       val cb = android.widget.CheckBox(this)
                       cb.isChecked = true
                       try { cb.buttonTintList = ColorStateList.valueOf(cAccent) } catch (_: Exception) {}
                       cb.setOnCheckedChangeListener { _, v -> selected[i] = v }
                       checks.add(cb)
                       row.addView(cb, LinearLayout.LayoutParams(dp(36), dp(36)))
-          
+
                       val thumb = ImageView(this)
                       thumb.scaleType = ImageView.ScaleType.CENTER_CROP
                       thumb.clipToOutline = true
@@ -3894,7 +3693,7 @@ jobs:
                               if (bmp != null) handler.post { thumb.setImageBitmap(bmp) }
                           } catch (_: Exception) { }
                       }.start()
-          
+
                       val mid = LinearLayout(this)
                       mid.orientation = LinearLayout.VERTICAL
                       mid.setPadding(0, 0, dp(6), 0)
@@ -3906,7 +3705,7 @@ jobs:
                       name.ellipsize = android.text.TextUtils.TruncateAt.END
                       mid.addView(name)
                       row.addView(mid, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-          
+
                       row.setOnClickListener { cb.isChecked = !cb.isChecked }
                       val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                       lp.bottomMargin = dp(8)
@@ -3914,7 +3713,7 @@ jobs:
                   }
                   scroll.addView(listCol)
                   rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-          
+
                   var allOn = true
                   selectAll.setOnClickListener {
                       allOn = !allOn
@@ -3923,7 +3722,7 @@ jobs:
                           selected[i] = allOn
                       }
                   }
-          
+
                   val startBtn = textBtn("İndirmeyi başlat") {
                       val picked = ArrayList<Pair<String, String>>()
                       for (i in items.indices) if (selected[i]) picked.add(items[i].id to items[i].title)
@@ -3943,12 +3742,12 @@ jobs:
                   startBtn.gravity = Gravity.CENTER
                   startBtn.background = shape(cAccent, 22)
                   rootV.addView(startBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
-          
+
                   sheetWindow(d, rootV, true)
                   d.show()
-          
+
               }
-          
+
               private fun safeFileName(title: String, id: String): String {
                   var t = title.trim()
                       .replace(Regex("\\s*[-|]\\s*YouTube(\\s*Music)?\\s*$", RegexOption.IGNORE_CASE), "")
@@ -3959,7 +3758,7 @@ jobs:
                   if (t.isBlank() || t == id) t = "video_$id"
                   return t
               }
-          
+
               private fun processPlaylistQueue() {
                   if (!playlistRunning) return
                   if (playlistIndex >= playlistQueue.size) {
@@ -3972,12 +3771,12 @@ jobs:
                   val total = playlistQueue.size
                   val watch = "https://www.youtube.com/watch?v=$id"
                   val base = safeFileName(title, id)
-          
+
                   fun advance() {
                       playlistIndex++
                       handler.postDelayed({ processPlaylistQueue() }, 3000L)
                   }
-          
+
                   fun tryDownload(links: List<Pair<String, String>>) {
                       fun isAudio(label: String, url: String): Boolean {
                           val t = "$label $url".lowercase()
@@ -4027,13 +3826,13 @@ jobs:
                           }
                       }
                   }
-          
+
                   fetchViaInnertube(watch) { links ->
                       if (links.isNotEmpty()) tryDownload(links)
                       else fetchLinksViaSavefromSilent(watch) { tryDownload(it) }
                   }
               }
-          
+
               /** Liste kuyruğu için SaveFrom — UI toast yok. */
               private fun fetchLinksViaSavefromSilent(page: String, onDone: (List<Pair<String, String>>) -> Unit) {
                   val loader = WebView(this)
@@ -4102,7 +3901,7 @@ jobs:
                   loader.loadUrl("https://en.savefrom.net/" + page)
                   handler.postDelayed({ if (!finished) finish(emptyList()) }, 14000)
               }
-          
+
               private fun videoIdOf(page: String): String? {
                   return try {
                       val u = Uri.parse(page)
@@ -4117,7 +3916,7 @@ jobs:
                       }?.takeIf { it.length >= 8 }
                   } catch (_: Exception) { null }
               }
-          
+
               private fun parseYtFormatLinks(raw: String?): List<Pair<String, String>> {
                   if (raw.isNullOrBlank() || raw == "null" || raw == "\"\"") return emptyList()
                   return try {
@@ -4144,7 +3943,7 @@ jobs:
                       out
                   } catch (_: Exception) { emptyList() }
               }
-          
+
               private fun fetchViaInnertube(page: String, onDone: (List<Pair<String, String>>) -> Unit) {
                   val id = videoIdOf(page) ?: page.substringAfter("v=", "").take(11).takeIf { it.length >= 8 }
                   if (id == null) { onDone(emptyList()); return }
@@ -4232,7 +4031,7 @@ jobs:
                       handler.post { onDone(links) }
                   }.start()
               }
-          
+
               private fun fetchViaSavefrom(page: String) {
                   val loader = WebView(this)
                   loader.settings.javaScriptEnabled = true
@@ -4316,7 +4115,7 @@ jobs:
                   loader.loadUrl("https://en.savefrom.net/" + page)
                   handler.postDelayed({ if (!finished) finishWith(emptyList()) }, 18000)
               }
-          
+
               private fun showFetchedDownloadOptions(links: List<Pair<String, String>>) {
                   fun heightOf(s: String): Int {
                       val m = Regex("(\\d{3,4})\\s*p", RegexOption.IGNORE_CASE).find(s)
@@ -4335,11 +4134,11 @@ jobs:
                           (u.contains("mime=video") && u.contains("audio")) ||
                           (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
                   }
-          
+
                   val audioLinks = links.filter { isAudio(it.first, it.second) }
                   val bestAudio = audioLinks.maxByOrNull { it.second.length }?.second
                   val progressive = links.filter { !isAudio(it.first, it.second) && looksProgressive(it.second) }
-          
+
                   data class Opt(val label: String, val url: String, val audioOnly: Boolean)
                   val opts = ArrayList<Opt>()
                   val seenH = HashSet<Int>()
@@ -4353,13 +4152,13 @@ jobs:
                       if (opts.size >= 4) break
                   }
                   if (bestAudio != null) opts.add(Opt("MP3", bestAudio, true))
-          
+
                   hideDlSearching()
                   if (opts.isEmpty()) {
                       toast("İndirme linki alınamadı")
                       return
                   }
-          
+
                   val d = Dialog(this)
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
@@ -4398,7 +4197,7 @@ jobs:
                   sheetWindow(d, col, false)
                   d.show()
               }
-          
+
               private fun downloadAndMerge(videoUrl: String, audioUrl: String, outName: String) {
                   toast("MP4 indiriliyor: $outName")
                   Thread {
@@ -4457,7 +4256,7 @@ jobs:
                       }
                   }.start()
               }
-          
+
               private fun httpToFile(url: String, dest: java.io.File): Boolean {
                   return try {
                       val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
@@ -4475,7 +4274,7 @@ jobs:
                       dest.length() > 0
                   } catch (_: Exception) { false }
               }
-          
+
               private fun muxAv(videoPath: String, audioPath: String, outPath: String): Boolean {
                   return try {
                       val vExt = android.media.MediaExtractor()
@@ -4528,7 +4327,7 @@ jobs:
                       true
                   } catch (_: Exception) { false }
               }
-          
+
               private fun mediaKindOf(name: String, mime: String): String? {
                   val n = name.lowercase()
                   return when {
@@ -4539,7 +4338,7 @@ jobs:
                       else -> null
                   }
               }
-          
+
               /** İndirilen video / müziği yeni ExoPlayer oynatıcısında açar (aynı türdeki indirilenler liste olur). */
               private fun openMediaPlayer(file: java.io.File, title: String, audio: Boolean) {
                   for (t in tabs) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
@@ -4558,7 +4357,7 @@ jobs:
                       .putExtra(MediaPlayerActivity.EXTRA_INDEX, idx)
                   try { startActivity(i) } catch (_: Exception) { toast("Oynatıcı açılamadı") }
               }
-          
+
               private fun isLocalViewable(name: String, mime: String): Boolean {
                   val n = name.lowercase()
                   val m = mime.lowercase()
@@ -4569,7 +4368,7 @@ jobs:
                       m.contains("wordprocessingml") || m.contains("spreadsheetml") || m.contains("presentationml") ||
                       m.contains("msword") || m.contains("ms-excel") || m.contains("ms-powerpoint") || m.contains("rtf")
               }
-          
+
               /** İndirilen dosya başka bir paket (DownloadManager) adına kaydedildiği için yoldan okunamayabilir; gerekirse kopyasını alır. */
               private fun resolveReadable(f: java.io.File, e: Prefs.DownloadEntry): java.io.File? {
                   try {
@@ -4598,7 +4397,7 @@ jobs:
                   } catch (_: Exception) { }
                   return null
               }
-          
+
               private fun openLocalDocument(f: java.io.File, e: Prefs.DownloadEntry) {
                   Thread {
                       val rf = resolveReadable(f, e)
@@ -4613,7 +4412,7 @@ jobs:
                       }
                   }.start()
               }
-          
+
               /** Uygulama içi İndirilenler listesi. */
               private fun showDownloads() {
                   val items = ArrayList(prefs.downloads())
@@ -4622,7 +4421,7 @@ jobs:
                   rootV.orientation = LinearLayout.VERTICAL
                   rootV.setBackgroundColor(cBg)
                   rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
-          
+
                   val head = LinearLayout(this)
                   head.orientation = LinearLayout.HORIZONTAL
                   head.gravity = Gravity.CENTER_VERTICAL
@@ -4644,7 +4443,7 @@ jobs:
                       head.addView(clear)
                   }
                   rootV.addView(head)
-          
+
                   if (items.isEmpty()) {
                       val empty = TextView(this)
                       empty.text = "Henüz indirilen dosya yok.\nİndirdiğin dosyalar burada görünür."
@@ -4735,16 +4534,16 @@ jobs:
                       scroll.addView(listCol)
                       rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
                   }
-          
+
                   val close = textBtn("Kapat") { d.dismiss() }
                   close.setTextColor(cSub)
                   close.gravity = Gravity.CENTER
                   rootV.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-          
+
                   sheetWindow(d, rootV, true)
                   d.show()
               }
-          
+
               private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
                   val items = ArrayList(list)
                   val d = Dialog(this)
@@ -4752,7 +4551,7 @@ jobs:
                   rootV.orientation = LinearLayout.VERTICAL
                   rootV.setBackgroundColor(cBg)
                   rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
-          
+
                   val head = LinearLayout(this)
                   head.orientation = LinearLayout.HORIZONTAL
                   head.gravity = Gravity.CENTER_VERTICAL
@@ -4760,11 +4559,11 @@ jobs:
                   val tv = TextView(this)
                   tv.text = title; tv.textSize = 24f; tv.setTypeface(null, Typeface.BOLD); tv.setTextColor(cText)
                   head.addView(tv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-          
+
                   val listCol = LinearLayout(this)
                   listCol.orientation = LinearLayout.VERTICAL
                   var query = ""
-          
+
                   fun render() {
                       listCol.removeAllViews()
                       val q = query.trim().lowercase()
@@ -4813,7 +4612,7 @@ jobs:
                           listCol.addView(row, lp)
                       }
                   }
-          
+
                   if (neutral != null) {
                       val nb = textBtn(neutral.first) { neutral.second(); items.clear(); render() }
                       nb.setTextColor(cAccent); nb.setTypeface(null, Typeface.BOLD)
@@ -4823,7 +4622,7 @@ jobs:
                   done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
                   head.addView(done, LinearLayout.LayoutParams(dp(64), dp(40)))
                   rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-          
+
                   val search = EditText(this)
                   search.hint = "🔎  Ara"
                   search.setHintTextColor(cSub); search.setTextColor(cText); search.textSize = 15f
@@ -4834,7 +4633,7 @@ jobs:
                   val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44))
                   slp.bottomMargin = dp(12)
                   rootV.addView(search, slp)
-          
+
                   val scroll = ScrollView(this)
                   scroll.addView(listCol)
                   rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -4843,19 +4642,19 @@ jobs:
                   d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                   d.show()
               }
-          
+
               private fun openFind() {
                   findBar.visibility = View.VISIBLE; findInput.setText(""); findCount.text = ""
                   findInput.requestFocus()
                   (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(findInput, 0)
               }
-          
+
               private fun closeFind() {
                   if (findBar.visibility != View.VISIBLE) return
                   findBar.visibility = View.GONE; currentWeb()?.clearMatches()
                   hideKeyboard(); root.requestFocus()
               }
-          
+
               /** TikTok'a masaüstü tarayıcı gibi görünür (sayfa mobil kalır); başka sitelerde mobil kimlik geri gelir. */
               private fun applyHostUa(t: BTab, url: String?) {
                   if (t.desktop || url == null || t.mobileUa.isEmpty()) return
@@ -4873,7 +4672,7 @@ jobs:
                       }
                   } catch (_: Exception) { }
               }
-          
+
               private fun toggleDesktop() {
                   val t = tabs.getOrNull(cur) ?: return
                   t.desktop = !t.desktop
@@ -4884,13 +4683,13 @@ jobs:
                   } else { s.userAgentString = t.mobileUa }
                   t.web.reload()
               }
-          
+
               private fun shareCurrent() {
                   val t = tabs.getOrNull(cur) ?: return
                   if (!t.url.startsWith("http")) return
                   startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), "Paylaş"))
               }
-          
+
               private fun capturePreview(tab: BTab) {
                   try {
                       val w = tab.web.width; val h = tab.web.height
@@ -4902,7 +4701,7 @@ jobs:
                       tab.web.draw(canvas); tab.preview = bmp
                   } catch (_: Exception) {}
               }
-          
+
               private fun pillBtn(label: String, colors: IntArray, onClick: () -> Unit): TextView {
                   val t = TextView(this)
                   t.text = label; t.textSize = 14f; t.setTypeface(null, Typeface.BOLD)
@@ -4913,7 +4712,7 @@ jobs:
                   t.setOnClickListener { onClick() }
                   return t
               }
-          
+
               private fun showTabs() {
                   tabs.getOrNull(cur)?.let { capturePreview(it) }
                   val d = Dialog(this)
@@ -4921,7 +4720,7 @@ jobs:
                   rootV.orientation = LinearLayout.VERTICAL
                   rootV.setBackgroundColor(cBg)
                   rootV.setPadding(dp(12), dp(34), dp(12), dp(16))
-          
+
                   val head = LinearLayout(this)
                   head.orientation = LinearLayout.HORIZONTAL
                   head.gravity = Gravity.CENTER_VERTICAL
@@ -4933,13 +4732,13 @@ jobs:
                   done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
                   head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
                   rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-          
+
                   val grid = LinearLayout(this)
                   grid.orientation = LinearLayout.VERTICAL
                   val scroll = ScrollView(this)
                   scroll.addView(grid)
                   rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-          
+
                   val actions = LinearLayout(this)
                   actions.orientation = LinearLayout.HORIZONTAL
                   actions.setPadding(0, dp(10), 0, 0)
@@ -4949,12 +4748,12 @@ jobs:
                   val l2 = LinearLayout.LayoutParams(0, dp(48), 1f); l2.leftMargin = dp(6)
                   actions.addView(b1, l1); actions.addView(b2, l2)
                   rootV.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-          
+
                   fillTabs(grid, title, d)
                   sheetWindow(d, rootV, true)
                   d.show()
               }
-          
+
               private fun fillTabs(grid: LinearLayout, title: TextView, d: Dialog) {
                   grid.removeAllViews()
                   title.text = "Sekmeler · " + tabs.size
@@ -4970,7 +4769,7 @@ jobs:
                       grid.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                   }
               }
-          
+
               private fun tabCard(i: Int, grid: LinearLayout, title: TextView, d: Dialog): View {
                   val t = tabs[i]
                   val card = LinearLayout(this)
@@ -4982,7 +4781,7 @@ jobs:
                   if (i == cur) bg.setStroke(dp(2), if (t.incognito) 0xFFA46BFF.toInt() else cAccent)
                   card.background = bg
                   card.setOnClickListener { d.dismiss(); switchTo(i) }
-          
+
                   val head = LinearLayout(this)
                   head.orientation = LinearLayout.HORIZONTAL
                   head.gravity = Gravity.CENTER_VERTICAL
@@ -4997,7 +4796,7 @@ jobs:
                   head.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                   head.addView(textBtn("✕") { closeTab(i); fillTabs(grid, title, d) }, LinearLayout.LayoutParams(dp(34), dp(34)))
                   card.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-          
+
                   val img = ImageView(this)
                   img.scaleType = ImageView.ScaleType.MATRIX
                   img.background = shape(if (t.incognito) 0xFF3A2470.toInt() else cField, 14)
@@ -5014,7 +4813,7 @@ jobs:
                   card.addView(img, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(170)))
                   return card
               }
-          
+
               private fun settingsRow(icon: String, title: String, sub: String?, trailing: View?, onClick: () -> Unit): View {
                   val row = LinearLayout(this)
                   row.orientation = LinearLayout.HORIZONTAL
@@ -5043,13 +4842,13 @@ jobs:
                   if (trailing != null) row.addView(trailing, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                   return row
               }
-          
+
               private fun chevron(): TextView {
                   val c = TextView(this)
                   c.text = "›"; c.textSize = 24f; c.setTextColor(cSub)
                   return c
               }
-          
+
               private fun switchRow(icon: String, title: String, sub: String, value: Boolean, onChange: (Boolean) -> Unit): View {
                   val sw = SwitchCompat(this)
                   sw.isChecked = value
@@ -5059,8 +4858,8 @@ jobs:
                   sw.setOnCheckedChangeListener { _, v -> onChange(v) }
                   return settingsRow(icon, title, sub, sw) { sw.toggle() }
               }
-          
-          
+
+
               private fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -5084,7 +4883,7 @@ jobs:
                   sheetWindow(d, col, false)
                   d.show()
               }
-          
+
               private fun themedConfirm(message: String, onYes: () -> Unit, onNo: () -> Unit) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -5114,13 +4913,13 @@ jobs:
                   sheetWindow(d, col, false)
                   d.show()
               }
-          
+
               private fun startModeLabel(): String = when (prefs.startMode) {
                   "home" -> "Ana sayfa"
                   "blank" -> "Yeni sekme"
                   else -> "Kaldığım yerden"
               }
-          
+
               private fun chooseStartMode(onDone: () -> Unit) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -5176,8 +4975,8 @@ jobs:
                   sheetWindow(d, col, false)
                   d.show()
               }
-          
-          
+
+
               private fun showSettings() {
                   val d = Dialog(this)
                   val rootV = LinearLayout(this)
@@ -5195,7 +4994,7 @@ jobs:
                   done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
                   head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
                   rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-          
+
                   val list = LinearLayout(this)
                   list.orientation = LinearLayout.VERTICAL
                   fun add(v: View) {
@@ -5240,14 +5039,14 @@ jobs:
                   add(settingsRow("🧽", "Önbellek ve çerezler", null, null) {
                       themedConfirm("Önbellek ve çerezler silinsin mi?", onYes = { clearBrowsingData(); toast("Temizlendi") }, onNo = {})
                   })
-          
+
                   val scroll = ScrollView(this)
                   scroll.addView(list)
                   rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
                   sheetWindow(d, rootV, true)
                   d.show()
               }
-          
+
               private fun isDefaultBrowser(): Boolean {
                   return try {
                       if (Build.VERSION.SDK_INT >= 29) {
@@ -5260,7 +5059,7 @@ jobs:
                       }
                   } catch (_: Exception) { false }
               }
-          
+
               private fun openDefaultAppsSettings() {
                   try {
                       startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
@@ -5269,11 +5068,11 @@ jobs:
                       try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } catch (_: Exception) { toast("Ayarlar açılamadı") }
                   }
               }
-          
+
               private fun afterRole() {
                   if (isDefaultBrowser()) toast("Rota artık varsayılan tarayıcı ✓") else openDefaultAppsSettings()
               }
-          
+
               private fun askDefaultBrowser() {
                   if (isDefaultBrowser()) { toast("Rota zaten varsayılan tarayıcı ✓"); return }
                   if (Build.VERSION.SDK_INT >= 29) {
@@ -5287,7 +5086,7 @@ jobs:
                   }
                   openDefaultAppsSettings()
               }
-          
+
               private fun chooseTheme(onDone: () -> Unit) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -5340,7 +5139,7 @@ jobs:
                   sheetWindow(d, sc, false)
                   d.show()
               }
-          
+
               private fun chooseEngine(onDone: () -> Unit) {
                   val d = Dialog(this)
                   val col = LinearLayout(this)
@@ -5375,20 +5174,20 @@ jobs:
                   sheetWindow(d, col, false)
                   d.show()
               }
-          
+
               private fun clearBrowsingData() {
                   CookieManager.getInstance().removeAllCookies(null)
                   CookieManager.getInstance().flush()
                   WebStorage.getInstance().deleteAllData()
                   for (t in tabs) t.web.clearCache(true)
               }
-          
+
               private companion object {
                   const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
                   const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
                   const val MAX_TABS = 20
-          
-          
+
+
                   // YouTube sayfasından progressive + ses URL'lerini çıkar (cipher'sız olanlar)
                   const val YT_EXTRACT_FORMATS_JS =
                       "(function(){try{" +
@@ -5411,8 +5210,8 @@ jobs:
                       "out.push({u:v.currentSrc,itag:0,q:'playing',k:'p',audio:false});}" +
                       "return JSON.stringify(out.slice(0,20));" +
                       "}catch(e){return '[]';}})();"
-          
-          
+
+
                             // YouTube / YouTube Music: "uygulamada aç / izle / en iyi deneyim" pencerelerini kapatır
                             const val YT_PROMO_JS = """
                             (function(){try{
@@ -5443,57 +5242,9 @@ jobs:
                             try{mo.observe(document.documentElement,{childList:true,subtree:true});}catch(x){}
                             }catch(e){}})();
                             """
-          
+
                   // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-                  
-              const val YT_MUSIC_CATALOG_JS =
-                  "(function(){try{" +
-                  "if(!/music\\.youtube\\.com/i.test(location.hostname||''))return JSON.stringify({playlists:[],songs:[],page:location.href});" +
-                  "var playlists=[],songs=[],seen={};" +
-                  "function abs(u){if(!u)return '';u=String(u);if(u.indexOf('http')===0)return u.split('?')[0].indexOf('google')>=0?u:u;if(u.indexOf('//')===0)return location.protocol+u;return u;}" +
-                  "function txt(el){if(!el)return '';return (el.getAttribute('title')||el.getAttribute('aria-label')||el.textContent||'').replace(/\\s+/g,' ').trim();}" +
-                  "function pushP(title,sub,url,art){title=(title||'').replace(/\\s+/g,' ').trim();url=(url||'').trim();if(!title||title.length<2)return;if(!url||url.indexOf('http')!==0)return;" +
-                  "if(/signin|accounts\\.google|language|feedback/i.test(url+title))return;if(seen['p'+url])return;seen['p'+url]=1;" +
-                  "playlists.push({title:title.slice(0,90),artist:(sub||'').replace(/\\s+/g,' ').trim().slice(0,90),url:url,art:abs(art||'')});}" +
-                  "function pushS(title,artist,url,art){title=(title||'').replace(/\\s+/g,' ').trim();if(!title||title.length<1)return;" +
-                  "if(/^(oynat|play|next|previous|karıştır)/i.test(title))return;var id=url||(title+'|'+artist);if(seen['s'+id])return;seen['s'+id]=1;" +
-                  "songs.push({title:title.slice(0,90),artist:(artist||'').replace(/\\s+/g,' ').trim().slice(0,90),url:(url||'').trim(),art:abs(art||'')});}" +
-                  // two-row cards (listeler / albümler / çalma listeleri)
-                  "document.querySelectorAll('ytmusic-two-row-item-renderer,ytmusic-responsive-list-item-renderer a[href*=\"browse\"],ytmusic-carousel-item-renderer').forEach(function(el){" +
-                  "var root=el.tagName&&el.tagName.toLowerCase().indexOf('a')>=0?el.closest('ytmusic-two-row-item-renderer,ytmusic-carousel-item-renderer,ytmusic-responsive-list-item-renderer')||el:el;" +
-                  "var a=root.querySelector?root.querySelector('a[href*=\"browse\"],a[href*=\"playlist\"],a[href*=\"channel\"],a[href]'): (root.href?root:null);" +
-                  "if(!a)a=root.querySelector&&root.querySelector('a[href]');" +
-                  "var href=a?(a.href||a.getAttribute('href')||''):'';" +
-                  "if(href&&href.indexOf('http')!==0){try{href=new URL(href,location.href).href;}catch(z){}}" +
-                  "var title=txt(root.querySelector&&root.querySelector('#title,yt-formatted-string#title,.title,a[title],yt-formatted-string[title]'));" +
-                  "if(!title&&a)title=txt(a);" +
-                  "var sub=txt(root.querySelector&&root.querySelector('#subtitle,.subtitle,yt-formatted-string.subtitle'));" +
-                  "var img=root.querySelector&&root.querySelector('img');var art=img?(img.getAttribute('src')||img.src||''):'';" +
-                  "if(href&&(/browse|playlist|channel/.test(href)||(root.tagName||'').toLowerCase().indexOf('two-row')>=0))pushP(title,sub,href,art);" +
-                  "else if(href&&/watch/.test(href))pushS(title,sub,href,art);" +
-                  "});" +
-                  // şarkı satırları
-                  "document.querySelectorAll('ytmusic-responsive-list-item-renderer,ytmusic-player-queue-item,ytmusic-list-item-renderer').forEach(function(el){" +
-                  "var a=el.querySelector('a[href*=\"watch\"],a[href*=\"browse\"],a[href]');" +
-                  "var href=a?(a.href||''):'';" +
-                  "var title=txt(el.querySelector('.title,#title,yt-formatted-string.title,yt-formatted-string[class*=\"title\"]'));" +
-                  "if(!title)title=txt(el.querySelector('yt-formatted-string'));" +
-                  "var secs=el.querySelectorAll('.secondary-flex-columns yt-formatted-string,yt-formatted-string.flex-column,.subtitle yt-formatted-string,yt-formatted-string[class*=\"byline\"]');" +
-                  "var artist=secs.length?txt(secs[0]):'';" +
-                  "var img=el.querySelector('img');var art=img?(img.getAttribute('src')||img.src||''):'';" +
-                  "if(href&&/browse|playlist/.test(href)&&!/watch/.test(href))pushP(title,artist,href,art);" +
-                  "else pushS(title,artist,href,art);" +
-                  "});" +
-                  // genel link tarama (yedek)
-                  "if(playlists.length<3){document.querySelectorAll('a[href*=\"/browse/\"],a[href*=\"list=\"]').forEach(function(a){" +
-                  "var href=a.href||'';var title=txt(a);if(title.length<3){var p=a.closest('[id],[class]');title=txt(p);}pushP(title,'',href,'');});}" +
-                  "if(songs.length<3){document.querySelectorAll('a[href*=\"watch?v=\"]').forEach(function(a){" +
-                  "var title=txt(a);if(title.length<2)return;pushS(title,'',a.href,'');});}" +
-                  "return JSON.stringify({playlists:playlists.slice(0,50),songs:songs.slice(0,60),page:location.href,ts:Date.now()});" +
-                  "}catch(e){return JSON.stringify({playlists:[],songs:[],error:String(e),page:location.href});}})();"
-          
-          
-              const val YT_MUSIC_UX_JS =
+                  const val YT_MUSIC_UX_JS =
                       "(function(){try{\n" +
                       "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
                       "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
@@ -5863,7 +5614,7 @@ jobs:
                       "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
                       "try{var __pk=document.getElementById('__rota_peek');if(__pk)__pk.remove();document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');}catch(z){}\n" +
                       "}catch(e){}})();\n"
-          
+
                   const val KEEP_PLAYING_JS =
                       "(function(){try{" +
                           "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
@@ -5880,7 +5631,7 @@ jobs:
                           "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
                           "m.dataset.pusulaWasPlaying='1';window.__userPause=false;}catch(z){}},true);" +
                           "}catch(e){}})();"
-          
+
                   // Reklam sırasında: siyah bekleme ekranı örtülür, ses tamamen kısılır, altyazı ve reklam arayüzü gizlenir,
                   // reklam 16 kat hızlandırılır ve "Atla" düğmesine basılır. Reklam bitince ekran varsayılan haline döner.
                   const val STABLE_AD_BLOCKER_JS =
@@ -5921,9 +5672,8 @@ jobs:
                       "if(!vd)return;" +
                       "vd.style.visibility='';" +
                       "vd.playbackRate=1;" +
-                      // Reklam bitince sesi geri aç
+                      // Reklam bitince asla muted bırakma — ses her zaman geri açılır
                       "vd.muted=false;" +
-                      "try{document.querySelectorAll('video,audio').forEach(function(m){if(m!==vd){try{m.muted=false;}catch(z){}}});}catch(x){}" +
                       "var tv=parseFloat(vd.dataset.pv||'1')||1;" +
                       "vd.volume=0;" +
                       "var k=0;" +
@@ -5943,7 +5693,7 @@ jobs:
                       "if(tick%5===1)hideAdUi(true);" +
                       "if(vd){" +
                       "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
-                      // Reklam: hem volume=0 hem muted (gizli WebView dahil tüm medya)
+                      // muted kullanma — sadece volume=0 (reklam sesi); içerik muted kalmasın
                       "try{vd.volume=0;vd.muted=true;}catch(x){}" +
                       "try{document.querySelectorAll('video,audio').forEach(function(m){try{m.volume=0;m.muted=true;}catch(z){}});}catch(x){}" +
                       "vd.style.visibility='hidden';" +
@@ -5973,7 +5723,7 @@ jobs:
                       "}" +
                       "setInterval(function(){watch();check();},60);" +
                       "})();"
-          
+
                   // YouTube üst çubuğundaki "Uygulamada aç" düğmesini gizler; başka hiçbir şeye dokunmaz.
                   const val OPEN_APP_HIDE_JS =
                       "(function(){" +
@@ -6008,7 +5758,7 @@ jobs:
                       "}" +
                       "setInterval(hide,600);" +
                       "})();"
-          
+
                   // YouTube sayfasında ortadaki büyük logo / oynat katmanı ve watermark
                   const val YT_HIDE_LOGO_JS =
                       "(function(){try{" +
@@ -6022,7 +5772,7 @@ jobs:
                       "';" +
                       "document.documentElement.appendChild(s);" +
                       "}catch(e){}})();"
-          
+
                   // YouTube: videoyu aşağı çek → video parmakla birlikte sağ alta küçülür (hareketi native yönetir)
                   const val YT_MINI_PLAYER_JS = """
                   (function(){try{
@@ -6070,8 +5820,8 @@ jobs:
                   },{passive:true,capture:true});
                   }catch(e){}})();
                   """
-          
-          
+
+
                   // Küçük pencerede: oynatıcının üstündeki YouTube yazıları/kontroller gizlenir, video pencereyi doldurur
                   const val YT_MINI_CSS_ON_JS = """
                   (function(){try{
@@ -6083,11 +5833,11 @@ jobs:
                   '.html5-video-player{background:#000!important}';
                   }catch(e){}})();
                   """
-          
+
                   const val YT_MINI_CSS_OFF_JS = """
                   (function(){try{var s=document.getElementById('__rota_mini_css');if(s)s.remove();}catch(e){}})();
                   """
-          
+
                   // Küçük pencere açıkken gezinme sayfasında video ön izlemeleri oynamaz
                   const val YT_NO_PREVIEW_JS = """
                   (function(){try{
@@ -6109,7 +5859,7 @@ jobs:
                   stop();
                   }catch(e){}})();
                   """
-          
+
                   // Uygulama açık temadayken YouTube / YT Music arayüzünü de açık tona zorlar
                   const val FORCE_LIGHT_YT_JS =
                       "(function(){" +
@@ -6135,7 +5885,7 @@ jobs:
                       "}" +
                       "apply();setInterval(apply,1500);" +
                       "})();"
-          
+
                   // Normal videolar altyazısız başlar (reklam dışında). Kullanıcı sonradan açarsa karışılmaz.
                   const val CAPTIONS_OFF_JS =
                       "(function(){" +
@@ -6169,7 +5919,7 @@ jobs:
                       "}" +
                       "setInterval(capsOff,400);" +
                       "})();"
-          
+
                   const val BACKGROUND_MEDIA_JS =
                       "(function(){try{" +
                           "if(window.__userPause)return;" +
@@ -6177,7 +5927,7 @@ jobs:
                           "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                           "});" +
                           "}catch(e){}})();"
-          
+
                   const val MEDIA_TOGGLE_JS =
                       "(function(){try{" +
                       "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
@@ -6196,7 +5946,7 @@ jobs:
                       "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
                       "if(b)b.click();" +
                       "}catch(e){}})();"
-          
+
                   // PiP / küçük pencere düğmeleri için gecikmesiz oynat-duraklat (ses geçişi yok)
                   const val MEDIA_TOGGLE_FAST_JS =
                       "(function(){try{" +
@@ -6209,7 +5959,7 @@ jobs:
                       "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
                       "if(b)b.click();" +
                       "}catch(e){}})();"
-          
+
                   // Zorla oynat (toggle yok)
                   const val MEDIA_FORCE_PLAY_JS =
                       "(function(){try{" +
@@ -6223,7 +5973,7 @@ jobs:
                       "var b=document.querySelector('.ytp-play-button,#play-pause-button,ytmusic-player-bar #play-pause-button,ytmusic-play-button-renderer');" +
                       "if(b)b.click();}" +
                       "}catch(e){}})();"
-          
+
                   // PiP'ten dönünce video düzeni bozuk mu? (oynatıcı sayfa genişliğinden dar ya da PiP stili kalmış)
                   const val PIP_LAYOUT_CHECK_JS =
                       "(function(){try{" +
@@ -6233,14 +5983,14 @@ jobs:
                       "var bad=window.scrollX>0||(window.scrollY>0&&window.scrollY<160)||r.width<window.innerWidth*0.9||r.height<60||document.getElementById('__pip')!==null||document.querySelector('.__pipv')!==null;" +
                       "return bad?'bad':'ok';" +
                       "}catch(e){return 'ok';}})();"
-          
+
                   const val FIX_HSCROLL_JS =
                       "(function(){try{var e=document.scrollingElement||document.documentElement;" +
                       "if(e&&e.scrollLeft)e.scrollLeft=0;if(window.scrollX)window.scrollTo(0,window.scrollY);" +
                       "if(location.pathname.indexOf('/watch')===0&&window.scrollY>0&&window.scrollY<160)window.scrollTo(0,0);" +
                       "if(document.body&&document.body.scrollLeft)document.body.scrollLeft=0;" +
                       "}catch(x){}})();"
-          
+
                   const val PIP_RELAYOUT_JS =
                       "(function(){try{" +
                       "var e0=document.scrollingElement||document.documentElement;if(e0&&e0.scrollLeft)e0.scrollLeft=0;if(window.scrollX)window.scrollTo(0,window.scrollY);" +
@@ -6254,14 +6004,14 @@ jobs:
                       "if(v){try{v.style.removeProperty('transform');v.style.removeProperty('object-fit');v.style.removeProperty('object-position');}catch(z){}}" +
                       "window.dispatchEvent(new Event('resize'));" +
                       "}catch(e){}})();"
-          
+
                   const val MEDIA_PAUSE_FAST_JS =
                       "(function(){try{" +
                       "window.__userPause=true;" +
                       "document.querySelectorAll('video,audio').forEach(function(m){try{m.dataset.pusulaWasPlaying='';if(!m.paused)m.pause();}catch(z){}});" +
                       "if(window.__pipFlash)window.__pipFlash();" +
                       "}catch(e){}})();"
-          
+
                   const val MEDIA_PAUSE_JS =
                       "(function(){try{" +
                       "function fadeTo(m,from,to,ms,done){var steps=Math.max(8,Math.round(ms/25)),i=0;m.volume=from;var iv=setInterval(function(){i++;var t=i/steps;var e=0.5-0.5*Math.cos(Math.PI*t);m.volume=Math.max(0,Math.min(1,from+(to-from)*e));if(i>=steps){clearInterval(iv);m.volume=to;if(done)done();}},25);}" +
@@ -6269,7 +6019,7 @@ jobs:
                       "window.__userPause=true;if(!m.paused){var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,300,function(){m.pause();try{m.volume=from;}catch(z){}m.dataset.pusulaWasPlaying='';});}" +
                       "});" +
                       "}catch(e){}})();"
-          
+
                   const val MEDIA_PREVIOUS_JS =
                       "(function(){try{" +
                       "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
@@ -6288,7 +6038,7 @@ jobs:
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v){v.currentTime=0;}fadeInAll(500);}" +
                       "fadeOutAll(400,doPrev);" +
                       "}catch(e){}})();"
-          
+
                   const val MEDIA_NEXT_JS =
                       "(function(){try{" +
                       "function mediaList(){return Array.from(document.querySelectorAll('video,audio'));}" +
@@ -6302,10 +6052,10 @@ jobs:
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('video');if(v&&isFinite(v.duration)){v.currentTime=v.duration;}fadeInAll(500);}" +
                       "fadeOutAll(400,doNext);" +
                       "}catch(e){}})();"
-          
+
                   const val MEDIA_HOOK_JS =
                       "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
-          
+
                   const val MEDIA_STATE_JS =
                       "(function(){try{" +
                       "var l=Array.from(document.querySelectorAll('video,audio'));" +
@@ -6340,7 +6090,7 @@ jobs:
                       "}catch(x){}" +
                       "});" +
                       "}catch(e){}})();"
-          
+
                   // Küçük pencere: video eski düzenle (tam kare) gösterilir. Sayfa, videoyu kendiliğinden
                   // duraklatmasın diye video.pause() küçük pencere süresince engellenir; yalnızca
                   // bizim oynat/duraklat düğmelerimiz (window.__userPause) duraklatabilir.
@@ -6374,7 +6124,7 @@ jobs:
                       "function tick(){var d=v.duration;if(!isFinite(d)||d<=0){bar.style.display='none';return;}bar.style.display='block';fill.style.width=(v.currentTime/d*100)+'%';}" +
                       "tick();window.__pipIv=setInterval(tick,500);})();" +
                       "}catch(e){}})();"
-          
+
                   const val PIP_OFF_JS =
                       "(function(){try{" +
                       "var pv=window.__pipVol;window.__pipVol=null;" +
@@ -6391,7 +6141,7 @@ jobs:
                       "}catch(z){}});" +
                       "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
-          
+
                   // PiP sonrası: sadece pip sınıfları/scale; YouTube layout'una dokunma
                   const val PIP_RECOVER_JS =
                       "(function(){try{" +
@@ -6412,7 +6162,7 @@ jobs:
                       "}" +
                       "try{window.dispatchEvent(new Event('resize'));}catch(z){}" +
                       "}catch(e){}})();"
-          
+
                   const val LANDSCAPE_VIDEO_JS =
                       "(function(){try{" +
                       "var v=document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');" +
@@ -6428,23 +6178,21 @@ jobs:
                       "}" +
                       "document.body.classList.add('__landv');" +
                       "}catch(e){}})();"
-          
+
                   const val PORTRAIT_VIDEO_JS =
                       "(function(){try{" +
                       "document.body.classList.remove('__landv');" +
                       "var s=document.getElementById('__land');if(s)s.remove();" +
                       "if(document.fullscreenElement){try{document.exitFullscreen();}catch(x){}}" +
                       "}catch(e){}})();"
-          
-          
+
+
               }
           }
           EOF
-      - name: 3-Diger kaynaklar
-        run: |
           cat > app/src/main/java/com/pusula/browser/Themes.kt <<'EOF'
           package com.pusula.browser
-          
+
           /** Uygulama renk temaları. */
           class Palette(
               val id: String,
@@ -6459,10 +6207,10 @@ jobs:
               val accent: Int,
               val accent2: Int
           )
-          
+
           object Themes {
               private fun c(v: Long): Int = v.toInt()
-          
+
               val all: List<Palette> = listOf(
                   Palette("gece", "Gece Mavisi", true,
                       c(0xFF0B1020), c(0xFF131B33), c(0xFF1D2848), c(0xFFEAF0FF), c(0xFF8FA0C8), c(0xFFC9D6FF), c(0xFF4C8DFF), c(0xFF8A5CFF)),
@@ -6477,13 +6225,13 @@ jobs:
                   Palette("okyanus", "Okyanus", false,
                       c(0xFFEAF6FA), c(0xFFFFFFFF), c(0xFFDDEFF5), c(0xFF0F2530), c(0xFF5A7886), c(0xFF2A4E5E), c(0xFF0EA5C6), c(0xFF2F6BFF))
               )
-          
+
               fun get(id: String): Palette = all.firstOrNull { it.id == id } ?: all[0]
           }
           EOF
           cat > app/src/main/java/com/pusula/browser/DocumentViewerActivity.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.annotation.SuppressLint
           import android.graphics.Bitmap
           import android.graphics.Color
@@ -6517,13 +6265,13 @@ jobs:
           import java.io.ByteArrayInputStream
           import java.io.ByteArrayOutputStream
           import java.io.File
-          
+
           /**
            * PDF, Word, Excel, PowerPoint, RTF, metin ve görsel dosyaları uygulama içinde açar.
            * Yerel dosyalar (İndirilenler) internetsiz açılır; uzak adresler Google görüntüleyiciyle.
            */
           class DocumentViewerActivity : AppCompatActivity() {
-          
+
               private lateinit var web: WebView
               private lateinit var progress: ProgressBar
               private var fileUrl: String = ""
@@ -6536,7 +6284,7 @@ jobs:
               private var bgHex = "#0B1020"
               private var fgHex = "#EAF0FF"
               private var subHex = "#4A5578"
-          
+
               @SuppressLint("SetJavaScriptEnabled")
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
@@ -6546,7 +6294,7 @@ jobs:
                   fileName = intent.getStringExtra(EXTRA_NAME)
                       ?: (filePath?.let { File(it).name } ?: guessName(fileUrl))
                   mime = intent.getStringExtra(EXTRA_MIME)
-          
+
                   val prefs = Prefs(this)
                   val pal = Themes.get(prefs.theme)
                   val cBg = pal.bg
@@ -6557,18 +6305,18 @@ jobs:
                   bgHex = String.format("#%06X", 0xFFFFFF and pal.bg)
                   fgHex = String.format("#%06X", 0xFFFFFF and pal.text)
                   subHex = String.format("#%06X", 0xFFFFFF and pal.field)
-          
+
                   WindowCompat.setDecorFitsSystemWindows(window, false)
                   window.setBackgroundDrawable(ColorDrawable(cBg))
                   val bars = WindowInsetsControllerCompat(window, window.decorView)
                   bars.isAppearanceLightStatusBars = !pal.dark
                   bars.isAppearanceLightNavigationBars = !pal.dark
-          
+
                   val root = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       setBackgroundColor(cBg)
                   }
-          
+
                   val top = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER_VERTICAL
@@ -6580,7 +6328,7 @@ jobs:
                       v.setPadding(dp(6), sb.top + dp(8), dp(6), dp(10))
                       insets
                   }
-          
+
                   val back = ImageButton(this).apply {
                       setImageResource(R.drawable.ic_back)
                       setColorFilter(cIcon)
@@ -6591,7 +6339,7 @@ jobs:
                       setOnClickListener { finish() }
                   }
                   top.addView(back, LinearLayout.LayoutParams(dp(52), dp(52)))
-          
+
                   val titleView = TextView(this).apply {
                       text = fileName
                       textSize = 16f
@@ -6603,7 +6351,7 @@ jobs:
                   top.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
                       leftMargin = dp(4); rightMargin = dp(8)
                   })
-          
+
                   // Yerel dosya zaten indirilmiş; indir düğmesi yalnızca uzak adreste görünür.
                   if (filePath == null) {
                       val downloadBtn = TextView(this).apply {
@@ -6623,12 +6371,12 @@ jobs:
                       })
                   }
                   root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-          
+
                   progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                       max = 100; this.progress = 0; visibility = View.VISIBLE
                   }
                   root.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)))
-          
+
                   val progressBar = progress
                   web = WebView(this).apply {
                       setBackgroundColor(cBg)
@@ -6662,7 +6410,7 @@ jobs:
                   }
                   root.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
                   setContentView(root)
-          
+
                   onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                       override fun handleOnBackPressed() {
                           if (web.canGoBack()) web.goBack() else finish()
@@ -6670,7 +6418,7 @@ jobs:
                   })
                   loadDocument()
               }
-          
+
               private fun loadDocument() {
                   val path = filePath
                   if (path != null) {
@@ -6683,7 +6431,7 @@ jobs:
                   }
                   openRemote()
               }
-          
+
               private fun openRemote() {
                   val lowerMime = (mime ?: "").lowercase()
                   val lowerName = fileName.lowercase()
@@ -6694,14 +6442,14 @@ jobs:
                   if (isText) web.loadUrl(fileUrl)
                   else web.loadUrl("https://docs.google.com/gview?embedded=true&url=" + Uri.encode(fileUrl))
               }
-          
+
               private fun showMessage(text: String) {
                   progress.visibility = View.GONE
                   web.loadDataWithBaseURL(null,
                       DocConverter.wrap("<p>" + DocConverter.esc(text) + "</p>", bgHex, fgHex, subHex),
                       "text/html", "utf-8", null)
               }
-          
+
               private fun openLocal(f: File) {
                   val n = f.name.lowercase()
                   val m = (mime ?: "").lowercase()
@@ -6720,7 +6468,7 @@ jobs:
                       }
                   }
               }
-          
+
               private fun showText(f: File) {
                   Thread {
                       val html = try {
@@ -6742,7 +6490,7 @@ jobs:
                       }
                   }.start()
               }
-          
+
               private fun convertAsync(f: File) {
                   Thread {
                       val html = try { DocConverter.convert(f, bgHex, fgHex, subHex) } catch (_: Throwable) { null }
@@ -6753,7 +6501,7 @@ jobs:
                       }
                   }.start()
               }
-          
+
               private fun openPdf(f: File) {
                   try {
                       val p = ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -6781,7 +6529,7 @@ jobs:
                       showMessage("PDF açılamadı (şifreli veya bozuk olabilir)")
                   }
               }
-          
+
               private fun renderPdfPage(u: Uri): WebResourceResponse? {
                   val idx = u.lastPathSegment?.substringBefore('.')?.toIntOrNull() ?: return null
                   synchronized(pdfLock) {
@@ -6806,7 +6554,7 @@ jobs:
                       }
                   }
               }
-          
+
               private fun downloadFile(prefs: Prefs) {
                   try {
                       val req = android.app.DownloadManager.Request(Uri.parse(fileUrl))
@@ -6831,18 +6579,18 @@ jobs:
                       toast("İndirilemedi")
                   }
               }
-          
+
               private fun toast(s: String) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show() }
-          
+
               private fun guessName(url: String): String {
                   return try {
                       val path = Uri.parse(url).lastPathSegment ?: "dosya"
                       if (path.contains(".")) path else "dosya"
                   } catch (_: Exception) { "dosya" }
               }
-          
+
               private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
-          
+
               override fun onDestroy() {
                   try { web.destroy() } catch (_: Exception) {}
                   synchronized(pdfLock) {
@@ -6852,7 +6600,7 @@ jobs:
                   }
                   super.onDestroy()
               }
-          
+
               companion object {
                   const val EXTRA_URL = "url"
                   const val EXTRA_NAME = "name"
@@ -6863,19 +6611,19 @@ jobs:
           EOF
           cat > app/src/main/java/com/pusula/browser/DocConverter.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.util.Base64
           import android.util.Xml
           import org.xmlpull.v1.XmlPullParser
           import java.io.File
           import java.io.InputStream
           import java.util.zip.ZipFile
-          
+
           /** DOCX / XLSX / PPTX / RTF dosyalarını internetsiz, ek kütüphanesiz HTML'e çevirir. */
           object DocConverter {
-          
+
               fun esc(s: String): String = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-          
+
               fun wrap(body: String, bg: String, fg: String, sub: String): String =
                   "<!doctype html><html><head><meta charset=\"utf-8\">" +
                       "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=5\">" +
@@ -6886,7 +6634,7 @@ jobs:
                       "img{max-width:100%;height:auto}pre{white-space:pre-wrap;font:14px/1.5 monospace}" +
                       ".sc{overflow-x:auto}h1,h2,h3{margin:18px 0 6px}p{margin:0 0 8px}</style></head><body>" +
                       body + "</body></html>"
-          
+
               /** Desteklenmeyen uzantıda null döner. */
               fun convert(f: File, bg: String, fg: String, sub: String): String? {
                   val n = f.name.lowercase()
@@ -6899,13 +6647,13 @@ jobs:
                   }
                   return wrap(body, bg, fg, sub)
               }
-          
+
               private fun newParser(ins: InputStream): XmlPullParser {
                   val p = Xml.newPullParser()
                   p.setInput(ins, "UTF-8")
                   return p
               }
-          
+
               private fun rels(z: ZipFile, path: String): Map<String, String> {
                   val m = HashMap<String, String>()
                   val e = z.getEntry(path) ?: return m
@@ -6923,7 +6671,7 @@ jobs:
                   }
                   return m
               }
-          
+
               private fun mimeOf(name: String): String {
                   val n = name.lowercase()
                   return when {
@@ -6934,7 +6682,7 @@ jobs:
                       else -> "image/jpeg"
                   }
               }
-          
+
               // ---------------------------------------------------------------- DOCX
               private fun docx(f: File): String {
                   return ZipFile(f).use { z ->
@@ -7014,7 +6762,7 @@ jobs:
                       sb.toString()
                   }
               }
-          
+
               // ---------------------------------------------------------------- XLSX
               private fun colIdx(ref: String): Int {
                   var n = 0
@@ -7023,7 +6771,7 @@ jobs:
                   }
                   return (n - 1).coerceAtLeast(0)
               }
-          
+
               private fun xlsx(f: File): String {
                   return ZipFile(f).use { z ->
                       val shared = ArrayList<String>()
@@ -7073,7 +6821,7 @@ jobs:
                       if (out.isEmpty()) "<p>Tablo boş veya okunamadı.</p>" else out.toString()
                   }
               }
-          
+
               private fun sheetRows(ins: InputStream, shared: List<String>, out: StringBuilder) {
                   val p = newParser(ins)
                   var ev = p.eventType
@@ -7123,7 +6871,7 @@ jobs:
                       ev = p.next()
                   }
               }
-          
+
               // ---------------------------------------------------------------- PPTX
               private fun pptx(f: File): String {
                   return ZipFile(f).use { z ->
@@ -7156,7 +6904,7 @@ jobs:
                       if (slides.isEmpty()) "<p>Sunum boş veya okunamadı.</p>" else out.toString()
                   }
               }
-          
+
               // ---------------------------------------------------------------- RTF
               private fun rtf(f: File): String {
                   val s = f.readText(Charsets.ISO_8859_1)
@@ -7227,7 +6975,7 @@ jobs:
           EOF
           cat > app/src/main/java/com/pusula/browser/MediaPlayerActivity.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.graphics.Bitmap
           import android.graphics.Canvas
           import android.graphics.Color
@@ -7269,11 +7017,11 @@ jobs:
           import java.io.File
           import kotlin.math.max
           import kotlin.math.min
-          
+
           /** ExoPlayer tabanlı, kararlı uygulama içi video / müzik oynatıcı. */
           @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
           class MediaPlayerActivity : AppCompatActivity() {
-          
+
               private var player: ExoPlayer? = null
               private lateinit var playerView: PlayerView
               private lateinit var topBar: LinearLayout
@@ -7282,14 +7030,14 @@ jobs:
               private lateinit var bars: WindowInsetsControllerCompat
               private val handler = Handler(Looper.getMainLooper())
               private var isAudio = false
-          
+
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   val paths = intent.getStringArrayListExtra(EXTRA_PATHS) ?: arrayListOf()
                   val titles = intent.getStringArrayListExtra(EXTRA_TITLES) ?: arrayListOf()
                   if (paths.isEmpty()) { finish(); return }
                   val start = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, paths.size - 1)
-          
+
                   WindowCompat.setDecorFitsSystemWindows(window, false)
                   window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
                   window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -7297,7 +7045,7 @@ jobs:
                   bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                   bars.isAppearanceLightStatusBars = false
                   bars.isAppearanceLightNavigationBars = false
-          
+
                   val root = FrameLayout(this)
                   root.setBackgroundColor(Color.BLACK)
                   ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
@@ -7305,7 +7053,7 @@ jobs:
                       v.setPadding(b.left, 0, b.right, b.bottom)
                       insets
                   }
-          
+
                   playerView = PlayerView(this)
                   playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                   playerView.setControllerShowTimeoutMs(3500)
@@ -7313,7 +7061,7 @@ jobs:
                   playerView.setDefaultArtwork(BitmapDrawable(resources, makeArt()))
                   playerView.setShutterBackgroundColor(Color.BLACK)
                   root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-          
+
                   // Üst çubuk: geri + başlık (kontroller görününce görünür)
                   topBar = LinearLayout(this)
                   topBar.orientation = LinearLayout.HORIZONTAL
@@ -7338,7 +7086,7 @@ jobs:
                   titleView.ellipsize = android.text.TextUtils.TruncateAt.END
                   topBar.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(12) })
                   root.addView(topBar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
-          
+
                   flash = TextView(this)
                   flash.textSize = 18f
                   flash.setTextColor(Color.WHITE)
@@ -7346,13 +7094,13 @@ jobs:
                   flash.setPadding(dp(18), dp(10), dp(18), dp(10))
                   flash.visibility = View.GONE
                   root.addView(flash, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-          
+
                   setContentView(root)
-          
+
                   playerView.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
                       topBar.visibility = if (v == View.VISIBLE || isAudio) View.VISIBLE else View.GONE
                   })
-          
+
                   val attrs = AudioAttributes.Builder()
                       .setUsage(C.USAGE_MEDIA)
                       .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
@@ -7386,7 +7134,7 @@ jobs:
                   p.playWhenReady = true
                   playerView.player = p
                   player = p
-          
+
                   // Çift dokunma: sol yarı geri, sağ yarı ileri 10 sn
                   val gd = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
                       override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -7405,10 +7153,10 @@ jobs:
                       }
                   })
                   playerView.setOnTouchListener { _, ev -> gd.onTouchEvent(ev); false }
-          
+
                   applyBars()
               }
-          
+
               private fun setAudioMode(audio: Boolean) {
                   isAudio = audio
                   playerView.setControllerShowTimeoutMs(if (audio) 0 else 3500)
@@ -7419,19 +7167,19 @@ jobs:
                   }
                   applyBars()
               }
-          
+
               private fun applyBars() {
                   if (isAudio) bars.show(WindowInsetsCompat.Type.systemBars())
                   else bars.hide(WindowInsetsCompat.Type.systemBars())
               }
-          
+
               private fun flashMsg(s: String) {
                   flash.text = s
                   flash.visibility = View.VISIBLE
                   handler.removeCallbacksAndMessages(null)
                   handler.postDelayed({ flash.visibility = View.GONE }, 700)
               }
-          
+
               private fun makeArt(): Bitmap {
                   val s = 720
                   val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
@@ -7445,14 +7193,14 @@ jobs:
                   c.drawText("🎵", s / 2f, s / 2f + 110f, t)
                   return b
               }
-          
+
               private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
-          
+
               override fun onStop() {
                   super.onStop()
                   player?.pause()
               }
-          
+
               override fun onDestroy() {
                   handler.removeCallbacksAndMessages(null)
                   try { playerView.player = null } catch (_: Exception) { }
@@ -7460,7 +7208,7 @@ jobs:
                   player = null
                   super.onDestroy()
               }
-          
+
               companion object {
                   const val EXTRA_PATHS = "paths"
                   const val EXTRA_TITLES = "titles"
@@ -7470,7 +7218,7 @@ jobs:
           EOF
           cat > app/src/main/java/com/pusula/browser/PlaybackService.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.app.Notification
           import android.app.NotificationChannel
           import android.app.NotificationManager
@@ -7490,7 +7238,7 @@ jobs:
           import android.os.IBinder
           import androidx.core.app.ServiceCompat
           import androidx.core.content.ContextCompat
-          
+
           /** Bildirim ve kilit ekranı medya oynatıcısı. Düğmeler uygulamaya yayın olarak iletilir. */
           class PlaybackService : Service() {
               private var session: MediaSession? = null
@@ -7510,11 +7258,11 @@ jobs:
               /** Arama / başka uygulama ses alınca true; focus geri gelince devam */
               private var resumeAfterFocus = false
               private var heldFocus = false
-          
+
               // Not: Otomatik pause/play kapalı — WebView medyası ile focus dinleyicisi
               // birbirini kesiyordu (play deyince stop). Telefon araması için ileride yumuşak eklenir.
               private val focusListener = AudioManager.OnAudioFocusChangeListener { _ -> }
-          
+
               private fun requestFocus(): Boolean {
                   val am = audioManager ?: return true
                   if (heldFocus) return true
@@ -7542,7 +7290,7 @@ jobs:
                   heldFocus = ok
                   return ok
               }
-          
+
               private fun abandonFocus() {
                   val am = audioManager ?: return
                   try {
@@ -7555,7 +7303,7 @@ jobs:
                   } catch (_: Exception) { }
                   heldFocus = false
               }
-          
+
               override fun onCreate() {
                   super.onCreate()
                   running = true
@@ -7613,9 +7361,9 @@ jobs:
                   session = s
                   sessionToken = s.sessionToken
               }
-          
+
               private fun send(action: String) { sendBroadcast(Intent(action).setPackage(packageName)) }
-          
+
               private fun closeAll() {
                   resumeAfterFocus = false
                   blockUntil = android.os.SystemClock.elapsedRealtime() + 5000L
@@ -7631,7 +7379,7 @@ jobs:
                   foregroundStarted = false
                   stopSelf()
               }
-          
+
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                   when (intent?.action) {
                       ACTION_UPDATE -> {
@@ -7665,13 +7413,13 @@ jobs:
                   refresh()
                   return START_NOT_STICKY
               }
-          
+
               private fun pi(code: Int, action: String): PendingIntent =
                   PendingIntent.getBroadcast(this, code, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-          
+
               private fun act(res: Int, label: String, p: PendingIntent): Notification.Action =
                   Notification.Action.Builder(Icon.createWithResource(this, res), label, p).build()
-          
+
               private fun loadArt(url: String) {
                   Thread {
                       for (attempt in 0..1) {
@@ -7702,7 +7450,7 @@ jobs:
                       }
                   }.start()
               }
-          
+
               private fun refresh() {
                   val s = session ?: return
                   val shownTitle = if (title.isBlank()) "Rota" else title
@@ -7734,7 +7482,7 @@ jobs:
                       .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, posSafe, if (playing) 1f else 0f)
                       .setBufferedPosition(posSafe)
                       .build())
-          
+
                   val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                   val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (quiet) CHANNEL_QUIET else CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
                   b.setSmallIcon(R.drawable.ic_notif)
@@ -7767,7 +7515,7 @@ jobs:
                       }
                   } catch (_: Exception) { stopSelf() }
               }
-          
+
               override fun onDestroy() {
                   running = false
                   resumeAfterFocus = false
@@ -7780,9 +7528,9 @@ jobs:
                   sessionToken = null
                   super.onDestroy()
               }
-          
+
               override fun onBind(intent: Intent?): IBinder? = null
-          
+
               companion object {
                   const val CHANNEL = "playback"
                   const val CHANNEL_QUIET = "playback_quiet"
@@ -7801,32 +7549,31 @@ jobs:
                   const val ACTION_HOME = "com.pusula.browser.MEDIA_HOME"
                   const val ACTION_SEARCH = "com.pusula.browser.MEDIA_SEARCH"
                   const val ACTION_OPEN = "com.pusula.browser.MEDIA_OPEN"
-          
+
                   @Volatile var running = false
                   @Volatile var sessionToken: MediaSession.Token? = null
-          
+
                   @Volatile var blockUntil = 0L
-          
+
                   fun update(ctx: Context, playing: Boolean, title: String, artist: String, pip: Boolean = false, pos: Long = -1L, dur: Long = -2L, art: String = "") {
                       if (android.os.SystemClock.elapsedRealtime() < blockUntil) return
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
                           .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist).putExtra("pip", pip).putExtra("pos", pos).putExtra("dur", dur).putExtra("art", art)
                       try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
                   }
-          
+
                   fun stop(ctx: Context) {
                       try { ctx.stopService(Intent(ctx, PlaybackService::class.java)) } catch (_: Exception) { }
                   }
               }
           }
           EOF
-          
+
           cat > app/src/main/java/com/pusula/browser/RotaMediaBrowserService.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.app.PendingIntent
           import android.content.Intent
-          import android.net.Uri
           import android.os.Bundle
           import android.support.v4.media.MediaBrowserCompat
           import android.support.v4.media.MediaDescriptionCompat
@@ -7834,20 +7581,17 @@ jobs:
           import android.support.v4.media.session.MediaSessionCompat
           import android.support.v4.media.session.PlaybackStateCompat
           import androidx.media.MediaBrowserServiceCompat
-          import org.json.JSONArray
-          import org.json.JSONObject
-          
+
           /**
-           * Android Auto: YouTube Music sayfasından çekilen liste/şarkı/kapakları gösterir.
-           * Listeden seçim → MainActivity URL açar ve oynatmayı dener.
+           * Android Auto medya servisi — kendi MediaSessionCompat'i ile listelenir.
+           * Çalma komutları telefona (MainActivity / WebView) yayınlanır.
            */
           class RotaMediaBrowserService : MediaBrowserServiceCompat() {
-          
+
               private var session: MediaSessionCompat? = null
-          
+
               override fun onCreate() {
                   super.onCreate()
-                  instance = this
                   val s = MediaSessionCompat(this, "RotaAuto")
                   s.setFlags(
                       MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
@@ -7862,29 +7606,16 @@ jobs:
                           sendBroadcast(Intent(PlaybackService.ACTION_SEEK).setPackage(packageName).putExtra("pos", pos))
                       }
                       override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
-                          val url = resolveUrl(mediaId?.trim().orEmpty()) ?: return
-                          // Auto'da medya kartını hemen aç (buffering)
-                          try {
-                              session?.setPlaybackState(
-                                  PlaybackStateCompat.Builder()
-                                      .setActions(
-                                          PlaybackStateCompat.ACTION_PLAY or
-                                              PlaybackStateCompat.ACTION_PAUSE or
-                                              PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                                              PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                                              PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-                                      )
-                                      .setState(PlaybackStateCompat.STATE_BUFFERING, 0L, 1f)
-                                      .build()
-                              )
-                              session?.isActive = true
-                          } catch (_: Exception) { }
-                          openAndPlay(url)
+                          val id = mediaId ?: return
+                          if (id.startsWith("http")) {
+                              sendBroadcast(Intent(PlaybackService.ACTION_OPEN).setPackage(packageName).putExtra("url", id))
+                          }
                       }
                       override fun onPlayFromSearch(query: String?, extras: Bundle?) {
                           val q = query?.trim().orEmpty()
-                          if (q.isEmpty()) return
-                          openAndPlay("https://music.youtube.com/search?q=" + Uri.encode(q))
+                          if (q.isNotEmpty()) {
+                              sendBroadcast(Intent(PlaybackService.ACTION_SEARCH).setPackage(packageName).putExtra("q", q))
+                          }
                       }
                       override fun onCustomAction(action: String?, extras: Bundle?) {
                           when (action) {
@@ -7905,281 +7636,113 @@ jobs:
                                   PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
                                   PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
                           )
-                          .setState(PlaybackStateCompat.STATE_NONE, 0L, 1f)
+                          .setState(PlaybackStateCompat.STATE_PAUSED, 0, 1f)
                           .build()
                   )
-                  s.setSessionActivity(
-                      PendingIntent.getActivity(
-                          this, 0,
-                          Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                      )
+                  s.setMetadata(
+                      MediaMetadataCompat.Builder()
+                          .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Rota")
+                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, "Rota")
+                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, "Android Auto")
+                          .build()
                   )
                   s.isActive = true
                   session = s
                   sessionToken = s.sessionToken
               }
-          
+
               private fun send(action: String) {
                   sendBroadcast(Intent(action).setPackage(packageName))
               }
-          
-              private fun openAndPlay(url: String) {
-                  if (!url.startsWith("http")) return
-                  try {
-                      val launch = Intent(this, MainActivity::class.java).apply {
-                          action = PlaybackService.ACTION_OPEN
-                          putExtra("url", url)
-                          putExtra("autoplay", true)
-                          addFlags(
-                              Intent.FLAG_ACTIVITY_NEW_TASK or
-                                  Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                                  Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                          )
-                      }
-                      startActivity(launch)
-                  } catch (_: Exception) { }
-                  sendBroadcast(
-                      Intent(PlaybackService.ACTION_OPEN).setPackage(packageName)
-                          .putExtra("url", url)
-                          .putExtra("autoplay", true)
-                  )
-              }
-          
-              private fun resolveUrl(mediaId: String): String? {
-                  if (mediaId.startsWith("http")) return mediaId
-                  if (mediaId.startsWith("pl:") || mediaId.startsWith("sg:")) {
-                      val u = mediaId.substring(3)
-                      if (u.startsWith("http")) return u
-                  }
-                  return null
-              }
-          
+
               override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
-                  return BrowserRoot(ROOT, null)
+                  // Android Auto (gearhead) + sistem medya tarayıcıları — asla null dönme
+                  val extras = Bundle()
+                  try {
+                      extras.putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+                      extras.putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
+                      extras.putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
+                  } catch (_: Exception) { }
+                  return BrowserRoot(ROOT, extras)
               }
-          
+
               override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
+                  val prefs = Prefs(this)
                   val out = ArrayList<MediaBrowserCompat.MediaItem>()
-                  val cat = readCatalog()
-                  // Katalog boşsa telefonda YT Music'i arka planda açtırmayı dene
-                  if (cat.playlists.isEmpty() && cat.songs.isEmpty() && parentId == ROOT) {
-                      try {
-                          val launch = Intent(this, MainActivity::class.java).apply {
-                              putExtra("ensure_music", true)
-                              addFlags(
-                                  Intent.FLAG_ACTIVITY_NEW_TASK or
-                                      Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                                      Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                              )
-                          }
-                          startActivity(launch)
-                      } catch (_: Exception) { }
-                  }
                   when (parentId) {
                       ROOT -> {
-                          out.add(folder(PLAYLISTS, "Listeler (${cat.playlists.size})"))
-                          out.add(folder(SONGS, "Şarkılar (${cat.songs.size})"))
-                          if (cat.playlists.isEmpty() && cat.songs.isEmpty()) {
-                              out.add(song("https://music.youtube.com/", "YouTube Music'i telefonda aç", "Listeler burada görünür", null))
-                              for (e in Prefs(this).history().take(15)) {
-                                  if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url, null))
-                              }
-                          } else {
-                              for (p in cat.playlists.take(15)) {
-                                  out.add(song("pl:" + p.url, p.title, p.artist.ifBlank { "Liste" }, p.art))
-                              }
+                          out.add(folder(HOME, "Ana sayfa"))
+                          out.add(folder(FAV, "Favoriler"))
+                          out.add(folder(RECENT, "Son dinlenenler"))
+                      }
+                      HOME, RECENT -> {
+                          for (e in prefs.history().take(40)) {
+                              if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
+                          }
+                          if (out.isEmpty()) {
+                              out.add(song("https://music.youtube.com/", "YouTube Music", "Aç"))
                           }
                       }
-                      PLAYLISTS -> {
-                          if (cat.playlists.isEmpty()) {
-                              out.add(song("https://music.youtube.com/", "Liste yok", "Telefonda YT Music ana sayfa açık olsun", null))
-                          } else {
-                              for (p in cat.playlists) {
-                                  out.add(song("pl:" + p.url, p.title, p.artist.ifBlank { "Liste" }, p.art))
-                              }
+                      FAV -> {
+                          for (e in prefs.bookmarks().take(40)) {
+                              if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
                           }
-                      }
-                      SONGS -> {
-                          if (cat.songs.isEmpty()) {
-                              out.add(song("https://music.youtube.com/", "Şarkı yok", "Telefonda YT Music açık olsun", null))
-                          } else {
-                              for (sItem in cat.songs) {
-                                  val id = if (sItem.url.startsWith("http")) "sg:" + sItem.url else "sg:" + sItem.title
-                                  out.add(song(id, sItem.title, sItem.artist.ifBlank { "Şarkı" }, sItem.art))
-                              }
+                          if (out.isEmpty()) {
+                              out.add(song("https://music.youtube.com/", "Favori yok · Music aç", "YouTube Music"))
                           }
                       }
                   }
                   result.sendResult(out)
               }
-          
+
               override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
                   val q = query.trim()
+                  val prefs = Prefs(this)
                   val out = ArrayList<MediaBrowserCompat.MediaItem>()
                   if (q.isNotEmpty()) {
-                      out.add(song("https://music.youtube.com/search?q=" + Uri.encode(q), "\"$q\" ara", "YouTube Music", null))
-                      val cat = readCatalog()
-                      for (p in cat.playlists) {
-                          if (p.title.contains(q, true) || p.artist.contains(q, true)) {
-                              out.add(song("pl:" + p.url, p.title, p.artist, p.art))
-                          }
-                      }
-                      for (sItem in cat.songs) {
-                          if (sItem.title.contains(q, true) || sItem.artist.contains(q, true)) {
-                              val id = if (sItem.url.startsWith("http")) "sg:" + sItem.url else "sg:" + sItem.title
-                              out.add(song(id, sItem.title, sItem.artist, sItem.art))
+                      val searchUrl = "https://music.youtube.com/search?q=" + android.net.Uri.encode(q)
+                      out.add(song(searchUrl, "\"$q\" ara", "YouTube Music"))
+                      for (e in (prefs.bookmarks() + prefs.history())) {
+                          if (e.title.contains(q, true) || e.url.contains(q, true)) {
+                              out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
                           }
                       }
                   }
                   result.sendResult(out)
               }
-          
+
               override fun onDestroy() {
-                  if (instance === this) instance = null
                   try { session?.isActive = false; session?.release() } catch (_: Exception) { }
                   session = null
                   super.onDestroy()
               }
-          
-              private data class CatItem(val title: String, val artist: String, val url: String, val art: String)
-              private data class Catalog(val playlists: List<CatItem>, val songs: List<CatItem>)
-          
-              private fun readCatalog(): Catalog {
-                  val raw = try { Prefs(this).autoCatalog } catch (_: Exception) { "" }
-                  if (raw.isBlank()) return Catalog(emptyList(), emptyList())
-                  return try {
-                      val o = JSONObject(raw)
-                      val pl = ArrayList<CatItem>()
-                      val sg = ArrayList<CatItem>()
-                      val pla = o.optJSONArray("playlists") ?: JSONArray()
-                      for (i in 0 until pla.length()) {
-                          val it = pla.optJSONObject(i) ?: continue
-                          val url = it.optString("url")
-                          val title = it.optString("title")
-                          if (url.startsWith("http") && title.isNotBlank()) {
-                              pl.add(CatItem(title, it.optString("artist"), url, it.optString("art")))
-                          }
-                      }
-                      val sga = o.optJSONArray("songs") ?: JSONArray()
-                      for (i in 0 until sga.length()) {
-                          val it = sga.optJSONObject(i) ?: continue
-                          val title = it.optString("title")
-                          if (title.isNotBlank()) {
-                              sg.add(CatItem(title, it.optString("artist"), it.optString("url"), it.optString("art")))
-                          }
-                      }
-                      Catalog(pl, sg)
-                  } catch (_: Exception) {
-                      Catalog(emptyList(), emptyList())
-                  }
-              }
-          
+
               private fun folder(id: String, title: String): MediaBrowserCompat.MediaItem {
                   val d = MediaDescriptionCompat.Builder().setMediaId(id).setTitle(title).build()
                   return MediaBrowserCompat.MediaItem(d, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
               }
-          
-              private fun song(id: String, title: String, subtitle: String, art: String?): MediaBrowserCompat.MediaItem {
-                  val b = MediaDescriptionCompat.Builder()
+
+              private fun song(id: String, title: String, subtitle: String): MediaBrowserCompat.MediaItem {
+                  val d = MediaDescriptionCompat.Builder()
                       .setMediaId(id)
                       .setTitle(title.take(80))
                       .setSubtitle(subtitle.take(80))
-                  if (!art.isNullOrBlank() && art.startsWith("http")) {
-                      try { b.setIconUri(Uri.parse(art)) } catch (_: Exception) { }
-                  }
-                  val playId = when {
-                      id.startsWith("http") -> id
-                      id.startsWith("pl:") || id.startsWith("sg:") -> id.substring(3)
-                      else -> id
-                  }
-                  if (playId.startsWith("http")) {
-                      try { b.setMediaUri(Uri.parse(playId)) } catch (_: Exception) { }
-                  }
-                  return MediaBrowserCompat.MediaItem(b.build(), MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
+                      .build()
+                  return MediaBrowserCompat.MediaItem(d, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
               }
-          
-              fun publishNowPlaying(
-                  title: String,
-                  artist: String,
-                  artUrl: String,
-                  playing: Boolean,
-                  positionMs: Long,
-                  durationMs: Long
-              ) {
-                  try {
-                      val s = session ?: return
-                      val mb = MediaMetadataCompat.Builder()
-                          .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title.ifBlank { "Rota" })
-                          .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist.ifBlank { "YouTube Music" })
-                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, title.ifBlank { "Rota" })
-                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, artist.ifBlank { "YouTube Music" })
-                      if (durationMs > 0) mb.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
-                      if (artUrl.startsWith("http")) {
-                          try {
-                              mb.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artUrl)
-                              mb.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, artUrl)
-                              mb.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, artUrl)
-                          } catch (_: Exception) { }
-                      }
-                      s.setMetadata(mb.build())
-                      var actions =
-                          PlaybackStateCompat.ACTION_PLAY or
-                              PlaybackStateCompat.ACTION_PAUSE or
-                              PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                              PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                              PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                              PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
-                              PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
-                      if (durationMs > 0) actions = actions or PlaybackStateCompat.ACTION_SEEK_TO
-                      val st = if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
-                      s.setPlaybackState(
-                          PlaybackStateCompat.Builder()
-                              .setActions(actions)
-                              .setState(st, positionMs.coerceAtLeast(0L), if (playing) 1f else 0f)
-                              .build()
-                      )
-                      s.isActive = true
-                  } catch (_: Exception) { }
-              }
-          
+
               companion object {
                   const val ROOT = "root"
-                  const val PLAYLISTS = "playlists"
-                  const val SONGS = "songs"
-          
-                  @Volatile var instance: RotaMediaBrowserService? = null
-          
-                  fun notifyCatalogChanged() {
-                      try {
-                          instance?.let { svc ->
-                              svc.notifyChildrenChanged(ROOT)
-                              svc.notifyChildrenChanged(PLAYLISTS)
-                              svc.notifyChildrenChanged(SONGS)
-                          }
-                      } catch (_: Exception) { }
-                  }
-          
-                  fun updateNowPlaying(
-                      title: String,
-                      artist: String,
-                      artUrl: String,
-                      playing: Boolean,
-                      positionMs: Long,
-                      durationMs: Long
-                  ) {
-                      try {
-                          instance?.publishNowPlaying(title, artist, artUrl, playing, positionMs, durationMs)
-                      } catch (_: Exception) { }
-                  }
+                  const val HOME = "home"
+                  const val FAV = "fav"
+                  const val RECENT = "recent"
               }
           }
-          
           EOF
-          
+
           cat > app/src/main/java/com/pusula/browser/DownloadNotifier.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.app.DownloadManager
           import android.app.Notification
           import android.app.NotificationChannel
@@ -8190,7 +7753,7 @@ jobs:
           import android.os.Build
           import androidx.core.app.NotificationCompat
           import androidx.core.app.NotificationManagerCompat
-          
+
           /**
            * İndirme bildirimleri: ilerleme SESSİZ kanalda canlı güncellenir (damlacık sesi yok),
            * ses yalnızca indirme bitince gelir.
@@ -8198,7 +7761,7 @@ jobs:
           object DownloadNotifier {
               private const val CH_PROGRESS = "dl_progress"
               private const val CH_DONE = "dl_done"
-          
+
               private fun ensureChannels(ctx: Context) {
                   if (Build.VERSION.SDK_INT < 26) return
                   val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -8208,11 +7771,11 @@ jobs:
                   nm.createNotificationChannel(p)
                   nm.createNotificationChannel(NotificationChannel(CH_DONE, "İndirme tamamlandı", NotificationManager.IMPORTANCE_DEFAULT))
               }
-          
+
               private fun post(ctx: Context, id: Int, n: Notification) {
                   try { NotificationManagerCompat.from(ctx).notify(id, n) } catch (_: SecurityException) { }
               }
-          
+
               fun track(context: Context, dlId: Long, name: String) {
                   val ctx = context.applicationContext
                   ensureChannels(ctx)
@@ -8241,7 +7804,7 @@ jobs:
                                   }
                               }
                           } catch (_: Exception) { }
-          
+
                           if (!found) {
                               NotificationManagerCompat.from(ctx).cancel(nid)
                               return@Thread
@@ -8260,7 +7823,7 @@ jobs:
                               post(ctx, doneId, n)
                               return@Thread
                           }
-          
+
                           val pct = if (total > 0) ((got * 100) / total).toInt().coerceIn(0, 100) else -1
                           if (pct != lastPct) {
                               lastPct = pct
@@ -8284,12 +7847,12 @@ jobs:
           EOF
           cat > app/src/main/java/com/pusula/browser/Prefs.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.content.Context
           import android.net.Uri
           import org.json.JSONArray
           import org.json.JSONObject
-          
+
           object Engines {
               class E(val id: String, val name: String, val search: String, val home: String)
               val all = listOf(
@@ -8299,9 +7862,9 @@ jobs:
               )
               fun get(id: String): E = all.firstOrNull { it.id == id } ?: all[0]
           }
-          
+
           val HOST_LIKE = Regex("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}([:/?#].*)?$|^(\\d{1,3}\\.){3}\\d{1,3}([:/?#].*)?$|^localhost([:/?#].*)?$")
-          
+
           fun resolveInput(raw: String, engine: Engines.E): String {
               val t = raw.trim()
               if (t.isEmpty()) return engine.home
@@ -8309,11 +7872,11 @@ jobs:
               if (!t.contains(' ') && HOST_LIKE.matches(t)) return "https://" + t
               return engine.search.replace("%s", Uri.encode(t))
           }
-          
+
           class Prefs(context: Context) {
               class Entry(val title: String, val url: String)
               private val sp = context.getSharedPreferences("pusula", Context.MODE_PRIVATE)
-          
+
               var engine: String get() = sp.getString("engine", "google") ?: "google"
                 set(v) { sp.edit().putString("engine", v).apply() }
               var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
@@ -8326,11 +7889,6 @@ jobs:
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
                 set(v) { sp.edit().putString("pins", v).apply() }
-          
-              /** Android Auto: YT Music sayfasından çekilen listeler/şarkılar JSON */
-              var autoCatalog: String
-                  get() = sp.getString("autoCatalog", "") ?: ""
-                  set(v) { sp.edit().putString("autoCatalog", v).apply() }
               var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false)
                 set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
@@ -8342,7 +7900,7 @@ jobs:
                 set(v) { sp.edit().putBoolean("clearOnExit", v).apply() }
               var pipSeek: Boolean get() = sp.getBoolean("pipSeek", true)
                 set(v) { sp.edit().putBoolean("pipSeek", v).apply() }
-          
+
               private fun readList(key: String): MutableList<Entry> {
                   val out = ArrayList<Entry>()
                   try {
@@ -8379,10 +7937,10 @@ jobs:
               }
               fun removeHistory(url: String) { val l = readList("history"); l.removeAll { it.url == url }; writeList("history", l) }
               fun clearHistory() { sp.edit().putString("history", "[]").apply() }
-          
+
               /** İndirilen dosya kaydı (uygulama içi liste için). */
               class DownloadEntry(val title: String, val url: String, val path: String, val mime: String, val time: Long)
-          
+
               fun downloads(): List<DownloadEntry> {
                   val out = ArrayList<DownloadEntry>()
                   try {
@@ -8400,7 +7958,7 @@ jobs:
                   } catch (_: Exception) {}
                   return out
               }
-          
+
               fun addDownload(title: String, url: String, path: String, mime: String) {
                   val list = downloads().toMutableList()
                   // Aynı dosya varsa üste taşı
@@ -8418,7 +7976,7 @@ jobs:
                   }
                   sp.edit().putString("downloads", arr.toString()).apply()
               }
-          
+
               fun removeDownload(path: String) {
                   val list = downloads().toMutableList()
                   list.removeAll { it.path == path }
@@ -8433,9 +7991,9 @@ jobs:
                   }
                   sp.edit().putString("downloads", arr.toString()).apply()
               }
-          
+
               fun clearDownloads() { sp.edit().putString("downloads", "[]").apply() }
-          
+
               fun saveTabs(urls: List<String>, current: Int) {
                   val arr = JSONArray()
                   for (u in urls) arr.put(u)
@@ -8454,29 +8012,29 @@ jobs:
           EOF
           cat > app/src/main/java/com/pusula/browser/PusulaBridge.kt <<'EOF'
           package com.pusula.browser
-          
+
           import android.webkit.JavascriptInterface
           import org.json.JSONArray
           import org.json.JSONObject
-          
+
           /** Yeni sekme sayfasının okuduğu bilgiler. Yalnızca kendi sayfamız yüklüyken cevap verir. */
           class PusulaBridge(private val prefs: Prefs) {
               @Volatile var trusted = false
-          
+
               private fun hex(v: Int): String = "#%06X".format(0xFFFFFF and v)
-          
+
               private fun pinsJson(): Any {
                   val raw = prefs.pins
                   if (raw.isEmpty()) return JSONObject.NULL
                   return try { JSONArray(raw) } catch (e: Exception) { JSONObject.NULL }
               }
-          
+
               @JavascriptInterface
               fun savePins(json: String) {
                   if (!trusted) return
                   try { prefs.pins = JSONArray(json).toString() } catch (e: Exception) { }
               }
-          
+
               @JavascriptInterface
               fun config(): String {
                   if (!trusted) return "{}"
@@ -8549,7 +8107,7 @@ jobs:
           cat > app/src/main/res/drawable/ic_reload.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z"/></vector>
           EOF
-          
+
           cat > app/src/main/res/drawable/ic_pip_prev.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
               <path android:fillColor="#FFFFFFFF" android:pathData="M8,8h8v32h-8zM40,8 L16,24 40,40z"/>
@@ -8580,7 +8138,7 @@ jobs:
               <path android:fillColor="#FFFFFFFF" android:pathData="M12,10h8v28h-8zM28,10h8v28h-8z"/>
           </vector>
           EOF
-          
+
           cat > app/src/main/res/drawable/ic_pip_back10.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
               <path android:fillColor="#FFFFFFFF" android:pathData="M24,8 L4,24 24,40z M44,8 L24,24 44,40z"/>
@@ -8626,7 +8184,7 @@ jobs:
           grep -n '[$]' app/src/main/java/com/pusula/browser/Prefs.kt || true
           ls -la app/src/main/java/com/pusula/browser/
           echo "=== TEŞHİS SONU ==="
-- name: Gradle 8.9
+      - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 8.9 }
       - name: APK derle
