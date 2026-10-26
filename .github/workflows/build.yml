@@ -5250,7 +5250,7 @@ jobs:
                       "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
                       "var HS='ytmusic-play-button-renderer,#play-pause-button,.play-pause-button';\n" +
                       "var FX=['paper-ripple','tp-yt-paper-ripple','yt-touch-feedback-shape','.yt-spec-touch-feedback-shape','#ink'];\n" +
-                      "var css='*{-webkit-tap-highlight-color:rgba(0,0,0,0)!important}html,body{overscroll-behavior-y:contain!important}';\n" +
+                      "var css='*{-webkit-tap-highlight-color:rgba(0,0,0,0)!important}html,body{overscroll-behavior-y:contain!important}*,*::before,*::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}*:not(ytmusic-player-page):not(ytmusic-player-page *){filter:none!important}';\n" +
                       "HS.split(',').forEach(function(h){\n" +
                       "css+=h+'{outline:none!important;--paper-ripple-color:transparent;--paper-ripple-opacity:0;--yt-spec-touch-response:transparent;--yt-spec-touch-response-v2:transparent;--yt-focus-color:transparent}';\n" +
                       "FX.forEach(function(f){css+=h+' '+f+'{display:none!important}';});\n" +
@@ -5509,36 +5509,36 @@ jobs:
                       "var pk2=[];\n" +
                       "function peek2On(){\n" +
                       "try{\n" +
-                      "document.documentElement.classList.add('rota-peek2');\n" +
-                      "if(!document.getElementById('__rota_peek2')){\n" +
-                      "var st=document.createElement('style');st.id='__rota_peek2';\n" +
-                      "st.textContent='html.rota-peek2 *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}html.rota-peek2 *:not(ytmusic-player-page):not(ytmusic-player-page *){filter:none!important}html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout #main-panel,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response,html.rota-peek2 ytmusic-app-layout #nav-bar-background,html.rota-peek2 ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek2 ytmusic-app-layout #content{display:block!important}.rota-pk2-hide{opacity:0!important}';\n" +
-                      "document.documentElement.appendChild(st);\n" +
-                      "}\n" +
                       "if(!pg)return;\n" +
                       "var root=document.querySelector('ytmusic-app-layout,#layout')||document.body;\n" +
-                      "var q=[root],n=0,W=window.innerWidth,H=window.innerHeight;\n" +
-                      "while(q.length&&n<600){\n" +
+                      "var q=[root],n=0;\n" +
+                      "while(q.length&&n<800){\n" +
                       "var e=q.shift();n++;\n" +
-                      "if(e===pg)continue;\n" +
-                      "if(e.nodeType===1&&!e.contains(pg)&&!e.matches('#content,#main-panel,ytmusic-browse-response,ytmusic-nav-bar,#nav-bar-background')){\n" +
-                      "var cs=getComputedStyle(e),r=e.getBoundingClientRect();\n" +
-                      "var big=r.width>=W*0.8&&r.height>=H*0.5;\n" +
-                      "var nm=(e.id||'')+' '+(typeof e.className==='string'?e.className:'');\n" +
-                      "var fl=(cs.filter||'')+(cs.backdropFilter||cs.webkitBackdropFilter||'');\n" +
-                      "if(big&&(/background|blur|gradient|scrim|backdrop/i.test(nm)||fl.indexOf('blur')>=0||(cs.backgroundImage&&cs.backgroundImage!=='none'))){\n" +
-                      "e.classList.add('rota-pk2-hide');pk2.push(e);\n" +
-                      "continue;\n" +
+                      "if(e.nodeType!==1)continue;\n" +
+                      "var inPg=(e===pg);\n" +
+                      "var cs=getComputedStyle(e);\n" +
+                      "var f=cs.filter||'none',b=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n" +
+                      "var fb=(f!=='none'&&!inPg&&f.indexOf('blur')>=0),bb=(b!=='none');\n" +
+                      "if(fb||bb){\n" +
+                      "pk2.push([e,e.style.getPropertyValue('filter'),e.style.getPropertyPriority('filter'),e.style.getPropertyValue('backdrop-filter'),e.style.getPropertyPriority('backdrop-filter')]);\n" +
+                      "if(fb)e.style.setProperty('filter','none','important');\n" +
+                      "if(bb){e.style.setProperty('backdrop-filter','none','important');e.style.setProperty('-webkit-backdrop-filter','none','important');}\n" +
                       "}\n" +
-                      "}\n" +
+                      "if(inPg)continue;\n" +
                       "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n" +
                       "}\n" +
                       "}catch(z){}\n" +
                       "}\n" +
                       "function peek2Off(){\n" +
                       "try{\n" +
-                      "document.documentElement.classList.remove('rota-peek2');\n" +
-                      "pk2.forEach(function(e){try{e.classList.remove('rota-pk2-hide');}catch(z){}});\n" +
+                      "pk2.forEach(function(a){\n" +
+                      "var e=a[0];\n" +
+                      "try{\n" +
+                      "if(a[1])e.style.setProperty('filter',a[1],a[2]);else e.style.removeProperty('filter');\n" +
+                      "if(a[3])e.style.setProperty('backdrop-filter',a[3],a[4]);else e.style.removeProperty('backdrop-filter');\n" +
+                      "e.style.removeProperty('-webkit-backdrop-filter');\n" +
+                      "}catch(z){}\n" +
+                      "});\n" +
                       "pk2=[];\n" +
                       "}catch(z){}\n" +
                       "}\n" +
@@ -5558,8 +5558,8 @@ jobs:
                       "function closeDown(v){\n" +
                       "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
                       "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
-                      "var d=Math.max(170,Math.min(320,left/Math.max(v,0.9)));\n" +
-                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
+                      "var d=Math.max(380,Math.min(600,left/Math.max(v,0.5)));\n" +
+                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.3,.1,.25,1)','important');\n" +
                       "setOff(H);\n" +
                       "setTimeout(function(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
