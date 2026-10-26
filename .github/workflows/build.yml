@@ -5510,6 +5510,8 @@ jobs:
                       "function peek2On(){\n" +
                       "try{\n" +
                       "if(!pg)return;\n" +
+                      "document.documentElement.classList.add('rota-peek2');\n" +
+                      "if(!document.getElementById('__rota_peek2')){var rs=document.createElement('style');rs.id='__rota_peek2';rs.textContent='html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout #main-panel,html.rota-peek2 ytmusic-app-layout ytmusic-pages,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response,html.rota-peek2 ytmusic-app-layout #nav-bar-background,html.rota-peek2 ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response{display:block!important}';document.documentElement.appendChild(rs);}\n" +
                       "var root=document.querySelector('ytmusic-app-layout,#layout')||document.body;\n" +
                       "var q=[root],n=0;\n" +
                       "while(q.length&&n<800){\n" +
@@ -5531,6 +5533,7 @@ jobs:
                       "}\n" +
                       "function peek2Off(){\n" +
                       "try{\n" +
+                      "document.documentElement.classList.remove('rota-peek2');\n" +
                       "pk2.forEach(function(a){\n" +
                       "var e=a[0];\n" +
                       "try{\n" +
@@ -5571,7 +5574,7 @@ jobs:
                       "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
                       "var t0=Date.now();\n" +
                       "(function poll(){\n" +
-                      "if(!pageOpen()){cleanAll();return;}\n" +
+                      "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n" +
                       "if(Date.now()-t0>1500){\n" +
                       "document.documentElement.classList.remove('rota-noanim');\n" +
                       "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
