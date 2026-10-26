@@ -5560,20 +5560,32 @@ jobs:
                       "}\n" +
                       "function closeDown(v){\n" +
                       "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
-                      "var H=window.innerHeight;\n" +
-                      "var d=Math.max(200,Math.min(320,180));\n" +
-                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
+                      "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
+                      "var d=Math.max(380,Math.min(600,left/Math.max(v,0.5)));\n" +
+                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.3,.1,.25,1)','important');\n" +
                       "setOff(H);\n" +
-                      "pg.style.setProperty('pointer-events','none','important');\n" +
                       "setTimeout(function(){\n" +
-                      "try{tryClick();}catch(z){}\n" +
-                      "setTimeout(function(){\n" +
-                      "try{if(pageOpen())tryNative();}catch(z){}\n" +
-                      "setTimeout(function(){\n" +
-                      "try{if(pageOpen())tryLayout();}catch(z){}\n" +
-                      "cleanAll();\n" +
-                      "},100);\n" +
-                      "},80);\n" +
+                      "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "document.documentElement.classList.add('rota-noanim');\n" +
+                      "var ok=false;\n" +
+                      "try{ok=tryNative();}catch(z){}\n" +
+                      "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
+                      "var t0=Date.now();\n" +
+                      "(function poll(){\n" +
+                      "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n" +
+                      "if(Date.now()-t0>1500){\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "void pg.offsetWidth;\n" +
+                      "armed=true;\n" +
+                      "springBack();\n" +
+                      "return;\n" +
+                      "}\n" +
+                      "setTimeout(poll,50);\n" +
+                      "})();\n" +
                       "},d);\n" +
                       "}\n" +
                       "setInterval(function(){\n" +
@@ -5585,6 +5597,7 @@ jobs:
                       "},300);\n" +
                       "document.addEventListener('touchstart',function(e){\n" +
                       "tr=false;locked=false;\n" +
+                      "return;\n" +
                       "if(busy||!armed||!e.touches||e.touches.length!==1)return;\n" +
                       "if(!pageOpen())return;\n" +
                       "var path=(e.composedPath&&e.composedPath())||[];\n" +
