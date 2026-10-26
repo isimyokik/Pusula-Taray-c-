@@ -5447,9 +5447,7 @@ jobs:
                       "function clean(){\n" +
                       "if(!pg)return;\n" +
                       "peekOff();\n" +
-                      "['transform','transition','border-radius','will-change','overflow','opacity','pointer-events'].forEach(function(k){pg.style.removeProperty(k);});\n" +
-                      "document.documentElement.classList.remove('rota-noanim');\n" +
-                      "document.documentElement.classList.remove('rota-peek');\n" +
+                      "['transform','transition','border-radius','will-change','overflow','opacity'].forEach(function(k){pg.style.removeProperty(k);});\n" +
                       "busy=false;\n" +
                       "}\n" +
                       "function springBack(){\n" +
@@ -5461,19 +5459,49 @@ jobs:
                       "}\n" +
                       "function commit(v){\n" +
                       "busy=true;busyT=Date.now();\n" +
-                      "var H=window.innerHeight;\n" +
-                      "pg.style.setProperty('transition','transform 180ms cubic-bezier(.2,.7,.3,1)','important');\n" +
+                      "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
+                      "var d=Math.max(170,Math.min(340,left/Math.max(v,0.9)));\n" +
+                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
                       "setOff(H);\n" +
-                      "pg.style.setProperty('pointer-events','none','important');\n" +
-                      "setTimeout(function(){\n" +
-                      "try{tryClick();}catch(z){}\n" +
-                      "setTimeout(function(){\n" +
-                      "try{if(openNow())tryNative();}catch(z){}\n" +
-                      "setTimeout(clean,80);\n" +
-                      "},60);\n" +
-                      "},180);\n" +
+                      "setTimeout(afterDown,d);\n" +
                       "}\n" +
-                      "function afterDown(){clean();}\n" +
+                      "function afterDown(){\n" +
+                      "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "pg.style.removeProperty('border-radius');\n" +
+                      "document.documentElement.classList.add('rota-noanim');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "pg.style.removeProperty('border-radius');\n" +
+                      "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n" +
+                      "function success(){\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "clean();\n" +
+                      "}\n" +
+                      "function fail(){\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "void pg.offsetWidth;\n" +
+                      "showDebug();\n" +
+                      "springBack();\n" +
+                      "}\n" +
+                      "function next(){\n" +
+                      "if(i>=tries.length){fail();return;}\n" +
+                      "var ok=false;\n" +
+                      "try{ok=tries[i++]();}catch(z){}\n" +
+                      "if(!ok){next();return;}\n" +
+                      "var sig0=layoutSig(),t0=Date.now();\n" +
+                      "(function poll(){\n" +
+                      "var el=Date.now()-t0;\n" +
+                      "if(!openNow()){success();return;}\n" +
+                      "if(layoutSig()!==sig0){if(el>=1800){success();return;}}\n" +
+                      "else if(el>=1000){next();return;}\n" +
+                      "setTimeout(poll,60);\n" +
+                      "})();\n" +
+                      "}\n" +
+                      "next();\n" +
+                      "}\n" +
                       "var armed=true,sawClosed=false,busy=false,busyT=0,locked=false,tr=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
                       "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
                       "function rubber(d){if(d<=0)return 0;var R=window.innerHeight*1.1;return R*(1-Math.exp(-d/R));}\n" +
@@ -5532,32 +5560,20 @@ jobs:
                       "}\n" +
                       "function closeDown(v){\n" +
                       "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
-                      "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
-                      "var d=Math.max(380,Math.min(600,left/Math.max(v,0.5)));\n" +
-                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.3,.1,.25,1)','important');\n" +
+                      "var H=window.innerHeight;\n" +
+                      "var d=Math.max(200,Math.min(320,180));\n" +
+                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
                       "setOff(H);\n" +
+                      "pg.style.setProperty('pointer-events','none','important');\n" +
                       "setTimeout(function(){\n" +
-                      "pg.style.setProperty('transition','none','important');\n" +
-                      "pg.style.setProperty('opacity','0','important');\n" +
-                      "pg.style.removeProperty('transform');\n" +
-                      "document.documentElement.classList.add('rota-noanim');\n" +
-                      "var ok=false;\n" +
-                      "try{ok=tryNative();}catch(z){}\n" +
-                      "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
-                      "var t0=Date.now();\n" +
-                      "(function poll(){\n" +
-                      "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n" +
-                      "if(Date.now()-t0>1500){\n" +
-                      "document.documentElement.classList.remove('rota-noanim');\n" +
-                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
-                      "pg.style.removeProperty('opacity');\n" +
-                      "void pg.offsetWidth;\n" +
-                      "armed=true;\n" +
-                      "springBack();\n" +
-                      "return;\n" +
-                      "}\n" +
-                      "setTimeout(poll,50);\n" +
-                      "})();\n" +
+                      "try{tryClick();}catch(z){}\n" +
+                      "setTimeout(function(){\n" +
+                      "try{if(pageOpen())tryNative();}catch(z){}\n" +
+                      "setTimeout(function(){\n" +
+                      "try{if(pageOpen())tryLayout();}catch(z){}\n" +
+                      "cleanAll();\n" +
+                      "},100);\n" +
+                      "},80);\n" +
                       "},d);\n" +
                       "}\n" +
                       "setInterval(function(){\n" +
