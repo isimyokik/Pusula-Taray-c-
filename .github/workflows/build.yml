@@ -5447,7 +5447,7 @@ jobs:
                       "function clean(){\n" +
                       "if(!pg)return;\n" +
                       "peekOff();\n" +
-                      "['transition','will-change'].forEach(function(k){pg.style.removeProperty(k);});\n" +
+                      "['transform','transition','border-radius','will-change','overflow','opacity','pointer-events'].forEach(function(k){pg.style.removeProperty(k);});\n" +
                       "document.documentElement.classList.remove('rota-noanim');\n" +
                       "document.documentElement.classList.remove('rota-peek');\n" +
                       "busy=false;\n" +
@@ -5469,14 +5469,11 @@ jobs:
                       "}\n" +
                       "function afterDown(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
-                      "pg.style.removeProperty('transform');\n" +
-                      "pg.style.removeProperty('border-radius');\n" +
+                      "setOff(window.innerHeight);\n" +
+                      "pg.style.setProperty('pointer-events','none','important');\n" +
                       "var tries=[tryNative,tryLayout],i=0;\n" +
                       "function success(){clean();}\n" +
-                      "function fail(){\n" +
-                      "try{tryLayout();}catch(z){}\n" +
-                      "clean();\n" +
-                      "}\n" +
+                      "function fail(){try{tryLayout();}catch(z){}clean();}\n" +
                       "function next(){\n" +
                       "if(i>=tries.length){fail();return;}\n" +
                       "var ok=false;\n" +
@@ -5485,7 +5482,7 @@ jobs:
                       "var t0=Date.now();\n" +
                       "(function poll(){\n" +
                       "if(!openNow()){success();return;}\n" +
-                      "if(Date.now()-t0>=500){next();return;}\n" +
+                      "if(Date.now()-t0>=450){next();return;}\n" +
                       "setTimeout(poll,40);\n" +
                       "})();\n" +
                       "}\n" +
