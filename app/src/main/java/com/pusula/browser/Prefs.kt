@@ -41,8 +41,7 @@ class Prefs(context: Context) {
       set(v) { sp.edit().putBoolean("barBottom", v).apply() }
     var pins: String get() = sp.getString("pins", "") ?: ""
       set(v) { sp.edit().putString("pins", v).apply() }
-
-    /** Android Auto: YT Music sayfasından çekilen listeler/şarkılar JSON */
+    /** YT Music sayfasından çekilen listeler/şarkılar JSON */
     var autoCatalog: String
         get() = sp.getString("autoCatalog", "") ?: ""
         set(v) { sp.edit().putString("autoCatalog", v).apply() }
