@@ -5244,7 +5244,7 @@ jobs:
                             """
 
                   // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-                  const val YT_MUSIC_UX_JS =
+                  val YT_MUSIC_UX_JS: String =
                       "(function(){try{\n" +
                       "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
                       "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
