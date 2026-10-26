@@ -1283,32 +1283,24 @@ jobs:
                           (findViewById<android.view.ViewGroup>(android.R.id.content))?.addView(web)
                       } catch (_: Exception) { }
                       autoMusicWeb = web
-                      // Document-start script: reklam + media hook
-                      if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                          try {
-                              if (prefs.adBlock) {
-                                  WebViewCompat.addDocumentStartJavaScript(web, STABLE_AD_BLOCKER_JS, setOf("*"))
-                              }
-                              WebViewCompat.addDocumentStartJavaScript(web, MEDIA_HOOK_JS, setOf("*"))
-                              if (prefs.bgPlay) {
-                                  WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
-                              }
-                          } catch (_: Exception) { }
-                      }
                       try { web.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
-                      handler.postDelayed({ injectAutoMusicScripts(web) }, 2000L)
-                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 4000L)
-                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 8000L)
-                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 14000L)
+                      handler.postDelayed({ injectAutoMusicScripts(web) }, 1500L)
+                      handler.postDelayed({ injectAutoMusicScripts(web) }, 4000L)
+                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 5000L)
+                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 10000L)
+                      handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 16000L)
                   } catch (_: Exception) { }
               }
 
               private fun injectAutoMusicScripts(web: android.webkit.WebView) {
                   try {
-                      if (prefs.adBlock) web.evaluateJavascript(STABLE_AD_BLOCKER_JS, null)
-                      web.evaluateJavascript(MEDIA_HOOK_JS, null)
+                      if (prefs.adBlock) {
+                          try { web.evaluateJavascript(STABLE_AD_BLOCKER_JS, null) } catch (_: Exception) { }
+                      }
+                      try { web.evaluateJavascript(MEDIA_HOOK_JS, null) } catch (_: Exception) { }
                   } catch (_: Exception) { }
               }
+
 
 
 
