@@ -5244,7 +5244,7 @@ jobs:
                             """
 
                   // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-                  val YT_MUSIC_UX_JS: String =
+                  const val YT_MUSIC_UX_JS =
                       "(function(){try{\n" +
                       "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
                       "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
@@ -5407,7 +5407,7 @@ jobs:
                       "try{\n" +
                       "if(!document.getElementById('__rota_peek')){\n" +
                       "var s=document.createElement('style');s.id='__rota_peek';\n" +
-                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
+                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *:not(ytmusic-player-bar):not(ytmusic-player-bar *):not(.ytmusic-player-bar):not([id*=player-bar]){transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
                       "document.documentElement.appendChild(s);\n" +
                       "}\n" +
                       "document.documentElement.classList.add('rota-peek');\n" +
@@ -5447,7 +5447,9 @@ jobs:
                       "function clean(){\n" +
                       "if(!pg)return;\n" +
                       "peekOff();\n" +
-                      "['transform','transition','border-radius','will-change','overflow','opacity'].forEach(function(k){pg.style.removeProperty(k);});\n" +
+                      "['transition','will-change'].forEach(function(k){pg.style.removeProperty(k);});\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "document.documentElement.classList.remove('rota-peek');\n" +
                       "busy=false;\n" +
                       "}\n" +
                       "function springBack(){\n" +
@@ -5467,43 +5469,30 @@ jobs:
                       "}\n" +
                       "function afterDown(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
-                      "pg.style.setProperty('opacity','0','important');\n" +
                       "pg.style.removeProperty('transform');\n" +
                       "pg.style.removeProperty('border-radius');\n" +
-                      "document.documentElement.classList.add('rota-noanim');\n" +
-                      "pg.style.setProperty('opacity','0','important');\n" +
-                      "pg.style.removeProperty('transform');\n" +
-                      "pg.style.removeProperty('border-radius');\n" +
-                      "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n" +
-                      "function success(){\n" +
-                      "pg.style.removeProperty('opacity');\n" +
-                      "clean();\n" +
-                      "}\n" +
+                      "var tries=[tryNative,tryLayout],i=0;\n" +
+                      "function success(){clean();}\n" +
                       "function fail(){\n" +
-                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
-                      "pg.style.removeProperty('opacity');\n" +
-                      "void pg.offsetWidth;\n" +
-                      "showDebug();\n" +
-                      "springBack();\n" +
+                      "try{tryLayout();}catch(z){}\n" +
+                      "clean();\n" +
                       "}\n" +
                       "function next(){\n" +
                       "if(i>=tries.length){fail();return;}\n" +
                       "var ok=false;\n" +
                       "try{ok=tries[i++]();}catch(z){}\n" +
                       "if(!ok){next();return;}\n" +
-                      "var sig0=layoutSig(),t0=Date.now();\n" +
+                      "var t0=Date.now();\n" +
                       "(function poll(){\n" +
-                      "var el=Date.now()-t0;\n" +
                       "if(!openNow()){success();return;}\n" +
-                      "if(layoutSig()!==sig0){if(el>=1800){success();return;}}\n" +
-                      "else if(el>=1000){next();return;}\n" +
-                      "setTimeout(poll,60);\n" +
+                      "if(Date.now()-t0>=500){next();return;}\n" +
+                      "setTimeout(poll,40);\n" +
                       "})();\n" +
                       "}\n" +
                       "next();\n" +
                       "}\n" +
                       "var armed=true,sawClosed=false,busy=false,busyT=0,locked=false,tr=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
-                      "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
+                      "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *:not(ytmusic-player-bar):not(ytmusic-player-bar *):not(.ytmusic-player-bar):not([id*=player-bar]){transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
                       "function rubber(d){if(d<=0)return 0;var R=window.innerHeight*1.1;return R*(1-Math.exp(-d/R));}\n" +
                       "function setOff(v){if(!pg)return;pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');}\n" +
                       "var pk2=[];\n" +
@@ -5558,32 +5547,6 @@ jobs:
                       "setOff(0);\n" +
                       "setTimeout(cleanAll,560);\n" +
                       "}\n" +
-                      "function releaseHold(){\n" +
-                      "if(pg){['transform','transition','will-change','opacity'].forEach(function(k){pg.style.removeProperty(k);});}\n" +
-                      "document.documentElement.classList.remove('rota-noanim');\n" +
-                      "}\n" +
-                      "function holdClosed(){\n" +
-                      "peek2Off();\n" +
-                      "setTimeout(function(){document.documentElement.classList.remove('rota-noanim');},650);\n" +
-                      "busy=false;\n" +
-                      "var t1=Date.now(),seenClosed=false;\n" +
-                      "(function w(){\n" +
-                      "try{\n" +
-                      "if(!pg){return;}\n" +
-                      "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
-                      "var oa=!!(l&&l.hasAttribute('player-page-open_'));\n" +
-                      "var r=pg.getBoundingClientRect(),H=window.innerHeight;\n" +
-                      "var closedNow=(!oa&&(r.height===0||r.top>=H*0.5));\n" +
-                      "if(!seenClosed){\n" +
-                      "if(closedNow)seenClosed=true;\n" +
-                      "else if(Date.now()-t1>2500){releaseHold();return;}\n" +
-                      "}else if(oa||(r.height>0&&r.top<H*0.5)){\n" +
-                      "releaseHold();return;\n" +
-                      "}\n" +
-                      "}catch(z){releaseHold();return;}\n" +
-                      "setTimeout(w,40);\n" +
-                      "})();\n" +
-                      "}\n" +
                       "function closeDown(v){\n" +
                       "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
                       "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
@@ -5598,30 +5561,9 @@ jobs:
                       "var ok=false;\n" +
                       "try{ok=tryNative();}catch(z){}\n" +
                       "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
-                      "(function(){\n" +
-                      "var seen=[],t0=Date.now(),n=0;\n" +
-                      "function desc(e){var c=(typeof e.className==='string'&&e.className)?'.'+e.className.trim().split(/\\s+/).slice(0,2).join('.'):'';return e.tagName.toLowerCase()+(e.id?'#'+e.id:'')+c;}\n" +
-                      "function sample(){\n" +
-                      "try{\n" +
-                      "var W=window.innerWidth,H=window.innerHeight,pts=[[W*0.5,H*0.8],[W*0.5,H*0.9],[W*0.2,H*0.93]];\n" +
-                      "var cur=pts.map(function(p){return (document.elementsFromPoint(p[0],p[1])||[]).slice(0,5).map(desc).join(' > ');}).join(' || ');\n" +
-                      "if(seen.indexOf(cur)<0)seen.push(Math.round((Date.now()-t0)/100)/10+'s '+cur);\n" +
-                      "}catch(z){}\n" +
-                      "n++;\n" +
-                      "if(Date.now()-t0<4200){setTimeout(sample,100);return;}\n" +
-                      "try{\n" +
-                      "var b=document.createElement('div');\n" +
-                      "b.style.cssText='position:fixed;left:4px;right:4px;top:70px;z-index:2147483647;background:rgba(0,0,0,.9);color:#fff;font:10px/1.25 monospace;padding:6px;border-radius:6px;word-break:break-all;max-height:60vh;overflow:auto;';\n" +
-                      "b.textContent='ROTA-TANI: '+seen.slice(0,10).join('  ##  ');\n" +
-                      "document.documentElement.appendChild(b);\n" +
-                      "setTimeout(function(){try{b.remove();}catch(z){}},25000);\n" +
-                      "}catch(z){}\n" +
-                      "}\n" +
-                      "sample();\n" +
-                      "})();\n" +
                       "var t0=Date.now();\n" +
                       "(function poll(){\n" +
-                      "if(!pageOpen()){holdClosed();return;}\n" +
+                      "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n" +
                       "if(Date.now()-t0>1500){\n" +
                       "document.documentElement.classList.remove('rota-noanim');\n" +
                       "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
