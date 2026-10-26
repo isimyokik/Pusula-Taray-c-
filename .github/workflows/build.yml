@@ -1067,7 +1067,6 @@ jobs:
                       addAction(PlaybackService.ACTION_OPEN)
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
-                  handler.postDelayed({ try { toast("Rota sürüm kontrol: v12") } catch (_: Exception) { } }, 1500)
                   startBrowsing()
                   addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }
                   handler.removeCallbacks(mediaStatePoll)
@@ -1130,16 +1129,18 @@ jobs:
 
               override fun onStop() {
                   super.onStop()
-                  if (isInPictureInPictureMode) {
-                      try { shown?.onResume() } catch (_: Exception) { }
-                      return
-                  }
+                  // PiP penceresi ✕ ile kapanınca da buraya gelinir (PiP bayrağı hâlâ true olabilir): arka planda çalma yolu çalışsın
                   if (prefs.bgPlay) {
                       appInBackground = true
                       try { shown?.onResume() } catch (_: Exception) { }
                       handler.removeCallbacks(backgroundMediaPump)
                       handler.post(backgroundMediaPump)
                       if (hasMedia && lastPlaying) {
+                          try {
+                              currentWeb()?.evaluateJavascript(
+                                  "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
+                                  "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
+                          } catch (_: Exception) { }
                           PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
                       }
                   }
