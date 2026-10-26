@@ -797,7 +797,23 @@ jobs:
                       updatePipActions()
                       if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
                   } else {
-                      // PiP kapandı (✕ veya büyütme): tek temiz yol — fazla müdahale yok
+                      // PiP ✕ ile kapandıysa (uygulama ekranda değil) hiçbir şeye dokunma; büyütüldüyse temizle
+                      pipExitPending = true
+                      handler.postDelayed({
+                          if (pipExitPending && isResumedNow && !isInPictureInPictureMode) {
+                              pipExitPending = false
+                              runPipExit()
+                          }
+                      }, 250)
+                  }
+              }
+
+              private var isResumedNow = false
+              private var pipExitPending = false
+
+              private fun runPipExit() {
+                  run {
+                      // PiP kapandı (büyütme): tek temiz yol
                       val playing = lastPlaying
                       val wasMini = pipFromMini
                       pipFromMini = false
@@ -1088,6 +1104,7 @@ jobs:
 
               override fun onPause() {
                   super.onPause()
+                  isResumedNow = false
                   saveTabs()
                   CookieManager.getInstance().flush()
                   if (isInPictureInPictureMode) {
@@ -1157,6 +1174,11 @@ jobs:
 
               override fun onResume() {
                   super.onResume()
+                  isResumedNow = true
+                  if (pipExitPending && !isInPictureInPictureMode) {
+                      pipExitPending = false
+                      handler.postDelayed({ if (!isInPictureInPictureMode) runPipExit() }, 120)
+                  }
                   appInBackground = false
                   handler.removeCallbacks(backgroundMediaPump)
                   shown?.onResume()
@@ -5988,7 +6010,11 @@ jobs:
                       "function fadeOutAll(ms,done){var list=mediaList(),n=list.length,left=n;if(!n){if(done)done();return;}list.forEach(function(m){try{var from=m.volume;m.dataset._fv=String(from);fadeTo(m,from,0,ms,function(){left--;if(left<=0&&done)done();});}catch(x){left--;if(left<=0&&done)done();}});}" +
                       "function fadeInAll(ms){setTimeout(function(){mediaList().forEach(function(m){try{var to=parseFloat(m.dataset._fv||'1');if(!(to>0))to=1;m.volume=0;if(m.muted)m.muted=false;fadeTo(m,0,to,ms,function(){try{delete m.dataset._fv;}catch(z){}});}catch(x){}});},80);}" +
                       "function clickEl(el){if(!el)return false;var btn=(el.tagName==='BUTTON'||el.getAttribute('role')==='button')?el:(el.querySelector&&(el.querySelector('button')||el.querySelector('[role=button]')))||el;try{btn.click();return true;}catch(x){try{el.click();return true;}catch(y){return false;}}}" +
-                      "function doPrev(){var vv=document.querySelector('video.html5-main-video')||document.querySelector('video,audio');if(vv&&isFinite(vv.currentTime)&&vv.currentTime>3){try{vv.currentTime=0;}catch(x){}var t0=Date.now();(function w(){if((!vv.seeking&&vv.currentTime<1.5&&Date.now()-t0>500)||Date.now()-t0>1800){doPrev2();return;}setTimeout(w,60);})();}else{doPrev2();}}" +
+                      "function sig(){var a='',b='';try{var mp=document.getElementById('movie_player');if(mp&&mp.getVideoData)a=String(mp.getVideoData().video_id||'');}catch(x){}try{var t=document.querySelector('ytmusic-player-bar .title,.title.ytmusic-player-bar,ytm-slim-video-metadata-section-renderer h2,h1.title');b=t?t.textContent.trim():'';}catch(x){}return a+'|'+b;}" +
+                      "function waitChange(s0,ms,yes,no){var t0=Date.now();(function w(){if(sig()!==s0){yes();return;}if(Date.now()-t0>ms){no();return;}setTimeout(w,100);})();}" +
+                      "function doPrev(){var s0=sig(),mp=document.getElementById('movie_player');" +
+                      "if(mp&&typeof mp.previousVideo==='function'){try{mp.previousVideo();}catch(x){}waitChange(s0,1500,function(){fadeInAll(500);},function(){doPrev3(s0);});}else{doPrev3(s0);}}" +
+                      "function doPrev3(s0){doPrev2();waitChange(s0,1200,function(){fadeInAll(500);},function(){doPrev2();});}" +
                       "function doPrev2(){var h=window.__msh&&window.__msh.previoustrack;if(h){try{h({action:'previoustrack'});fadeInAll(500);return;}catch(x){}}" +
                       "var sels=['.ytp-prev-button','.ytp-chrome-bottom .ytp-prev-button','ytmusic-player-bar .previous-button','ytmusic-player-controls .previous-button','ytmusic-player-bar yt-icon-button.previous-button','ytmusic-player-controls yt-icon-button.previous-button','#left-controls .previous-button','.previous-button','[aria-label=\\\"Previous\\\"]','[aria-label=\\\"Önceki\\\"]','[aria-label*=\\\"Previous track\\\"]','[aria-label*=\\\"Önceki parça\\\"]','[aria-label*=\\\"previous\\\"]'];" +
                       "for(var i=0;i<sels.length;i++){if(clickEl(document.querySelector(sels[i]))){fadeInAll(500);return;}}" +
