@@ -91,13 +91,9 @@ class PlaybackService : Service() {
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
-            val ch = NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_DEFAULT)
-            ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            ch.setShowBadge(false)
-            nm.createNotificationChannel(ch)
-            val qc = NotificationChannel(CHANNEL_QUIET, "Medya oynatıcı (PiP)", NotificationManager.IMPORTANCE_LOW)
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
+            val qc = NotificationChannel(CHANNEL_QUIET, "Medya oynatıcı (küçük pencere)", NotificationManager.IMPORTANCE_MIN)
             qc.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            qc.setShowBadge(false)
             nm.createNotificationChannel(qc)
         }
         val s = MediaSession(this, "Rota")
@@ -275,10 +271,8 @@ class PlaybackService : Service() {
         b.setContentTitle(shownTitle)
         b.setContentText(if (artist.isBlank()) "Rota" else artist)
         b.setContentIntent(open)
-        b.setOngoing(true)
+        b.setOngoing(playing)
         b.setVisibility(Notification.VISIBILITY_PUBLIC)
-        b.setCategory(Notification.CATEGORY_TRANSPORT)
-        b.setOnlyAlertOnce(true)
         b.addAction(act(android.R.drawable.ic_media_previous, "Önceki", pi(1, ACTION_PREVIOUS)))
         if (playing) b.addAction(act(android.R.drawable.ic_media_pause, "Duraklat", pi(2, ACTION_PAUSE)))
         else b.addAction(act(android.R.drawable.ic_media_play, "Oynat", pi(3, ACTION_PLAY)))
@@ -296,7 +290,10 @@ class PlaybackService : Service() {
             } else {
                 (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, n)
             }
-            // Duraklatınca bildirimi kaldırma — medya çubuğu görünsün
+            if (!playing) {
+                stopForeground(Service.STOP_FOREGROUND_DETACH)
+                foregroundStarted = false
+            }
         } catch (_: Exception) { stopSelf() }
     }
 
@@ -316,8 +313,8 @@ class PlaybackService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        const val CHANNEL = "playback_media_v3"
-        const val CHANNEL_QUIET = "playback_pip_v3"
+        const val CHANNEL = "playback"
+        const val CHANNEL_QUIET = "playback_quiet"
         const val NOTIF_ID = 1002
         const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
         const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
