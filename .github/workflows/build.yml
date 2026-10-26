@@ -5592,21 +5592,47 @@ jobs:
                       "setOff(H);\n" +
                       "setTimeout(function(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
-                      "setOff(H);\n" +
-                      "var tries=[tryClick,tryTap,tryLayout],i=0;\n" +
-                      "function next(){\n" +
-                      "if(i>=tries.length){armed=true;springBack();return;}\n" +
-                      "var ok=false,sig0=layoutSig();\n" +
-                      "try{ok=tries[i++]();}catch(z){}\n" +
-                      "if(!ok){next();return;}\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "document.documentElement.classList.add('rota-noanim');\n" +
+                      "var ok=false;\n" +
+                      "try{ok=tryNative();}catch(z){}\n" +
+                      "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
+                      "(function(){\n" +
+                      "var seen=[],t0=Date.now(),n=0;\n" +
+                      "function desc(e){var c=(typeof e.className==='string'&&e.className)?'.'+e.className.trim().split(/\\s+/).slice(0,2).join('.'):'';return e.tagName.toLowerCase()+(e.id?'#'+e.id:'')+c;}\n" +
+                      "function sample(){\n" +
+                      "try{\n" +
+                      "var W=window.innerWidth,H=window.innerHeight,pts=[[W*0.5,H*0.8],[W*0.5,H*0.9],[W*0.2,H*0.93]];\n" +
+                      "var cur=pts.map(function(p){return (document.elementsFromPoint(p[0],p[1])||[]).slice(0,5).map(desc).join(' > ');}).join(' || ');\n" +
+                      "if(seen.indexOf(cur)<0)seen.push(Math.round((Date.now()-t0)/100)/10+'s '+cur);\n" +
+                      "}catch(z){}\n" +
+                      "n++;\n" +
+                      "if(Date.now()-t0<4200){setTimeout(sample,100);return;}\n" +
+                      "try{\n" +
+                      "var b=document.createElement('div');\n" +
+                      "b.style.cssText='position:fixed;left:4px;right:4px;top:70px;z-index:2147483647;background:rgba(0,0,0,.9);color:#fff;font:10px/1.25 monospace;padding:6px;border-radius:6px;word-break:break-all;max-height:60vh;overflow:auto;';\n" +
+                      "b.textContent='ROTA-TANI: '+seen.slice(0,10).join('  ##  ');\n" +
+                      "document.documentElement.appendChild(b);\n" +
+                      "setTimeout(function(){try{b.remove();}catch(z){}},25000);\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "sample();\n" +
+                      "})();\n" +
                       "var t0=Date.now();\n" +
                       "(function poll(){\n" +
-                      "if(layoutSig()!==sig0){setTimeout(cleanAll,900);return;}\n" +
-                      "if(Date.now()-t0>1200){next();return;}\n" +
+                      "if(!pageOpen()){holdClosed();return;}\n" +
+                      "if(Date.now()-t0>1500){\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "void pg.offsetWidth;\n" +
+                      "armed=true;\n" +
+                      "springBack();\n" +
+                      "return;\n" +
+                      "}\n" +
                       "setTimeout(poll,50);\n" +
                       "})();\n" +
-                      "}\n" +
-                      "next();\n" +
                       "},d);\n" +
                       "}\n" +
                       "setInterval(function(){\n" +
