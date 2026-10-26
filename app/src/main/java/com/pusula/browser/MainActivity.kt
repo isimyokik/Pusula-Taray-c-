@@ -102,6 +102,8 @@ class MainActivity : AppCompatActivity() {
         var openScript: ScriptHandler? = null
         var errorUrl: String? = null
         var errorLoading: Boolean = false
+        /** Geçici ağ hatasında bir kez otomatik yenile */
+        var networkRetryUsed: Boolean = false
         var fromPopup: Boolean = false
     }
 
