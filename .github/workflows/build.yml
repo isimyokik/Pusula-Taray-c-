@@ -667,8 +667,8 @@ jobs:
               private fun pollMedia() {
                   val t = miniTab ?: tabs.getOrNull(cur)
                   try {
-                      // Önce gizli Auto webview (arabada seçilen parça orada çalıyor olabilir)
                       val hw = autoMusicWeb
+                      // Auto gizli web + görünür sekme: gizliyi öncelikli oku (çalma kaynağı)
                       if (hw != null && (hw.url ?: "").contains("youtube")) {
                           hw.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) }
                       } else if (t != null) {
@@ -766,9 +766,16 @@ jobs:
                       sentPos = pos; sentAt = now; sentPlaying = playing
                       PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
                   }
-                  // Auto medya kartı: başlık/kapak her değişimde (eski resim kilitlenmesin)
-                  if (has && (title.isNotBlank() || playing)) {
-                      RotaMediaBrowserService.updateNowPlaying(title, artist, artUrl, playing, pos, if (dur > 0) dur else 0L)
+                  // Auto medya = telefon medya birebir (başlık, kapak, play/pause, süre)
+                  if (has) {
+                      RotaMediaBrowserService.updateNowPlaying(
+                          title.ifBlank { lastTitle },
+                          artist.ifBlank { lastArtist },
+                          artUrl.ifBlank { lastArtUrl },
+                          playing,
+                          pos,
+                          if (dur > 0) dur else lastDur.coerceAtLeast(0L)
+                      )
                   }
                   // PiP düğme simgesi oynat/duraklat durumuna göre güncellensin
                   if (playChanged && isInPictureInPictureMode) updatePipActions()
@@ -1021,6 +1028,8 @@ jobs:
                       targets.forEach { t ->
                           try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
                       }
+                      // Android Auto gizli WebView (asıl çalma kaynağı)
+                      try { autoMusicWeb?.evaluateJavascript(js, null) } catch (_: Exception) { }
                       if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
                           lastPlaying = when (act) {
                               PlaybackService.ACTION_PAUSE -> false
@@ -1248,14 +1257,14 @@ jobs:
                           if (!u.contains("music.youtube.com") || u.contains("/watch")) {
                               try { existing.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
                           } else {
-                              // Liste dolsun diye hafif kaydır (lazy load)
                               try {
                                   existing.evaluateJavascript(
-                                      "(function(){try{var a=document.scrollingElement||document.body;if(a){a.scrollTop=Math.min(a.scrollTop+800,a.scrollHeight);}window.scrollBy(0,600);}catch(e){}})();",
+                                      "(function(){try{var a=document.scrollingElement||document.body;if(a){a.scrollTop=Math.min(a.scrollTop+600,a.scrollHeight);}window.scrollBy(0,400);}catch(e){}})();",
                                       null
                                   )
                               } catch (_: Exception) { }
                           }
+                          injectAutoMusicScripts(existing)
                           return
                       }
                       val web = BgWebView(this)
@@ -1274,13 +1283,33 @@ jobs:
                           (findViewById<android.view.ViewGroup>(android.R.id.content))?.addView(web)
                       } catch (_: Exception) { }
                       autoMusicWeb = web
+                      // Document-start script: reklam + media hook
+                      if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                          try {
+                              if (prefs.adBlock) {
+                                  WebViewCompat.addDocumentStartJavaScript(web, STABLE_AD_BLOCKER_JS, setOf("*"))
+                              }
+                              WebViewCompat.addDocumentStartJavaScript(web, MEDIA_HOOK_JS, setOf("*"))
+                              if (prefs.bgPlay) {
+                                  WebViewCompat.addDocumentStartJavaScript(web, KEEP_PLAYING_JS, setOf("*"))
+                              }
+                          } catch (_: Exception) { }
+                      }
                       try { web.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
-                      // Yükleme sonrası tekrar tara
+                      handler.postDelayed({ injectAutoMusicScripts(web) }, 2000L)
                       handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 4000L)
                       handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 8000L)
                       handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 14000L)
                   } catch (_: Exception) { }
               }
+
+              private fun injectAutoMusicScripts(web: android.webkit.WebView) {
+                  try {
+                      if (prefs.adBlock) web.evaluateJavascript(STABLE_AD_BLOCKER_JS, null)
+                      web.evaluateJavascript(MEDIA_HOOK_JS, null)
+                  } catch (_: Exception) { }
+              }
+
 
 
 
@@ -5898,8 +5927,9 @@ jobs:
                       "if(!vd)return;" +
                       "vd.style.visibility='';" +
                       "vd.playbackRate=1;" +
-                      // Reklam bitince asla muted bırakma — ses her zaman geri açılır
+                      // Reklam bitince sesi geri aç
                       "vd.muted=false;" +
+                      "try{document.querySelectorAll('video,audio').forEach(function(m){if(m!==vd){try{m.muted=false;}catch(z){}}});}catch(x){}" +
                       "var tv=parseFloat(vd.dataset.pv||'1')||1;" +
                       "vd.volume=0;" +
                       "var k=0;" +
@@ -5919,8 +5949,9 @@ jobs:
                       "if(tick%5===1)hideAdUi(true);" +
                       "if(vd){" +
                       "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
-                      // muted kullanma — sadece volume=0 (reklam sesi); içerik muted kalmasın
-                      "try{vd.volume=0;}catch(x){}" +
+                      // Reklam: hem volume=0 hem muted (gizli WebView dahil tüm medya)
+                      "try{vd.volume=0;vd.muted=true;}catch(x){}" +
+                      "try{document.querySelectorAll('video,audio').forEach(function(m){try{m.volume=0;m.muted=true;}catch(z){}});}catch(x){}" +
                       "vd.style.visibility='hidden';" +
                       "if(vd.playbackRate<8)vd.playbackRate=16;" +
                       "}" +
