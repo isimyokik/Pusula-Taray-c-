@@ -102,7 +102,6 @@ class MainActivity : AppCompatActivity() {
         var openScript: ScriptHandler? = null
         var errorUrl: String? = null
         var errorLoading: Boolean = false
-        /** Geçici ağ hatasında bir kez otomatik yenile */
         var networkRetryUsed: Boolean = false
         var fromPopup: Boolean = false
     }
@@ -238,20 +237,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) { }
             // Daha az sonuçla ezme (geçici boş tarama)
             if (prev.isNotBlank() && pl.length() + sg.length() < prevPl + prevSg && pl.length() + sg.length() < 3) return
-            // byPlaylist: playlist sayfasındaysak şarkıları o listeye bağla
-            try {
-                val page = o.optString("page")
-                val merged = JSONObject(inner)
-                val by = try { JSONObject(prev).optJSONObject("byPlaylist") } catch (_: Exception) { null } ?: JSONObject()
-                if (page.contains("browse") || page.contains("playlist") || page.contains("channel")) {
-                    if (sg.length() > 0) by.put(page, sg)
-                }
-                // önceki byPlaylist koru
-                if (by.length() > 0) merged.put("byPlaylist", by)
-                prefs.autoCatalog = merged.toString()
-            } catch (_: Exception) {
-                prefs.autoCatalog = inner
-            }
+            prefs.autoCatalog = inner
             RotaMediaBrowserService.notifyCatalogChanged()
         } catch (_: Exception) { }
     }
@@ -291,12 +277,10 @@ class MainActivity : AppCompatActivity() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
-        // Medya varken bildirimi güncelle (duraklatınca da; servis ayakta olsun)
-        if (has) {
+        // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
+        if ((changed || playing) && (playing || PlaybackService.running)) {
             sentPos = pos; sentAt = now; sentPlaying = playing
-            // PiP değilse quiet kanal kullanma → bildirim çubuğunda görünsün
-            val forPip = isInPictureInPictureMode
-            PlaybackService.update(this, playing, title, artist, forPip, pos, dur, artUrl)
+            PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
         }
         // Auto medya kartı: başlık/kapak her değişimde (eski resim kilitlenmesin)
         if (has && (title.isNotBlank() || playing)) {
@@ -709,24 +693,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleAutoIntent(intent: Intent?) {
         if (intent == null) return
-        // Arabadan: görünür sekmede YT Music (boş sekme bırakma)
-        if (intent.getBooleanExtra("auto_open_music", false)) {
-            try {
-                val music = "https://music.youtube.com/"
-                val idx = tabs.indexOfFirst { (it.web.url ?: "").contains("music.youtube.com") }
-                if (idx >= 0) {
-                    switchTo(idx)
-                    val u = tabs[idx].web.url ?: ""
-                    if (u.contains("/watch") || u.length < 10) {
-                        try { tabs[idx].web.loadUrl(music) } catch (_: Exception) { }
-                    }
-                } else {
-                    openTab(music, appMode = true)
-                }
-            } catch (_: Exception) {
-                try { openTab("https://music.youtube.com/", appMode = true) } catch (_: Exception) { }
-            }
-        }
         if (intent.getBooleanExtra("ensure_music", false)) {
             ensureAutoMusicLoaded()
         }
@@ -1419,10 +1385,7 @@ class MainActivity : AppCompatActivity() {
         val t = tabs[index]
         val wasCurrent = index == cur
         if (wasCurrent) { content.removeView(t.web); shown = null }
-        t.web.stopLoading()
-        try { t.web.clearHistory() } catch (_: Exception) { }
-        // clearCache(true) diğer sekmelerin oturumunu/zor yüklemeyi bozabiliyor — yok
-        try { t.web.destroy() } catch (_: Exception) { }
+        t.web.stopLoading(); try { t.web.clearHistory() } catch (_: Exception) {}; try { t.web.destroy() } catch (_: Exception) {}
         tabs.removeAt(index)
         if (t.incognito) {
             CookieManager.getInstance().removeAllCookies(null)
@@ -1899,7 +1862,7 @@ class MainActivity : AppCompatActivity() {
         ov?.animate()?.alpha(0f)?.setDuration(150)?.start()
     }
 
-
+    
     private fun updateTabCount() { tabCount.text = tabs.size.toString() }
 
     private fun stateFile(i: Int) = java.io.File(filesDir, "tabstate_$i.bin")
@@ -2142,9 +2105,7 @@ class MainActivity : AppCompatActivity() {
             if (transient && !tab.networkRetryUsed) {
                 tab.networkRetryUsed = true
                 handler.postDelayed({
-                    try {
-                        if (tabs.any { it === tab }) view.loadUrl(failing)
-                    } catch (_: Exception) { }
+                    try { if (tabs.any { it === tab }) view.loadUrl(failing) } catch (_: Exception) { }
                 }, 1200L)
                 return
             }
@@ -2158,27 +2119,16 @@ class MainActivity : AppCompatActivity() {
             showError(view, tab, failing, msg)
         }
 
-        override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: android.webkit.WebResourceResponse?) {
-            if (view == null || request == null || response == null) return
-            if (!request.isForMainFrame) return
-            val code = response.statusCode
-            if (code < 500) return
-            showError(view, tab, request.url.toString(), "Sunucu hatası HTTP $code — site geçici yanıt vermiyor")
-        }
-
-        
         override fun onReceivedSslError(view: WebView?, h: android.webkit.SslErrorHandler?, error: android.net.http.SslError?) {
-            // Chrome gibi: geçersiz sertifikada devam etme
             h?.cancel()
             if (view == null || error == null) return
             val failing = error.url ?: return
             try {
                 val fh = android.net.Uri.parse(failing).host
                 val ph = android.net.Uri.parse(tab.url).host
-                if (fh != null && ph != null && !fh.equals(ph, true)) {
-                    val samePage = failing.substringBefore('#').trimEnd('/').equals(tab.url.substringBefore('#').trimEnd('/'), true)
-                    if (!samePage) return
-                }
+                if (fh != null && ph != null && !fh.equals(ph, true) &&
+                    !failing.substringBefore('#').trimEnd('/').equals(tab.url.substringBefore('#').trimEnd('/'), true)
+                ) return
             } catch (_: Exception) { }
             val reason = when (error.primaryError) {
                 android.net.http.SslError.SSL_EXPIRED -> "Sertifika süresi dolmuş"
@@ -5529,8 +5479,8 @@ class MainActivity : AppCompatActivity() {
             "if(tick%5===1)hideAdUi(true);" +
             "if(vd){" +
             "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
-            "try{vd.muted=true;vd.volume=0;}catch(x){}" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{m.muted=true;m.volume=0;}catch(z){}});" +
+            // muted kullanma — sadece volume=0 (reklam sesi); içerik muted kalmasın
+            "try{vd.volume=0;}catch(x){}" +
             "vd.style.visibility='hidden';" +
             "if(vd.playbackRate<8)vd.playbackRate=16;" +
             "}" +
