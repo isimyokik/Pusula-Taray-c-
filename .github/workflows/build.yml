@@ -5592,26 +5592,21 @@ jobs:
                       "setOff(H);\n" +
                       "setTimeout(function(){\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
-                      "pg.style.setProperty('opacity','0','important');\n" +
-                      "pg.style.removeProperty('transform');\n" +
-                      "document.documentElement.classList.add('rota-noanim');\n" +
-                      "var ok=false;\n" +
-                      "try{ok=tryNative();}catch(z){}\n" +
-                      "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
+                      "setOff(H);\n" +
+                      "var tries=[tryClick,tryTap,tryLayout],i=0;\n" +
+                      "function next(){\n" +
+                      "if(i>=tries.length){armed=true;springBack();return;}\n" +
+                      "var ok=false,sig0=layoutSig();\n" +
+                      "try{ok=tries[i++]();}catch(z){}\n" +
+                      "if(!ok){next();return;}\n" +
                       "var t0=Date.now();\n" +
                       "(function poll(){\n" +
-                      "if(!pageOpen()){holdClosed();return;}\n" +
-                      "if(Date.now()-t0>1500){\n" +
-                      "document.documentElement.classList.remove('rota-noanim');\n" +
-                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
-                      "pg.style.removeProperty('opacity');\n" +
-                      "void pg.offsetWidth;\n" +
-                      "armed=true;\n" +
-                      "springBack();\n" +
-                      "return;\n" +
-                      "}\n" +
+                      "if(layoutSig()!==sig0){setTimeout(cleanAll,900);return;}\n" +
+                      "if(Date.now()-t0>1200){next();return;}\n" +
                       "setTimeout(poll,50);\n" +
                       "})();\n" +
+                      "}\n" +
+                      "next();\n" +
                       "},d);\n" +
                       "}\n" +
                       "setInterval(function(){\n" +
