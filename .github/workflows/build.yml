@@ -5245,401 +5245,544 @@ jobs:
 
                   // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
                   const val YT_MUSIC_UX_JS =
-                      "(function(){try{\n"
-                      + "if(location.hostname.indexOf('music.youtube.com')<0)return;\n"
-                      + "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n"
-                      + "var HS='ytmusic-play-button-renderer,#play-pause-button,.play-pause-button';\n"
-                      + "var FX=['paper-ripple','tp-yt-paper-ripple','yt-touch-feedback-shape','.yt-spec-touch-feedback-shape','#ink'];\n"
-                      + "var css='*{-webkit-tap-highlight-color:rgba(0,0,0,0)!important}html,body{overscroll-behavior-y:contain!important}*,*::before,*::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}*:not(ytmusic-player-page):not(ytmusic-player-page *){filter:none!important}';\n"
-                      + "HS.split(',').forEach(function(h){\n"
-                      + "css+=h+'{outline:none!important;--paper-ripple-color:transparent;--paper-ripple-opacity:0;--yt-spec-touch-response:transparent;--yt-spec-touch-response-v2:transparent;--yt-focus-color:transparent}';\n"
-                      + "FX.forEach(function(f){css+=h+' '+f+'{display:none!important}';});\n"
-                      + "});\n"
-                      + "var st=document.createElement('style');st.id='__rota_ytm_ux5';st.textContent=css;\n"
-                      + "document.documentElement.appendChild(st);\n"
-                      + "var ov=null;\n"
-                      + "function getOv(){\n"
-                      + "if(ov&&ov.isConnected)return ov;\n"
-                      + "ov=document.createElement('div');\n"
-                      + "ov.style.cssText='position:fixed;left:0;top:0;border-radius:50%;background:rgba(150,150,150,.4);pointer-events:none;z-index:2147483646;opacity:0;display:none;';\n"
-                      + "document.documentElement.appendChild(ov);\n"
-                      + "return ov;\n"
-                      + "}\n"
-                      + "function findHost(e){\n"
-                      + "var path=(e.composedPath&&e.composedPath())||[];\n"
-                      + "for(var i=0;i<path.length;i++){\n"
-                      + "var n=path[i];\n"
-                      + "if(n&&n.matches&&n.matches(HS))return n;\n"
-                      + "}\n"
-                      + "for(var j=0;j<path.length;j++){\n"
-                      + "var m=path[j];\n"
-                      + "if(m&&m.getAttribute&&m.matches&&m.matches('button,[role=button],tp-yt-paper-icon-button,yt-icon-button')){\n"
-                      + "var al=m.getAttribute('aria-label')||'';\n"
-                      + "if(/^(oynat|duraklat|play|pause)\\b/i.test(al))return m;\n"
-                      + "}\n"
-                      + "}\n"
-                      + "return null;\n"
-                      + "}\n"
-                      + "function inkDown(e){\n"
-                      + "try{\n"
-                      + "var h=findHost(e);if(!h)return;\n"
-                      + "var r=h.getBoundingClientRect();\n"
-                      + "if(r.width<8||r.width>150||Math.abs(r.width-r.height)>r.width*0.3)return;\n"
-                      + "var o=getOv(),s=Math.max(r.width,r.height);\n"
-                      + "o.style.transition='none';\n"
-                      + "o.style.width=s+'px';o.style.height=s+'px';\n"
-                      + "o.style.left=(r.left+(r.width-s)/2)+'px';o.style.top=(r.top+(r.height-s)/2)+'px';\n"
-                      + "o.style.display='block';o.style.opacity='0';\n"
-                      + "void o.offsetWidth;\n"
-                      + "o.style.transition='opacity .07s ease-out';o.style.opacity='1';\n"
-                      + "}catch(z){}\n"
-                      + "}\n"
-                      + "function inkUp(){\n"
-                      + "try{\n"
-                      + "if(!ov||ov.style.display==='none')return;\n"
-                      + "ov.style.transition='opacity .32s ease-out';ov.style.opacity='0';\n"
-                      + "var o=ov;setTimeout(function(){if(o.style.opacity==='0')o.style.display='none';},360);\n"
-                      + "}catch(z){}\n"
-                      + "}\n"
-                      + "document.addEventListener('pointerdown',inkDown,true);\n"
-                      + "window.addEventListener('pointerup',inkUp,true);\n"
-                      + "window.addEventListener('pointercancel',inkUp,true);\n"
-                      + "window.addEventListener('touchend',inkUp,true);\n"
-                      + "window.addEventListener('touchcancel',inkUp,true);\n"
-                      + "function clickable(e){\n"
-                      + "var n=e;\n"
-                      + "for(var k=0;k<12&&n;k++){\n"
-                      + "if(n.nodeType===1&&n.matches&&n.matches('button,[role=button],tp-yt-paper-icon-button,yt-icon-button,a,[class*=minimize],[class*=collapse],[class*=toggle-player]'))return n;\n"
-                      + "n=n.parentElement||(n.getRootNode&&n.getRootNode().host)||null;\n"
-                      + "}\n"
-                      + "return null;\n"
-                      + "}\n"
-                      + "function findChevron(){\n"
-                      + "var pg=pageEl();if(!pg)return null;\n"
-                      + "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','.toggle-player','[class*=minimize]','[class*=collapse-button]','[class*=dismiss]'];\n"
-                      + "for(var i=0;i<sels.length;i++){var el=pg.querySelector(sels[i]);if(el)return el;}\n"
-                      + "var all=pg.querySelectorAll('[aria-label]');\n"
-                      + "for(var j=0;j<all.length;j++){\n"
-                      + "var al=all[j].getAttribute('aria-label')||'';\n"
-                      + "if(/^(aÅaÄÄ±|asagi|collapse|minimi|kÃ¼Ã§Ã¼lt|kucult|down\\b)/i.test(al))return all[j];\n"
-                      + "}\n"
-                      + "for(var y=16;y<=110;y+=12){\n"
-                      + "for(var x=16;x<=96;x+=12){\n"
-                      + "var c=clickable(document.elementFromPoint(x,y));\n"
-                      + "if(c&&c.getBoundingClientRect().width<120)return c;\n"
-                      + "}\n"
-                      + "}\n"
-                      + "return null;\n"
-                      + "}\n"
-                      + "function fullTap(el){\n"
-                      + "var r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;\n"
-                      + "try{\n"
-                      + "var tc=new Touch({identifier:77,target:el,clientX:x,clientY:y});\n"
-                      + "el.dispatchEvent(new TouchEvent('touchstart',{touches:[tc],targetTouches:[tc],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n"
-                      + "el.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n"
-                      + "}catch(z){}\n"
-                      + "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){\n"
-                      + "var C=t.indexOf('pointer')===0?PointerEvent:MouseEvent;\n"
-                      + "try{el.dispatchEvent(new C(t,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,view:window,button:0,pointerType:'touch',isPrimary:true}));}catch(z){}\n"
-                      + "});\n"
-                      + "}\n"
-                      + "function tryNative(){\n"
-                      + "if(!window.RotaTap)return false;\n"
-                      + "var x=45,y=32,el=findChevron();\n"
-                      + "if(el){var r=el.getBoundingClientRect();if(r.width>0&&r.top<200&&r.left<200){x=r.left+r.width/2;y=r.top+r.height/2;}}\n"
-                      + "window.RotaTap.tap(x/window.innerWidth,y/window.innerHeight);\n"
-                      + "return true;\n"
-                      + "}\n"
-                      + "function tryClick(){var el=findChevron();if(!el)return false;el.click();return true;}\n"
-                      + "function tryTap(){var el=findChevron();if(!el)return false;fullTap(el);return true;}\n"
-                      + "function tryLayout(){\n"
-                      + "var layout=document.querySelector('ytmusic-app-layout,#layout');\n"
-                      + "if(!layout)return false;\n"
-                      + "try{if('playerPageOpen_' in layout)layout.playerPageOpen_=false;}catch(z){}\n"
-                      + "try{layout.removeAttribute('player-page-open_');}catch(z){}\n"
-                      + "try{layout.setAttribute('player-ui-state_','PLAYER_BAR_ONLY');}catch(z){}\n"
-                      + "return true;\n"
-                      + "}\n"
-                      + "function layoutSig(){\n"
-                      + "var l=document.querySelector('ytmusic-app-layout,#layout');\n"
-                      + "if(!l)return '';\n"
-                      + "return l.getAttributeNames().map(function(k){return k+'='+l.getAttribute(k);}).join('|');\n"
-                      + "}\n"
-                      + "function openNow(){\n"
-                      + "var p=pageEl();if(!p)return false;\n"
-                      + "var cs=getComputedStyle(p);\n"
-                      + "if(cs.display==='none'||cs.visibility==='hidden')return false;\n"
-                      + "var r=p.getBoundingClientRect(),H=window.innerHeight;\n"
-                      + "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n"
-                      + "}\n"
-                      + "function showDebug(){\n"
-                      + "try{\n"
-                      + "var seen=[];\n"
-                      + "for(var y=16;y<=110;y+=22){for(var x=16;x<=96;x+=26){\n"
-                      + "var e=document.elementFromPoint(x,y),n=0;\n"
-                      + "while(e&&n<3){\n"
-                      + "var d=e.tagName.toLowerCase()+(e.className&&typeof e.className==='string'?'.'+e.className.trim().split(/\\s+/).slice(0,2).join('.'):'')+(e.getAttribute('aria-label')?'['+e.getAttribute('aria-label')+']':'');\n"
-                      + "if(seen.indexOf(d)<0)seen.push(d);\n"
-                      + "e=e.parentElement;n++;\n"
-                      + "}\n"
-                      + "}}\n"
-                      + "var b=document.createElement('div');\n"
-                      + "b.style.cssText='position:fixed;left:8px;right:8px;bottom:70px;z-index:2147483647;background:rgba(0,0,0,.85);color:#fff;font:11px/1.3 monospace;padding:8px;border-radius:8px;word-break:break-all;';\n"
-                      + "b.textContent='Rota: kÃ¼Ã§Ã¼lt tuÅu Ã§alÄ±ÅmadÄ±. '+seen.slice(0,14).join(' ; ');\n"
-                      + "document.documentElement.appendChild(b);\n"
-                      + "setTimeout(function(){try{b.remove();}catch(z){}},12000);\n"
-                      + "}catch(z){}\n"
-                      + "}\n"
-                      + "function pageEl(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}\n"
-                      + "function pageOpen(){\n"
-                      + "var p=pageEl();if(!p)return false;\n"
-                      + "var r=p.getBoundingClientRect(),H=window.innerHeight;\n"
-                      + "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n"
-                      + "}\n"
-                      + "var busyT=0,tracking=false,locked=false,busy=false,sx=0,sy=0,off=0,smp=[],pg=null;\n"
-                      + "function rubber(d){\n"
-                      + "if(d<=0)return 0;\n"
-                      + "var R=window.innerHeight*1.1;\n"
-                      + "return R*(1-Math.exp(-d/R));\n"
-                      + "}\n"
-                      + "var peekEl=[];\n"
-                      + "function peekOn(){\n"
-                      + "try{\n"
-                      + "if(!document.getElementById('__rota_peek')){\n"
-                      + "var s=document.createElement('style');s.id='__rota_peek';\n"
-                      + "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n"
-                      + "document.documentElement.appendChild(s);\n"
-                      + "}\n"
-                      + "document.documentElement.classList.add('rota-peek');\n"
-                      + "var l=document.querySelector('ytmusic-app-layout,#layout');\n"
-                      + "if(l){\n"
-                      + "var q=[l],n=0;\n"
-                      + "while(q.length&&n<120){\n"
-                      + "var e=q.shift();n++;\n"
-                      + "if(e.nodeType===1&&e!==pg&&!(pg&&pg.contains(e))){\n"
-                      + "var cs=getComputedStyle(e);\n"
-                      + "var bf=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n"
-                      + "var fl=cs.filter||'none';\n"
-                      + "if(bf!=='none'||fl.indexOf('blur')>=0){\n"
-                      + "peekEl.push([e,e.style.cssText]);\n"
-                      + "e.style.setProperty('backdrop-filter','none','important');\n"
-                      + "e.style.setProperty('-webkit-backdrop-filter','none','important');\n"
-                      + "if(fl.indexOf('blur')>=0)e.style.setProperty('filter','none','important');\n"
-                      + "}\n"
-                      + "}\n"
-                      + "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n"
-                      + "}\n"
-                      + "}\n"
-                      + "}catch(z){}\n"
-                      + "}\n"
-                      + "function peekOff(){\n"
-                      + "try{\n"
-                      + "document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');\n"
-                      + "peekEl.forEach(function(a){a[0].style.cssText=a[1];});\n"
-                      + "peekEl=[];\n"
-                      + "}catch(z){}\n"
-                      + "}\n"
-                      + "function setOff(v){\n"
-                      + "if(!pg)return;\n"
-                      + "pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');\n"
-                      + "pg.style.setProperty('border-radius',Math.min(v,28)+'px '+Math.min(v,28)+'px 0 0','important');\n"
-                      + "}\n"
-                      + "function clean(){\n"
-                      + "if(!pg)return;\n"
-                      + "peekOff();\n"
-                      + "['transition','will-change','overflow'].forEach(function(k){pg.style.removeProperty(k);});\n"
-                      + "document.documentElement.classList.remove('rota-noanim');\n"
-                      + "busy=false;\n"
-                      + "}\n"
-                      + "function springBack(){\n"
-                      + "if(!pg)return;\n"
-                      + "busy=true;busyT=Date.now();\n"
-                      + "pg.style.setProperty('transition','transform .55s cubic-bezier(.3,1.35,.5,1)','important');\n"
-                      + "setOff(0);\n"
-                      + "setTimeout(clean,600);\n"
-                      + "}\n"
-                      + "function commit(v){\n"
-                      + "busy=true;busyT=Date.now();\n"
-                      + "var H=window.innerHeight,left=Math.max(H-off,1);\n"
-                      + "var d=Math.max(170,Math.min(340,left/Math.max(v,0.9)));\n"
-                      + "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n"
-                      + "setOff(H);\n"
-                      + "setTimeout(afterDown,d);\n"
-                      + "}\n"
-                      + "function afterDown(){\n"
-                      + "pg.style.setProperty('transition','none','important');\n"
-                      + "pg.style.removeProperty('transform');\n"
-                      + "pg.style.removeProperty('border-radius');\n"
-                      + "document.documentElement.classList.add('rota-noanim');\n"
-                      + "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n"
-                      + "function success(){\n"
-                      + "clean();\n"
-                      + "}\n"
-                      + "function fail(){\n"
-                      + "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n"
-                      + "void pg.offsetWidth;\n"
-                      + "showDebug();\n"
-                      + "springBack();\n"
-                      + "}\n"
-                      + "function next(){\n"
-                      + "if(i>=tries.length){fail();return;}\n"
-                      + "var ok=false;\n"
-                      + "try{ok=tries[i++]();}catch(z){}\n"
-                      + "if(!ok){next();return;}\n"
-                      + "var sig0=layoutSig(),t0=Date.now();\n"
-                      + "(function poll(){\n"
-                      + "var el=Date.now()-t0;\n"
-                      + "if(!openNow()){success();return;}\n"
-                      + "if(layoutSig()!==sig0){if(el>=1200){success();return;}}\n"
-                      + "else if(el>=700){next();return;}\n"
-                      + "setTimeout(poll,50);\n"
-                      + "})();\n"
-                      + "}\n"
-                      + "next();\n"
-                      + "}\n"
-                      + "var armed=true,sawClosed=false,busy=false,busyT=0,locked=false,tr=false,sx=0,sy=0,off=0,smp=[],pg=null;\n"
-                      + "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n"
-                      + "function rubber(d){if(d<=0)return 0;var R=window.innerHeight*1.1;return R*(1-Math.exp(-d/R));}\n"
-                      + "function setOff(v){if(!pg)return;pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');}\n"
-                      + "var pk2=[];\n"
-                      + "function peek2On(){\n"
-                      + "try{\n"
-                      + "if(!pg)return;\n"
-                      + "document.documentElement.classList.add('rota-peek2');\n"
-                      + "if(!document.getElementById('__rota_peek2')){var rs=document.createElement('style');rs.id='__rota_peek2';rs.textContent='html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout #main-panel,html.rota-peek2 ytmusic-app-layout ytmusic-pages,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response,html.rota-peek2 ytmusic-app-layout #nav-bar-background,html.rota-peek2 ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response{display:block!important}';document.documentElement.appendChild(rs);}\n"
-                      + "var root=document.querySelector('ytmusic-app-layout,#layout')||document.body;\n"
-                      + "var q=[root],n=0;\n"
-                      + "while(q.length&&n<800){\n"
-                      + "var e=q.shift();n++;\n"
-                      + "if(e.nodeType!==1)continue;\n"
-                      + "var inPg=(e===pg);\n"
-                      + "var cs=getComputedStyle(e);\n"
-                      + "var f=cs.filter||'none',b=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n"
-                      + "var fb=(f!=='none'&&!inPg&&f.indexOf('blur')>=0),bb=(b!=='none');\n"
-                      + "if(fb||bb){\n"
-                      + "pk2.push([e,e.style.getPropertyValue('filter'),e.style.getPropertyPriority('filter'),e.style.getPropertyValue('backdrop-filter'),e.style.getPropertyPriority('backdrop-filter')]);\n"
-                      + "if(fb)e.style.setProperty('filter','none','important');\n"
-                      + "if(bb){e.style.setProperty('backdrop-filter','none','important');e.style.setProperty('-webkit-backdrop-filter','none','important');}\n"
-                      + "}\n"
-                      + "if(inPg)continue;\n"
-                      + "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n"
-                      + "}\n"
-                      + "}catch(z){}\n"
-                      + "}\n"
-                      + "function peek2Off(){\n"
-                      + "try{\n"
-                      + "document.documentElement.classList.remove('rota-peek2');\n"
-                      + "pk2.forEach(function(a){\n"
-                      + "var e=a[0];\n"
-                      + "try{\n"
-                      + "if(a[1])e.style.setProperty('filter',a[1],a[2]);else e.style.removeProperty('filter');\n"
-                      + "if(a[3])e.style.setProperty('backdrop-filter',a[3],a[4]);else e.style.removeProperty('backdrop-filter');\n"
-                      + "e.style.removeProperty('-webkit-backdrop-filter');\n"
-                      + "}catch(z){}\n"
-                      + "});\n"
-                      + "pk2=[];\n"
-                      + "}catch(z){}\n"
-                      + "}\n"
-                      + "function cleanAll(){\n"
-                      + "peek2Off();\n"
-                      + "if(pg){['transform','transition','will-change','opacity'].forEach(function(k){pg.style.removeProperty(k);});}\n"
-                      + "document.documentElement.classList.remove('rota-noanim');\n"
-                      + "busy=false;\n"
-                      + "}\n"
-                      + "function springBack(){\n"
-                      + "if(!pg)return;\n"
-                      + "busy=true;busyT=Date.now();\n"
-                      + "pg.style.setProperty('transition','transform .5s cubic-bezier(.3,1.3,.5,1)','important');\n"
-                      + "setOff(0);\n"
-                      + "setTimeout(cleanAll,560);\n"
-                      + "}\n"
-                      + "function closeDown(v){\n"
-                      + "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n"
-                      + "var H=window.innerHeight,left=Math.max(H-off,1);\n"
-                      + "var d=Math.max(380,Math.min(600,left/Math.max(v,0.5)));\n"
-                      + "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.3,.1,.25,1)','important');\n"
-                      + "setOff(H);\n"
-                      + "setTimeout(function(){\n"
-                      + "pg.style.setProperty('transition','none','important');\n"
-                      + "pg.style.setProperty('opacity','0','important');\n"
-                      + "pg.style.removeProperty('transform');\n"
-                      + "document.documentElement.classList.add('rota-noanim');\n"
-                      + "var ok=false;\n"
-                      + "try{ok=tryNative();}catch(z){}\n"
-                      + "if(!ok){try{ok=tryClick();}catch(z){}}\n"
-                      + "var t0=Date.now();\n"
-                      + "(function poll(){\n"
-                      + "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n"
-                      + "if(Date.now()-t0>1500){\n"
-                      + "document.documentElement.classList.remove('rota-noanim');\n"
-                      + "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n"
-                      + "pg.style.removeProperty('opacity');\n"
-                      + "void pg.offsetWidth;\n"
-                      + "armed=true;\n"
-                      + "springBack();\n"
-                      + "return;\n"
-                      + "}\n"
-                      + "setTimeout(poll,50);\n"
-                      + "})();\n"
-                      + "},d);\n"
-                      + "}\n"
-                      + "setInterval(function(){\n"
-                      + "try{\n"
-                      + "if(!pageOpen())sawClosed=true;\n"
-                      + "else if(sawClosed&&!armed&&!busy)armed=true;\n"
-                      + "if(busy&&Date.now()-busyT>4000){cleanAll();}\n"
-                      + "}catch(z){}\n"
-                      + "},300);\n"
-                      + "document.addEventListener('touchstart',function(e){\n"
-                      + "tr=false;locked=false;\n"
-                      + "if(busy||!armed||!e.touches||e.touches.length!==1)return;\n"
-                      + "if(!pageOpen())return;\n"
-                      + "var path=(e.composedPath&&e.composedPath())||[];\n"
-                      + "var p=pageEl();\n"
-                      + "var pidx=path.indexOf(p);\n"
-                      + "if(pidx<0)return;\n"
-                      + "for(var i=0;i<path.length;i++){\n"
-                      + "var n=path[i];\n"
-                      + "if(!n||n.nodeType!==1)continue;\n"
-                      + "if(n.matches&&n.matches('#progress-bar,tp-yt-paper-slider,input[type=range],#volume-slider,ytmusic-player-queue-item[selected] #reorder'))return;\n"
-                      + "if(i<pidx&&n.scrollTop>0&&n.scrollHeight>n.clientHeight+2)return;\n"
-                      + "}\n"
-                      + "pg=p;sx=e.touches[0].clientX;sy=e.touches[0].clientY;off=0;smp=[];tr=true;\n"
-                      + "},{passive:true,capture:true});\n"
-                      + "document.addEventListener('touchmove',function(e){\n"
-                      + "if(!tr)return;\n"
-                      + "if(!e.touches||e.touches.length!==1){if(locked)springBack();tr=false;locked=false;return;}\n"
-                      + "var t=e.touches[0],dy=t.clientY-sy,dx=t.clientX-sx;\n"
-                      + "if(!locked){\n"
-                      + "if(dy<-10||(Math.abs(dx)>14&&Math.abs(dx)>dy)){tr=false;return;}\n"
-                      + "if(dy>8&&dy>Math.abs(dx)*1.3){\n"
-                      + "locked=true;sy=t.clientY;dy=0;\n"
-                      + "peek2On();\n"
-                      + "pg.style.setProperty('will-change','transform','important');\n"
-                      + "pg.style.setProperty('transition','none','important');\n"
-                      + "}else return;\n"
-                      + "}\n"
-                      + "if(e.cancelable)e.preventDefault();\n"
-                      + "off=rubber(dy);setOff(off);\n"
-                      + "var now=Date.now();smp.push([now,t.clientY]);\n"
-                      + "while(smp.length>2&&now-smp[0][0]>100)smp.shift();\n"
-                      + "},{passive:false,capture:true});\n"
-                      + "function endTouch(cancel){\n"
-                      + "if(!tr)return;\n"
-                      + "tr=false;\n"
-                      + "if(!locked)return;\n"
-                      + "locked=false;\n"
-                      + "var v=0;\n"
-                      + "if(smp.length>1){var a=smp[0],b=smp[smp.length-1];if(b[0]>a[0])v=(b[1]-a[1])/(b[0]-a[0]);}\n"
-                      + "if(!cancel&&(off>window.innerHeight*0.25||(v>0.55&&off>20)))closeDown(v);\n"
-                      + "else springBack();\n"
-                      + "}\n"
-                      + "document.addEventListener('touchend',function(){endTouch(false);},{passive:true,capture:true});\n"
-                      + "document.addEventListener('touchcancel',function(){endTouch(true);},{passive:true,capture:true});\n"
-                      + "try{var __pk=document.getElementById('__rota_peek');if(__pk)__pk.remove();document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');}catch(z){}\n"
-                      + "}catch(e){}})();\n"
-                      + "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});document.addEventListener('visibilitychange',function(e){document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});e.stopImmediatePropagation();},true);document.addEventListener('pause',function(e){try{var m=e.target;if(!m||!m.tagName)return;if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;if(window.__pipBlock&&!window.__userPause)return;m.dataset.pusulaWasPlaying='';}catch(z){}},true);document.addEventListener('play',function(e){try{var m=e.target;if(!m||!m.tagName)return;if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;m.dataset.pusulaWasPlaying='1';window.__userPause=false;}catch(z){}},true);}catch(e){}})();Atla(function(){if(location.hostname.indexOf('youtube.com')<0)return;var fast=false,gap=0,cover=null,obs=null,obsPl=null,tick=0;var sels=['.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info','.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text','.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container','.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list','.ytp-ad-feedback-dialog-container','.ytp-ad-skip-button-container','.caption-window','.ytp-caption-window-container','.ytp-caption-segment','.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial','ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer','.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'];function hideAdUi(on){for(var i=0;i<sels.length;i++){document.querySelectorAll(sels[i]).forEach(function(el){try{if(on){el.style.setProperty('display','none','important');el.style.setProperty('visibility','hidden','important');el.style.setProperty('opacity','0','important');}else{el.style.removeProperty('display');el.style.removeProperty('visibility');el.style.removeProperty('opacity');}}catch(x){}});}}function ensureCover(pl){if(cover&&cover.parentNode===pl)return cover;cover=document.createElement('div');cover.id='__adcover';cover.style.cssText='position:absolute;left:0;top:0;right:0;bottom:0;background:#000;z-index:2147483000;pointer-events:none;display:none';if(!document.getElementById('__adcss')){var st=document.createElement('style');st.id='__adcss';st.textContent='@keyframes __adsp{to{transform:rotate(360deg)}}';document.documentElement.appendChild(st);}var sp=document.createElement('div');sp.style.cssText='position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;box-sizing:border-box;border:4px solid rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.9);border-radius:50%;animation:__adsp .9s linear infinite';cover.appendChild(sp);pl.appendChild(cover);return cover;}function endAd(vd){fast=false;hideAdUi(false);if(!vd)return;vd.style.visibility='';vd.playbackRate=1;vd.muted=false;var tv=parseFloat(vd.dataset.pv||'1')||1;vd.volume=0;var k=0;var iv=setInterval(function(){k++;vd.muted=false;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;vd.muted=false;}},30);}function check(){try{var pl=document.querySelector('.html5-video-player');if(!pl)return;var vd=pl.querySelector('video');var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');var cv=ensureCover(pl);if(ad){gap=0;cv.style.display='block';tick++;if(tick%5===1)hideAdUi(true);if(vd){if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}try{vd.volume=0;}catch(x){}vd.style.visibility='hidden';if(vd.playbackRate<8)vd.playbackRate=16;}var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytp-ad-skip-button-container button');if(b)try{b.click();}catch(x){}}else if(fast||cv.style.display!=='none'){if(vd&&vd.playbackRate>1)vd.playbackRate=1;gap++;if(gap>=6){gap=0;cv.style.display='none';endAd(vd);}}}catch(e){}}function watch(){var pl=document.querySelector('.html5-video-player');if(pl&&pl!==obsPl){obsPl=pl;if(obs)obs.disconnect();obs=new MutationObserver(check);obs.observe(pl,{attributes:true,attributeFilter:['class']});}}setInterval(function(){watch();check();},60);})();Uygulamada aÃ§(function(){if(location.hostname.indexOf('youtube.com')<0)return;var reApp=/uygulamada\\s*a[cÃ§]|uygulamay[Ä±i]\\s*a[cÃ§]|uygulamay[Ä±i]\\s*(edin|indir)|open\\s*(in\\s*)?(the\\s*)?app|get\\s*the\\s*app|use\\s*the\\s*app/i;var rePrem=/premium|youtube\\s*premium|Ã¼ye\\s*ol|abone\\s*ol|try\\s*premium|get\\s*premium|go\\s*premium|premium.?a\\s*geÃ§|premium.?Ã¼ye/i;function hideEl(e){try{e.style.setProperty('display','none','important');e.style.setProperty('visibility','hidden','important');e.style.setProperty('height','0','important');e.style.setProperty('max-height','0','important');e.style.setProperty('overflow','hidden','important');e.style.setProperty('opacity','0','important');}catch(x){}}function hide(){try{document.querySelectorAll('ytm-open-app-button-renderer,ytm-open-app-banner-renderer,ytd-open-app-button-renderer,ytmusic-open-app-button,ytm-promo-banner,ytmusic-pivot-bar-renderer ytm-promo-banner,ytm-app-promo,ytd-app-promo,ytmusic-mealbar-promo-renderer').forEach(hideEl);var reApp=/uygulama(y[Ä±i]\\s*)?(a[cÃ§]|yÃ¼kle|indir)|open\\s*(the\\s*)?app|install\\s*(the\\s*)?app|get\\s*(the\\s*)?app|open\\s*in\\s*app|try\\s*the\\s*app/i;document.querySelectorAll('button,a,ytm-button-renderer,yt-button-renderer,ytmusic-button-renderer,[role=button]').forEach(function(e){var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\\s+/g,' ').trim();if(t.length>0&&t.length<80&&reApp.test(t))hideEl(e);});document.querySelectorAll('ytm-mealbar-promo-renderer,ytd-mealbar-promo-renderer,ytm-premium-upsell,ytd-premium-upsell,ytmusic-premium-upsell,ytm-banner-promo-renderer,ytd-banner-promo-renderer,ytm-statement-banner-renderer,.ytp-pause-overlay-container,.premium-upsell,.ytmusic-toast-renderer').forEach(hideEl);document.querySelectorAll('[class*=\"premium\"],[id*=\"premium\"]').forEach(function(e){var t=(e.textContent||'');if(t.length<200&&rePrem.test(t))hideEl(e);});var head=document.querySelector('ytm-mobile-topbar-renderer')||document.querySelector('header')||document.querySelector('ytmusic-nav-bar');if(head){head.querySelectorAll('a,button,ytm-button-renderer,yt-button-renderer').forEach(function(e){var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).trim();if(t.length<80&&(reApp.test(t)||rePrem.test(t))){var c=e.closest('ytm-button-renderer,yt-button-renderer')||e;hideEl(c);}});}document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,.yt-upsell-dialog').forEach(function(d){var t=(d.textContent||'');if(rePrem.test(t)){hideEl(d);var b=d.querySelector('#cancel-button,button');if(b)try{b.click();}catch(z){}}});}catch(x){}}setInterval(hide,600);})();"
+                      "(function(){try{\n" +
+                      "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
+                      "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
+                      "var HS='ytmusic-play-button-renderer,#play-pause-button,.play-pause-button';\n" +
+                      "var FX=['paper-ripple','tp-yt-paper-ripple','yt-touch-feedback-shape','.yt-spec-touch-feedback-shape','#ink'];\n" +
+                      "var css='*{-webkit-tap-highlight-color:rgba(0,0,0,0)!important}html,body{overscroll-behavior-y:contain!important}*,*::before,*::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}*:not(ytmusic-player-page):not(ytmusic-player-page *){filter:none!important}';\n" +
+                      "HS.split(',').forEach(function(h){\n" +
+                      "css+=h+'{outline:none!important;--paper-ripple-color:transparent;--paper-ripple-opacity:0;--yt-spec-touch-response:transparent;--yt-spec-touch-response-v2:transparent;--yt-focus-color:transparent}';\n" +
+                      "FX.forEach(function(f){css+=h+' '+f+'{display:none!important}';});\n" +
+                      "});\n" +
+                      "var st=document.createElement('style');st.id='__rota_ytm_ux5';st.textContent=css;\n" +
+                      "document.documentElement.appendChild(st);\n" +
+                      "var ov=null;\n" +
+                      "function getOv(){\n" +
+                      "if(ov&&ov.isConnected)return ov;\n" +
+                      "ov=document.createElement('div');\n" +
+                      "ov.style.cssText='position:fixed;left:0;top:0;border-radius:50%;background:rgba(150,150,150,.4);pointer-events:none;z-index:2147483646;opacity:0;display:none;';\n" +
+                      "document.documentElement.appendChild(ov);\n" +
+                      "return ov;\n" +
+                      "}\n" +
+                      "function findHost(e){\n" +
+                      "var path=(e.composedPath&&e.composedPath())||[];\n" +
+                      "for(var i=0;i<path.length;i++){\n" +
+                      "var n=path[i];\n" +
+                      "if(n&&n.matches&&n.matches(HS))return n;\n" +
+                      "}\n" +
+                      "for(var j=0;j<path.length;j++){\n" +
+                      "var m=path[j];\n" +
+                      "if(m&&m.getAttribute&&m.matches&&m.matches('button,[role=button],tp-yt-paper-icon-button,yt-icon-button')){\n" +
+                      "var al=m.getAttribute('aria-label')||'';\n" +
+                      "if(/^(oynat|duraklat|play|pause)\\b/i.test(al))return m;\n" +
+                      "}\n" +
+                      "}\n" +
+                      "return null;\n" +
+                      "}\n" +
+                      "function inkDown(e){\n" +
+                      "try{\n" +
+                      "var h=findHost(e);if(!h)return;\n" +
+                      "var r=h.getBoundingClientRect();\n" +
+                      "if(r.width<8||r.width>150||Math.abs(r.width-r.height)>r.width*0.3)return;\n" +
+                      "var o=getOv(),s=Math.max(r.width,r.height);\n" +
+                      "o.style.transition='none';\n" +
+                      "o.style.width=s+'px';o.style.height=s+'px';\n" +
+                      "o.style.left=(r.left+(r.width-s)/2)+'px';o.style.top=(r.top+(r.height-s)/2)+'px';\n" +
+                      "o.style.display='block';o.style.opacity='0';\n" +
+                      "void o.offsetWidth;\n" +
+                      "o.style.transition='opacity .07s ease-out';o.style.opacity='1';\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "function inkUp(){\n" +
+                      "try{\n" +
+                      "if(!ov||ov.style.display==='none')return;\n" +
+                      "ov.style.transition='opacity .32s ease-out';ov.style.opacity='0';\n" +
+                      "var o=ov;setTimeout(function(){if(o.style.opacity==='0')o.style.display='none';},360);\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "document.addEventListener('pointerdown',inkDown,true);\n" +
+                      "window.addEventListener('pointerup',inkUp,true);\n" +
+                      "window.addEventListener('pointercancel',inkUp,true);\n" +
+                      "window.addEventListener('touchend',inkUp,true);\n" +
+                      "window.addEventListener('touchcancel',inkUp,true);\n" +
+                      "function clickable(e){\n" +
+                      "var n=e;\n" +
+                      "for(var k=0;k<12&&n;k++){\n" +
+                      "if(n.nodeType===1&&n.matches&&n.matches('button,[role=button],tp-yt-paper-icon-button,yt-icon-button,a,[class*=minimize],[class*=collapse],[class*=toggle-player]'))return n;\n" +
+                      "n=n.parentElement||(n.getRootNode&&n.getRootNode().host)||null;\n" +
+                      "}\n" +
+                      "return null;\n" +
+                      "}\n" +
+                      "function findChevron(){\n" +
+                      "var pg=pageEl();if(!pg)return null;\n" +
+                      "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','.toggle-player','[class*=minimize]','[class*=collapse-button]','[class*=dismiss]'];\n" +
+                      "for(var i=0;i<sels.length;i++){var el=pg.querySelector(sels[i]);if(el)return el;}\n" +
+                      "var all=pg.querySelectorAll('[aria-label]');\n" +
+                      "for(var j=0;j<all.length;j++){\n" +
+                      "var al=all[j].getAttribute('aria-label')||'';\n" +
+                      "if(/^(aşağı|asagi|collapse|minimi|küçült|kucult|down\\b)/i.test(al))return all[j];\n" +
+                      "}\n" +
+                      "for(var y=16;y<=110;y+=12){\n" +
+                      "for(var x=16;x<=96;x+=12){\n" +
+                      "var c=clickable(document.elementFromPoint(x,y));\n" +
+                      "if(c&&c.getBoundingClientRect().width<120)return c;\n" +
+                      "}\n" +
+                      "}\n" +
+                      "return null;\n" +
+                      "}\n" +
+                      "function fullTap(el){\n" +
+                      "var r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;\n" +
+                      "try{\n" +
+                      "var tc=new Touch({identifier:77,target:el,clientX:x,clientY:y});\n" +
+                      "el.dispatchEvent(new TouchEvent('touchstart',{touches:[tc],targetTouches:[tc],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n" +
+                      "el.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n" +
+                      "}catch(z){}\n" +
+                      "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){\n" +
+                      "var C=t.indexOf('pointer')===0?PointerEvent:MouseEvent;\n" +
+                      "try{el.dispatchEvent(new C(t,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,view:window,button:0,pointerType:'touch',isPrimary:true}));}catch(z){}\n" +
+                      "});\n" +
+                      "}\n" +
+                      "function tryNative(){\n" +
+                      "if(!window.RotaTap)return false;\n" +
+                      "var x=45,y=32,el=findChevron();\n" +
+                      "if(el){var r=el.getBoundingClientRect();if(r.width>0&&r.top<200&&r.left<200){x=r.left+r.width/2;y=r.top+r.height/2;}}\n" +
+                      "window.RotaTap.tap(x/window.innerWidth,y/window.innerHeight);\n" +
+                      "return true;\n" +
+                      "}\n" +
+                      "function tryClick(){var el=findChevron();if(!el)return false;el.click();return true;}\n" +
+                      "function tryTap(){var el=findChevron();if(!el)return false;fullTap(el);return true;}\n" +
+                      "function tryLayout(){\n" +
+                      "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
+                      "if(!layout)return false;\n" +
+                      "try{if('playerPageOpen_' in layout)layout.playerPageOpen_=false;}catch(z){}\n" +
+                      "try{layout.removeAttribute('player-page-open_');}catch(z){}\n" +
+                      "try{layout.setAttribute('player-ui-state_','PLAYER_BAR_ONLY');}catch(z){}\n" +
+                      "return true;\n" +
+                      "}\n" +
+                      "function layoutSig(){\n" +
+                      "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
+                      "if(!l)return '';\n" +
+                      "return l.getAttributeNames().map(function(k){return k+'='+l.getAttribute(k);}).join('|');\n" +
+                      "}\n" +
+                      "function openNow(){\n" +
+                      "var p=pageEl();if(!p)return false;\n" +
+                      "var cs=getComputedStyle(p);\n" +
+                      "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
+                      "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
+                      "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n" +
+                      "}\n" +
+                      "function showDebug(){\n" +
+                      "try{\n" +
+                      "var seen=[];\n" +
+                      "for(var y=16;y<=110;y+=22){for(var x=16;x<=96;x+=26){\n" +
+                      "var e=document.elementFromPoint(x,y),n=0;\n" +
+                      "while(e&&n<3){\n" +
+                      "var d=e.tagName.toLowerCase()+(e.className&&typeof e.className==='string'?'.'+e.className.trim().split(/\\s+/).slice(0,2).join('.'):'')+(e.getAttribute('aria-label')?'['+e.getAttribute('aria-label')+']':'');\n" +
+                      "if(seen.indexOf(d)<0)seen.push(d);\n" +
+                      "e=e.parentElement;n++;\n" +
+                      "}\n" +
+                      "}}\n" +
+                      "var b=document.createElement('div');\n" +
+                      "b.style.cssText='position:fixed;left:8px;right:8px;bottom:70px;z-index:2147483647;background:rgba(0,0,0,.85);color:#fff;font:11px/1.3 monospace;padding:8px;border-radius:8px;word-break:break-all;';\n" +
+                      "b.textContent='Rota: küçült tuşu çalışmadı. '+seen.slice(0,14).join(' ; ');\n" +
+                      "document.documentElement.appendChild(b);\n" +
+                      "setTimeout(function(){try{b.remove();}catch(z){}},12000);\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "function pageEl(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}\n" +
+                      "function pageOpen(){\n" +
+                      "var p=pageEl();if(!p)return false;\n" +
+                      "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
+                      "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n" +
+                      "}\n" +
+                      "var busyT=0,tracking=false,locked=false,busy=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
+                      "function rubber(d){\n" +
+                      "if(d<=0)return 0;\n" +
+                      "var R=window.innerHeight*1.1;\n" +
+                      "return R*(1-Math.exp(-d/R));\n" +
+                      "}\n" +
+                      "var peekEl=[];\n" +
+                      "function peekOn(){\n" +
+                      "try{\n" +
+                      "if(!document.getElementById('__rota_peek')){\n" +
+                      "var s=document.createElement('style');s.id='__rota_peek';\n" +
+                      "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
+                      "document.documentElement.appendChild(s);\n" +
+                      "}\n" +
+                      "document.documentElement.classList.add('rota-peek');\n" +
+                      "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
+                      "if(l){\n" +
+                      "var q=[l],n=0;\n" +
+                      "while(q.length&&n<120){\n" +
+                      "var e=q.shift();n++;\n" +
+                      "if(e.nodeType===1&&e!==pg&&!(pg&&pg.contains(e))){\n" +
+                      "var cs=getComputedStyle(e);\n" +
+                      "var bf=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n" +
+                      "var fl=cs.filter||'none';\n" +
+                      "if(bf!=='none'||fl.indexOf('blur')>=0){\n" +
+                      "peekEl.push([e,e.style.cssText]);\n" +
+                      "e.style.setProperty('backdrop-filter','none','important');\n" +
+                      "e.style.setProperty('-webkit-backdrop-filter','none','important');\n" +
+                      "if(fl.indexOf('blur')>=0)e.style.setProperty('filter','none','important');\n" +
+                      "}\n" +
+                      "}\n" +
+                      "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n" +
+                      "}\n" +
+                      "}\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "function peekOff(){\n" +
+                      "try{\n" +
+                      "document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');\n" +
+                      "peekEl.forEach(function(a){a[0].style.cssText=a[1];});\n" +
+                      "peekEl=[];\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "function setOff(v){\n" +
+                      "if(!pg)return;\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');\n" +
+                      "pg.style.setProperty('border-radius',Math.min(v,28)+'px '+Math.min(v,28)+'px 0 0','important');\n" +
+                      "}\n" +
+                      "function clean(){\n" +
+                      "if(!pg)return;\n" +
+                      "peekOff();\n" +
+                      "['transition','will-change','overflow'].forEach(function(k){pg.style.removeProperty(k);});\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "busy=false;\n" +
+                      "}\n" +
+                      "function springBack(){\n" +
+                      "if(!pg)return;\n" +
+                      "busy=true;busyT=Date.now();\n" +
+                      "pg.style.setProperty('transition','transform .55s cubic-bezier(.3,1.35,.5,1)','important');\n" +
+                      "setOff(0);\n" +
+                      "setTimeout(clean,600);\n" +
+                      "}\n" +
+                      "function commit(v){\n" +
+                      "busy=true;busyT=Date.now();\n" +
+                      "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
+                      "var d=Math.max(170,Math.min(340,left/Math.max(v,0.9)));\n" +
+                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
+                      "setOff(H);\n" +
+                      "setTimeout(afterDown,d);\n" +
+                      "}\n" +
+                      "function afterDown(){\n" +
+                      "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "pg.style.removeProperty('border-radius');\n" +
+                      "document.documentElement.classList.add('rota-noanim');\n" +
+                      "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n" +
+                      "function success(){\n" +
+                      "clean();\n" +
+                      "}\n" +
+                      "function fail(){\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "void pg.offsetWidth;\n" +
+                      "showDebug();\n" +
+                      "springBack();\n" +
+                      "}\n" +
+                      "function next(){\n" +
+                      "if(i>=tries.length){fail();return;}\n" +
+                      "var ok=false;\n" +
+                      "try{ok=tries[i++]();}catch(z){}\n" +
+                      "if(!ok){next();return;}\n" +
+                      "var sig0=layoutSig(),t0=Date.now();\n" +
+                      "(function poll(){\n" +
+                      "var el=Date.now()-t0;\n" +
+                      "if(!openNow()){success();return;}\n" +
+                      "if(layoutSig()!==sig0){if(el>=1200){success();return;}}\n" +
+                      "else if(el>=700){next();return;}\n" +
+                      "setTimeout(poll,50);\n" +
+                      "})();\n" +
+                      "}\n" +
+                      "next();\n" +
+                      "}\n" +
+                      "var armed=true,sawClosed=false,busy=false,busyT=0,locked=false,tr=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
+                      "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
+                      "function rubber(d){if(d<=0)return 0;var R=window.innerHeight*1.1;return R*(1-Math.exp(-d/R));}\n" +
+                      "function setOff(v){if(!pg)return;pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');}\n" +
+                      "var pk2=[];\n" +
+                      "function peek2On(){\n" +
+                      "try{\n" +
+                      "if(!pg)return;\n" +
+                      "document.documentElement.classList.add('rota-peek2');\n" +
+                      "if(!document.getElementById('__rota_peek2')){var rs=document.createElement('style');rs.id='__rota_peek2';rs.textContent='html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout #main-panel,html.rota-peek2 ytmusic-app-layout ytmusic-pages,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response,html.rota-peek2 ytmusic-app-layout #nav-bar-background,html.rota-peek2 ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response{display:block!important}';document.documentElement.appendChild(rs);}\n" +
+                      "var root=document.querySelector('ytmusic-app-layout,#layout')||document.body;\n" +
+                      "var q=[root],n=0;\n" +
+                      "while(q.length&&n<800){\n" +
+                      "var e=q.shift();n++;\n" +
+                      "if(e.nodeType!==1)continue;\n" +
+                      "var inPg=(e===pg);\n" +
+                      "var cs=getComputedStyle(e);\n" +
+                      "var f=cs.filter||'none',b=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n" +
+                      "var fb=(f!=='none'&&!inPg&&f.indexOf('blur')>=0),bb=(b!=='none');\n" +
+                      "if(fb||bb){\n" +
+                      "pk2.push([e,e.style.getPropertyValue('filter'),e.style.getPropertyPriority('filter'),e.style.getPropertyValue('backdrop-filter'),e.style.getPropertyPriority('backdrop-filter')]);\n" +
+                      "if(fb)e.style.setProperty('filter','none','important');\n" +
+                      "if(bb){e.style.setProperty('backdrop-filter','none','important');e.style.setProperty('-webkit-backdrop-filter','none','important');}\n" +
+                      "}\n" +
+                      "if(inPg)continue;\n" +
+                      "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n" +
+                      "}\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "function peek2Off(){\n" +
+                      "try{\n" +
+                      "document.documentElement.classList.remove('rota-peek2');\n" +
+                      "pk2.forEach(function(a){\n" +
+                      "var e=a[0];\n" +
+                      "try{\n" +
+                      "if(a[1])e.style.setProperty('filter',a[1],a[2]);else e.style.removeProperty('filter');\n" +
+                      "if(a[3])e.style.setProperty('backdrop-filter',a[3],a[4]);else e.style.removeProperty('backdrop-filter');\n" +
+                      "e.style.removeProperty('-webkit-backdrop-filter');\n" +
+                      "}catch(z){}\n" +
+                      "});\n" +
+                      "pk2=[];\n" +
+                      "}catch(z){}\n" +
+                      "}\n" +
+                      "function cleanAll(){\n" +
+                      "peek2Off();\n" +
+                      "if(pg){['transform','transition','will-change','opacity'].forEach(function(k){pg.style.removeProperty(k);});}\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "busy=false;\n" +
+                      "}\n" +
+                      "function springBack(){\n" +
+                      "if(!pg)return;\n" +
+                      "busy=true;busyT=Date.now();\n" +
+                      "pg.style.setProperty('transition','transform .5s cubic-bezier(.3,1.3,.5,1)','important');\n" +
+                      "setOff(0);\n" +
+                      "setTimeout(cleanAll,560);\n" +
+                      "}\n" +
+                      "function closeDown(v){\n" +
+                      "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
+                      "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
+                      "var d=Math.max(380,Math.min(600,left/Math.max(v,0.5)));\n" +
+                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.3,.1,.25,1)','important');\n" +
+                      "setOff(H);\n" +
+                      "setTimeout(function(){\n" +
+                      "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "document.documentElement.classList.add('rota-noanim');\n" +
+                      "var ok=false;\n" +
+                      "try{ok=tryNative();}catch(z){}\n" +
+                      "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
+                      "var t0=Date.now();\n" +
+                      "(function poll(){\n" +
+                      "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n" +
+                      "if(Date.now()-t0>1500){\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "void pg.offsetWidth;\n" +
+                      "armed=true;\n" +
+                      "springBack();\n" +
+                      "return;\n" +
+                      "}\n" +
+                      "setTimeout(poll,50);\n" +
+                      "})();\n" +
+                      "},d);\n" +
+                      "}\n" +
+                      "setInterval(function(){\n" +
+                      "try{\n" +
+                      "if(!pageOpen())sawClosed=true;\n" +
+                      "else if(sawClosed&&!armed&&!busy)armed=true;\n" +
+                      "if(busy&&Date.now()-busyT>4000){cleanAll();}\n" +
+                      "}catch(z){}\n" +
+                      "},300);\n" +
+                      "document.addEventListener('touchstart',function(e){\n" +
+                      "tr=false;locked=false;\n" +
+                      "if(busy||!armed||!e.touches||e.touches.length!==1)return;\n" +
+                      "if(!pageOpen())return;\n" +
+                      "var path=(e.composedPath&&e.composedPath())||[];\n" +
+                      "var p=pageEl();\n" +
+                      "var pidx=path.indexOf(p);\n" +
+                      "if(pidx<0)return;\n" +
+                      "for(var i=0;i<path.length;i++){\n" +
+                      "var n=path[i];\n" +
+                      "if(!n||n.nodeType!==1)continue;\n" +
+                      "if(n.matches&&n.matches('#progress-bar,tp-yt-paper-slider,input[type=range],#volume-slider,ytmusic-player-queue-item[selected] #reorder'))return;\n" +
+                      "if(i<pidx&&n.scrollTop>0&&n.scrollHeight>n.clientHeight+2)return;\n" +
+                      "}\n" +
+                      "pg=p;sx=e.touches[0].clientX;sy=e.touches[0].clientY;off=0;smp=[];tr=true;\n" +
+                      "},{passive:true,capture:true});\n" +
+                      "document.addEventListener('touchmove',function(e){\n" +
+                      "if(!tr)return;\n" +
+                      "if(!e.touches||e.touches.length!==1){if(locked)springBack();tr=false;locked=false;return;}\n" +
+                      "var t=e.touches[0],dy=t.clientY-sy,dx=t.clientX-sx;\n" +
+                      "if(!locked){\n" +
+                      "if(dy<-10||(Math.abs(dx)>14&&Math.abs(dx)>dy)){tr=false;return;}\n" +
+                      "if(dy>8&&dy>Math.abs(dx)*1.3){\n" +
+                      "locked=true;sy=t.clientY;dy=0;\n" +
+                      "peek2On();\n" +
+                      "pg.style.setProperty('will-change','transform','important');\n" +
+                      "pg.style.setProperty('transition','none','important');\n" +
+                      "}else return;\n" +
+                      "}\n" +
+                      "if(e.cancelable)e.preventDefault();\n" +
+                      "off=rubber(dy);setOff(off);\n" +
+                      "var now=Date.now();smp.push([now,t.clientY]);\n" +
+                      "while(smp.length>2&&now-smp[0][0]>100)smp.shift();\n" +
+                      "},{passive:false,capture:true});\n" +
+                      "function endTouch(cancel){\n" +
+                      "if(!tr)return;\n" +
+                      "tr=false;\n" +
+                      "if(!locked)return;\n" +
+                      "locked=false;\n" +
+                      "var v=0;\n" +
+                      "if(smp.length>1){var a=smp[0],b=smp[smp.length-1];if(b[0]>a[0])v=(b[1]-a[1])/(b[0]-a[0]);}\n" +
+                      "if(!cancel&&(off>window.innerHeight*0.25||(v>0.55&&off>20)))closeDown(v);\n" +
+                      "else springBack();\n" +
+                      "}\n" +
+                      "document.addEventListener('touchend',function(){endTouch(false);},{passive:true,capture:true});\n" +
+                      "document.addEventListener('touchcancel',function(){endTouch(true);},{passive:true,capture:true});\n" +
+                      "try{var __pk=document.getElementById('__rota_peek');if(__pk)__pk.remove();document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');}catch(z){}\n" +
+                      "}catch(e){}})();\n"
 
+                  const val KEEP_PLAYING_JS =
+                      "(function(){try{" +
+                          "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
+                          "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
+                          "document.addEventListener('visibilitychange',function(e){" +
+                          "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
+                          "e.stopImmediatePropagation();},true);" +
+                          // Kullanıcı durdurduysa arka planda tekrar başlatma
+                          "document.addEventListener('pause',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                          "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
+                          "if(window.__pipBlock&&!window.__userPause)return;" +
+                          "m.dataset.pusulaWasPlaying='';}catch(z){}},true);" +
+                          "document.addEventListener('play',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                          "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
+                          "m.dataset.pusulaWasPlaying='1';window.__userPause=false;}catch(z){}},true);" +
+                          "}catch(e){}})();"
+
+                  // Reklam sırasında: siyah bekleme ekranı örtülür, ses tamamen kısılır, altyazı ve reklam arayüzü gizlenir,
+                  // reklam 16 kat hızlandırılır ve "Atla" düğmesine basılır. Reklam bitince ekran varsayılan haline döner.
+                  const val STABLE_AD_BLOCKER_JS =
+                      "(function(){" +
+                      "if(location.hostname.indexOf('youtube.com')<0)return;" +
+                      "var fast=false,gap=0,cover=null,obs=null,obsPl=null,tick=0;" +
+                      "var sels=['.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info','.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text','.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container','.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list','.ytp-ad-feedback-dialog-container','.ytp-ad-skip-button-container','.caption-window','.ytp-caption-window-container','.ytp-caption-segment','.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial','ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer','.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'];" +
+                      "function hideAdUi(on){" +
+                      "for(var i=0;i<sels.length;i++){" +
+                      "document.querySelectorAll(sels[i]).forEach(function(el){" +
+                      "try{" +
+                      "if(on){el.style.setProperty('display','none','important');el.style.setProperty('visibility','hidden','important');el.style.setProperty('opacity','0','important');}" +
+                      "else{el.style.removeProperty('display');el.style.removeProperty('visibility');el.style.removeProperty('opacity');}" +
+                      "}catch(x){}" +
+                      "});" +
+                      "}" +
+                      "}" +
+                      "function ensureCover(pl){" +
+                      "if(cover&&cover.parentNode===pl)return cover;" +
+                      "cover=document.createElement('div');" +
+                      "cover.id='__adcover';" +
+                      "cover.style.cssText='position:absolute;left:0;top:0;right:0;bottom:0;background:#000;z-index:2147483000;pointer-events:none;display:none';" +
+                      "if(!document.getElementById('__adcss')){" +
+                      "var st=document.createElement('style');" +
+                      "st.id='__adcss';" +
+                      "st.textContent='@keyframes __adsp{to{transform:rotate(360deg)}}';" +
+                      "document.documentElement.appendChild(st);" +
+                      "}" +
+                      "var sp=document.createElement('div');" +
+                      "sp.style.cssText='position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;box-sizing:border-box;border:4px solid rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.9);border-radius:50%;animation:__adsp .9s linear infinite';" +
+                      "cover.appendChild(sp);" +
+                      "pl.appendChild(cover);" +
+                      "return cover;" +
+                      "}" +
+                      "function endAd(vd){" +
+                      "fast=false;" +
+                      "hideAdUi(false);" +
+                      "if(!vd)return;" +
+                      "vd.style.visibility='';" +
+                      "vd.playbackRate=1;" +
+                      // Reklam bitince asla muted bırakma — ses her zaman geri açılır
+                      "vd.muted=false;" +
+                      "var tv=parseFloat(vd.dataset.pv||'1')||1;" +
+                      "vd.volume=0;" +
+                      "var k=0;" +
+                      "var iv=setInterval(function(){k++;vd.muted=false;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;vd.muted=false;}},30);" +
+                      "}" +
+                      "function check(){" +
+                      "try{" +
+                      "var pl=document.querySelector('.html5-video-player');" +
+                      "if(!pl)return;" +
+                      "var vd=pl.querySelector('video');" +
+                      "var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');" +
+                      "var cv=ensureCover(pl);" +
+                      "if(ad){" +
+                      "gap=0;" +
+                      "cv.style.display='block';" +
+                      "tick++;" +
+                      "if(tick%5===1)hideAdUi(true);" +
+                      "if(vd){" +
+                      "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
+                      // muted kullanma — sadece volume=0 (reklam sesi); içerik muted kalmasın
+                      "try{vd.volume=0;}catch(x){}" +
+                      "vd.style.visibility='hidden';" +
+                      "if(vd.playbackRate<8)vd.playbackRate=16;" +
+                      "}" +
+                      "var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytp-ad-skip-button-container button');" +
+                      "if(b)try{b.click();}catch(x){}" +
+                      "}else if(fast||cv.style.display!=='none'){" +
+                      "if(vd&&vd.playbackRate>1)vd.playbackRate=1;" +
+                      "gap++;" +
+                      "if(gap>=6){" +
+                      "gap=0;" +
+                      "cv.style.display='none';" +
+                      "endAd(vd);" +
+                      "}" +
+                      "}" +
+                      "}catch(e){}" +
+                      "}" +
+                      "function watch(){" +
+                      "var pl=document.querySelector('.html5-video-player');" +
+                      "if(pl&&pl!==obsPl){" +
+                      "obsPl=pl;" +
+                      "if(obs)obs.disconnect();" +
+                      "obs=new MutationObserver(check);" +
+                      "obs.observe(pl,{attributes:true,attributeFilter:['class']});" +
+                      "}" +
+                      "}" +
+                      "setInterval(function(){watch();check();},60);" +
+                      "})();"
+
+                  // YouTube üst çubuğundaki "Uygulamada aç" düğmesini gizler; başka hiçbir şeye dokunmaz.
+                  const val OPEN_APP_HIDE_JS =
+                      "(function(){" +
+                      "if(location.hostname.indexOf('youtube.com')<0)return;" +
+                      "var reApp=/uygulamada\\s*a[cç]|uygulamay[ıi]\\s*a[cç]|uygulamay[ıi]\\s*(edin|indir)|open\\s*(in\\s*)?(the\\s*)?app|get\\s*the\\s*app|use\\s*the\\s*app/i;" +
+                      "var rePrem=/premium|youtube\\s*premium|üye\\s*ol|abone\\s*ol|try\\s*premium|get\\s*premium|go\\s*premium|premium.?a\\s*geç|premium.?üye/i;" +
+                      "function hideEl(e){try{e.style.setProperty('display','none','important');e.style.setProperty('visibility','hidden','important');e.style.setProperty('height','0','important');e.style.setProperty('max-height','0','important');e.style.setProperty('overflow','hidden','important');e.style.setProperty('opacity','0','important');}catch(x){}}" +
+                      "function hide(){" +
+                      "try{" +
+                      // Uygulamada aç / uygulamayı yükle bannerları
+                      "document.querySelectorAll('ytm-open-app-button-renderer,ytm-open-app-banner-renderer,ytd-open-app-button-renderer,ytmusic-open-app-button,ytm-promo-banner,ytmusic-pivot-bar-renderer ytm-promo-banner,ytm-app-promo,ytd-app-promo,ytmusic-mealbar-promo-renderer').forEach(hideEl);" +
+                      "var reApp=/uygulama(y[ıi]\\s*)?(a[cç]|yükle|indir)|open\\s*(the\\s*)?app|install\\s*(the\\s*)?app|get\\s*(the\\s*)?app|open\\s*in\\s*app|try\\s*the\\s*app/i;" +
+                      "document.querySelectorAll('button,a,ytm-button-renderer,yt-button-renderer,ytmusic-button-renderer,[role=button]').forEach(function(e){" +
+                      "var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\\s+/g,' ').trim();" +
+                      "if(t.length>0&&t.length<80&&reApp.test(t))hideEl(e);" +
+                      "});" +
+                      // Premium upsell / mealtime / offer banners
+                      "document.querySelectorAll('ytm-mealbar-promo-renderer,ytd-mealbar-promo-renderer,ytm-premium-upsell,ytd-premium-upsell,ytmusic-premium-upsell,ytm-banner-promo-renderer,ytd-banner-promo-renderer,ytm-statement-banner-renderer,.ytp-pause-overlay-container,.premium-upsell,.ytmusic-toast-renderer').forEach(hideEl);" +
+                      "document.querySelectorAll('[class*=\"premium\"],[id*=\"premium\"]').forEach(function(e){var t=(e.textContent||'');if(t.length<200&&rePrem.test(t))hideEl(e);});" +
+                      "var head=document.querySelector('ytm-mobile-topbar-renderer')||document.querySelector('header')||document.querySelector('ytmusic-nav-bar');" +
+                      "if(head){" +
+                      "head.querySelectorAll('a,button,ytm-button-renderer,yt-button-renderer').forEach(function(e){" +
+                      "var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).trim();" +
+                      "if(t.length<80&&(reApp.test(t)||rePrem.test(t))){var c=e.closest('ytm-button-renderer,yt-button-renderer')||e;hideEl(c);}" +
+                      "});" +
+                      "}" +
+                      // Premium diyalogları kapat
+                      "document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,.yt-upsell-dialog').forEach(function(d){" +
+                      "var t=(d.textContent||'');if(rePrem.test(t)){hideEl(d);var b=d.querySelector('#cancel-button,button');if(b)try{b.click();}catch(z){}}" +
+                      "});" +
+                      "}catch(x){}" +
+                      "}" +
+                      "setInterval(hide,600);" +
+                      "})();"
+
+                  // YouTube sayfasında ortadaki büyük logo / oynat katmanı ve watermark
                   const val YT_HIDE_LOGO_JS =
                       "(function(){try{" +
                       "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
