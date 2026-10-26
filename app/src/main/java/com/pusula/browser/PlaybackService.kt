@@ -88,18 +88,12 @@ class PlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         running = true
-        try { startService(Intent(this, RotaMediaBrowserService::class.java)) } catch (_: Exception) { }
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
-            // IMPORTANCE_DEFAULT = bildirim çubuğunda görünür (LOW/MIN gizli kalıyordu)
-            val ch = NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_DEFAULT)
-            ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            ch.setShowBadge(false)
-            nm.createNotificationChannel(ch)
-            val qc = NotificationChannel(CHANNEL_QUIET, "Medya oynatıcı (PiP)", NotificationManager.IMPORTANCE_LOW)
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Medya oynatıcı", NotificationManager.IMPORTANCE_LOW))
+            val qc = NotificationChannel(CHANNEL_QUIET, "Medya oynatıcı (küçük pencere)", NotificationManager.IMPORTANCE_MIN)
             qc.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            qc.setShowBadge(false)
             nm.createNotificationChannel(qc)
         }
         val s = MediaSession(this, "Rota")
@@ -121,10 +115,7 @@ class PlaybackService : Service() {
                 }
             }
             override fun onPlayFromMediaId(mediaId: String, extras: android.os.Bundle?) {
-                var u = mediaId?.trim().orEmpty() ?: return
-                if (u.startsWith("sg:") || u.startsWith("pl:")) u = u.substring(3)
-                if (!u.startsWith("http")) return
-                sendBroadcast(Intent(ACTION_OPEN).setPackage(packageName).putExtra("url", u).putExtra("autoplay", true))
+                sendBroadcast(Intent(ACTION_OPEN).setPackage(packageName).putExtra("url", mediaId))
             }
             override fun onPlayFromSearch(query: String?, extras: android.os.Bundle?) {
                 val q = query?.trim().orEmpty()
@@ -273,14 +264,6 @@ class PlaybackService : Service() {
             .setBufferedPosition(posSafe)
             .build())
 
-        // Sadece Android Auto MediaSession — telefon UI / WebView'e dokunmaz
-        try {
-            RotaMediaBrowserService.updateNowPlaying(
-                title, artist, artUrl, playing, posSafe, if (duration > 0) duration else 0L
-            )
-            RotaMediaBrowserService.updateNowPlayingArt(artBmp)
-        } catch (_: Exception) { }
-
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (quiet) CHANNEL_QUIET else CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
         b.setSmallIcon(R.drawable.ic_notif)
@@ -330,8 +313,8 @@ class PlaybackService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        const val CHANNEL = "playback_visible"
-        const val CHANNEL_QUIET = "playback_quiet_v2"
+        const val CHANNEL = "playback"
+        const val CHANNEL_QUIET = "playback_quiet"
         const val NOTIF_ID = 1002
         const val ACTION_UPDATE = "com.pusula.browser.MEDIA_UPDATE"
         const val ACTION_PLAY = "com.pusula.browser.MEDIA_PLAY"
