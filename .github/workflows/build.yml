@@ -603,6 +603,7 @@ jobs:
               private var cur = -1
               private var shown: WebView? = null
               private var miniTab: BTab? = null
+              private var autoMusicTab: BTab? = null
               private var miniOverlay: FrameLayout? = null
               private var miniPlayBtn: TextView? = null
               private var mdOld: BTab? = null
@@ -660,9 +661,42 @@ jobs:
                   return r.trim()
               }
 
+              private var catalogPollTick = 0
+
               private fun pollMedia() {
                   val t = miniTab ?: tabs.getOrNull(cur) ?: return
                   try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
+                  catalogPollTick++
+                  if (catalogPollTick % 3 == 0) {
+                      try {
+                          // Katalog için YT Music sekmesi (kullanıcı açmasa da arka planda)
+                          if (prefs.autoCatalog.isBlank() || catalogPollTick % 15 == 0) {
+                              ensureAutoMusicLoaded()
+                          }
+                          val src = autoMusicTab ?: t
+                          val u = src.web.url ?: ""
+                          if (u.contains("music.youtube.com")) {
+                              src.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                          } else if (autoMusicTab != null) {
+                              // henüz yüklenmedi — bekle
+                          }
+                      } catch (_: Exception) { }
+                  }
+              }
+
+              private fun onMusicCatalog(raw: String?) {
+                  try {
+                      if (raw.isNullOrBlank() || raw == "null") return
+                      val inner = try { JSONArray("[$raw]").getString(0) } catch (_: Exception) { raw.trim().trim('"') }
+                      if (inner.isBlank() || inner == "{}") return
+                      val o = JSONObject(inner)
+                      val pl = o.optJSONArray("playlists") ?: JSONArray()
+                      val sg = o.optJSONArray("songs") ?: JSONArray()
+                      if (pl.length() == 0 && sg.length() == 0) return
+                      if (inner == prefs.autoCatalog) return
+                      prefs.autoCatalog = inner
+                      RotaMediaBrowserService.notifyCatalogChanged()
+                  } catch (_: Exception) { }
               }
 
               private fun onMediaState(raw: String?) {
@@ -932,12 +966,14 @@ jobs:
                       }
                       if (act == PlaybackService.ACTION_SEARCH) {
                           val q = intent.getStringExtra("q")?.trim().orEmpty()
-                          if (q.isNotEmpty()) openTab("https://music.youtube.com/search?q=" + Uri.encode(q), appMode = true)
+                          val autoplay = intent.getBooleanExtra("autoplay", true)
+                          if (q.isNotEmpty()) openFromAuto("https://music.youtube.com/search?q=" + Uri.encode(q), autoplay)
                           return
                       }
                       if (act == PlaybackService.ACTION_OPEN) {
                           val u = intent.getStringExtra("url")?.trim().orEmpty()
-                          if (u.startsWith("http")) openTab(u, appMode = true)
+                          val autoplay = intent.getBooleanExtra("autoplay", true)
+                          if (u.startsWith("http")) openFromAuto(u, autoplay)
                           return
                       }
                       val js = when (act) {
@@ -1081,6 +1117,8 @@ jobs:
                       addAction(PlaybackService.ACTION_OPEN)
                   }
                   ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+                  handleAutoIntent(intent)
+                  ensureAutoMusicLoaded()
                   startBrowsing()
                   addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }
                   handler.removeCallbacks(mediaStatePoll)
@@ -1102,8 +1140,99 @@ jobs:
 
               override fun onNewIntent(intent: Intent) {
                   super.onNewIntent(intent)
-                  val u = intent.dataString ?: return
-                  openTab(u, appMode = intent.getBooleanExtra("pusula_app", false))
+                  setIntent(intent)
+                  handleAutoIntent(intent)
+              }
+
+              private fun handleAutoIntent(intent: Intent?) {
+                  if (intent == null) return
+                  if (intent.getBooleanExtra("ensure_music", false)) {
+                      ensureAutoMusicLoaded()
+                  }
+                  val fromAuto = intent.action == PlaybackService.ACTION_OPEN ||
+                      intent.action == PlaybackService.ACTION_SEARCH
+                  val url = when {
+                      intent.action == PlaybackService.ACTION_SEARCH -> {
+                          val q = intent.getStringExtra("q")?.trim().orEmpty()
+                          if (q.isNotEmpty()) "https://music.youtube.com/search?q=" + Uri.encode(q) else ""
+                      }
+                      intent.action == PlaybackService.ACTION_OPEN ->
+                          intent.getStringExtra("url")?.trim().orEmpty()
+                      else -> intent.dataString?.trim().orEmpty()
+                  }
+                  if (!url.startsWith("http")) return
+                  val autoplay = intent.getBooleanExtra("autoplay", fromAuto)
+                  openFromAuto(url, autoplay)
+              }
+
+              private fun openFromAuto(url: String, autoplay: Boolean) {
+                  if (!url.startsWith("http")) return
+                  try {
+                      val existing = tabs.indexOfFirst { t ->
+                          val u = t.web.url ?: return@indexOfFirst false
+                          u == url || (url.length > 20 && u.startsWith(url.take(url.length.coerceAtMost(60))))
+                      }
+                      if (existing >= 0) {
+                          autoMusicTab = tabs[existing]
+                          switchTo(existing)
+                      } else if (autoMusicTab != null) {
+                          try {
+                              applyHostUa(autoMusicTab!!, url)
+                              autoMusicTab!!.web.loadUrl(url)
+                              val idx = tabs.indexOf(autoMusicTab)
+                              if (idx >= 0) switchTo(idx)
+                          } catch (_: Exception) {
+                              openTab(url, appMode = true)?.let { autoMusicTab = it }
+                          }
+                      } else {
+                          val created = openTab(url, appMode = true)
+                          if (created != null) autoMusicTab = created
+                      }
+                  } catch (_: Exception) {
+                      try { openTab(url, appMode = true)?.let { autoMusicTab = it } } catch (_: Exception) { }
+                  }
+                  if (autoplay) scheduleForcePlay()
+              }
+
+              private fun scheduleForcePlay() {
+                  val delays = longArrayOf(700L, 1500L, 2800L, 4500L, 7000L)
+                  for (d in delays) {
+                      handler.postDelayed({
+                          try {
+                              val w = (miniTab ?: tabs.getOrNull(cur))?.web ?: return@postDelayed
+                              w.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null)
+                          } catch (_: Exception) { }
+                      }, d)
+                  }
+              }
+
+
+              /** Android Auto: kullanıcı telefonda bir şey açmasa da YT Music arka planda yüklensin */
+              private fun ensureAutoMusicLoaded() {
+                  try {
+                      val musicHost = "music.youtube.com"
+                      // Zaten açık bir YT Music sekmesi var mı?
+                      val existing = tabs.indexOfFirst { t ->
+                          (t.web.url ?: "").contains(musicHost)
+                      }
+                      if (existing >= 0) {
+                          autoMusicTab = tabs[existing]
+                          return
+                      }
+                      val curUrl = autoMusicTab?.web?.url ?: ""
+                      if (autoMusicTab != null && curUrl.contains(musicHost)) return
+                      if (autoMusicTab != null) {
+                          try {
+                              autoMusicTab?.web?.loadUrl("https://music.youtube.com/")
+                          } catch (_: Exception) { }
+                          return
+                      }
+                      val t = createTab(false)
+                      t.appMode = true
+                      autoMusicTab = t
+                      applyHostUa(t, "https://music.youtube.com/")
+                      try { t.web.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
+                  } catch (_: Exception) { }
               }
 
               override fun onPause() {
@@ -5244,7 +5373,42 @@ jobs:
                             """
 
                   // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-                  const val YT_MUSIC_UX_JS =
+                  
+              const val YT_MUSIC_CATALOG_JS =
+                  "(function(){try{" +
+                  "if(!/music\\.youtube\\.com/i.test(location.hostname))return JSON.stringify({playlists:[],songs:[]});" +
+                  "var playlists=[],songs=[],seen={};" +
+                  "function abs(u){if(!u)return '';u=String(u);if(u.indexOf('http')===0)return u;if(u.indexOf('//')===0)return location.protocol+u;return u;}" +
+                  "function pushP(title,sub,url,art){title=(title||'').replace(/\\s+/g,' ').trim();url=(url||'').trim();if(!title||!url)return;if(seen['p'+url])return;seen['p'+url]=1;" +
+                  "playlists.push({title:title.slice(0,90),artist:(sub||'').replace(/\\s+/g,' ').trim().slice(0,90),url:url,art:abs(art||'')});}" +
+                  "function pushS(title,artist,url,art){title=(title||'').replace(/\\s+/g,' ').trim();if(!title)return;var id=url||(title+'|'+artist);if(seen['s'+id])return;seen['s'+id]=1;" +
+                  "songs.push({title:title.slice(0,90),artist:(artist||'').replace(/\\s+/g,' ').trim().slice(0,90),url:(url||'').trim(),art:abs(art||'')});}" +
+                  "document.querySelectorAll('ytmusic-two-row-item-renderer').forEach(function(el){" +
+                  "var a=el.querySelector('a[href]');var title='';var t=el.querySelector('#title,yt-formatted-string#title,.title');" +
+                  "if(t)title=t.textContent;if(!title&&a)title=a.getAttribute('title')||a.textContent||'';" +
+                  "var subEl=el.querySelector('#subtitle,yt-formatted-string.subtitle,.subtitle');var sub=subEl?subEl.textContent:'';" +
+                  "var img=el.querySelector('img');var art=img?(img.getAttribute('src')||img.src):'';pushP(title,sub,a?a.href:'',art);" +
+                  "});" +
+                  "document.querySelectorAll('ytmusic-responsive-list-item-renderer,ytmusic-list-item-renderer').forEach(function(el){" +
+                  "var a=el.querySelector('a[href*=\"watch\"],a[href*=\"browse\"],a[href]');" +
+                  "var t=el.querySelector('.title,#title,yt-formatted-string.title,yt-formatted-string[title]');" +
+                  "var title=t?(t.getAttribute('title')||t.textContent):'';" +
+                  "var sec=el.querySelectorAll('.secondary-flex-columns yt-formatted-string,yt-formatted-string.flex-column,.subtitle yt-formatted-string');" +
+                  "var artist=sec.length?sec[0].textContent:'';var img=el.querySelector('img');" +
+                  "pushS(title,artist,a?a.href:'',img?(img.getAttribute('src')||img.src):'');" +
+                  "});" +
+                  "document.querySelectorAll('ytmusic-carousel-item-renderer,ytmusic-player-queue-item').forEach(function(el){" +
+                  "var a=el.querySelector('a[href]');var t=el.querySelector('#title,.title,yt-formatted-string');" +
+                  "var title=t?t.textContent:(a?(a.getAttribute('title')||''):'');" +
+                  "var sub=el.querySelector('#subtitle,.subtitle');var img=el.querySelector('img');" +
+                  "if(a&&a.href&&a.href.indexOf('browse')>=0)pushP(title,sub?sub.textContent:'',a.href,img&&img.src);" +
+                  "else pushS(title,sub?sub.textContent:'',a?a.href:'',img&&img.src);" +
+                  "});" +
+                  "return JSON.stringify({playlists:playlists.slice(0,40),songs:songs.slice(0,50),page:location.href,ts:Date.now()});" +
+                  "}catch(e){return JSON.stringify({playlists:[],songs:[],error:String(e)});}})();"
+
+
+              const val YT_MUSIC_UX_JS =
                       "(function(){try{\n" +
                       "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
                       "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
@@ -7573,17 +7737,19 @@ jobs:
 
           import android.app.PendingIntent
           import android.content.Intent
+          import android.net.Uri
           import android.os.Bundle
           import android.support.v4.media.MediaBrowserCompat
           import android.support.v4.media.MediaDescriptionCompat
-          import android.support.v4.media.MediaMetadataCompat
           import android.support.v4.media.session.MediaSessionCompat
           import android.support.v4.media.session.PlaybackStateCompat
           import androidx.media.MediaBrowserServiceCompat
+          import org.json.JSONArray
+          import org.json.JSONObject
 
           /**
-           * Android Auto medya servisi — kendi MediaSessionCompat'i ile listelenir.
-           * Çalma komutları telefona (MainActivity / WebView) yayınlanır.
+           * Android Auto: YouTube Music sayfasından çekilen liste/şarkı/kapakları gösterir.
+           * Listeden seçim → MainActivity URL açar ve oynatmayı dener.
            */
           class RotaMediaBrowserService : MediaBrowserServiceCompat() {
 
@@ -7591,6 +7757,7 @@ jobs:
 
               override fun onCreate() {
                   super.onCreate()
+                  instance = this
                   val s = MediaSessionCompat(this, "RotaAuto")
                   s.setFlags(
                       MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
@@ -7605,16 +7772,13 @@ jobs:
                           sendBroadcast(Intent(PlaybackService.ACTION_SEEK).setPackage(packageName).putExtra("pos", pos))
                       }
                       override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
-                          val id = mediaId ?: return
-                          if (id.startsWith("http")) {
-                              sendBroadcast(Intent(PlaybackService.ACTION_OPEN).setPackage(packageName).putExtra("url", id))
-                          }
+                          val url = resolveUrl(mediaId?.trim().orEmpty()) ?: return
+                          openAndPlay(url)
                       }
                       override fun onPlayFromSearch(query: String?, extras: Bundle?) {
                           val q = query?.trim().orEmpty()
-                          if (q.isNotEmpty()) {
-                              sendBroadcast(Intent(PlaybackService.ACTION_SEARCH).setPackage(packageName).putExtra("q", q))
-                          }
+                          if (q.isEmpty()) return
+                          openAndPlay("https://music.youtube.com/search?q=" + Uri.encode(q))
                       }
                       override fun onCustomAction(action: String?, extras: Bundle?) {
                           when (action) {
@@ -7635,15 +7799,15 @@ jobs:
                                   PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
                                   PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
                           )
-                          .setState(PlaybackStateCompat.STATE_PAUSED, 0, 1f)
+                          .setState(PlaybackStateCompat.STATE_NONE, 0L, 1f)
                           .build()
                   )
-                  s.setMetadata(
-                      MediaMetadataCompat.Builder()
-                          .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Rota")
-                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, "Rota")
-                          .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, "Android Auto")
-                          .build()
+                  s.setSessionActivity(
+                      PendingIntent.getActivity(
+                          this, 0,
+                          Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                      )
                   )
                   s.isActive = true
                   session = s
@@ -7654,40 +7818,90 @@ jobs:
                   sendBroadcast(Intent(action).setPackage(packageName))
               }
 
-              override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
-                  // Android Auto (gearhead) + sistem medya tarayıcıları — asla null dönme
-                  val extras = Bundle()
+              private fun openAndPlay(url: String) {
+                  if (!url.startsWith("http")) return
                   try {
-                      extras.putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
-                      extras.putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
-                      extras.putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
+                      val launch = Intent(this, MainActivity::class.java).apply {
+                          action = PlaybackService.ACTION_OPEN
+                          putExtra("url", url)
+                          putExtra("autoplay", true)
+                          addFlags(
+                              Intent.FLAG_ACTIVITY_NEW_TASK or
+                                  Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                  Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                          )
+                      }
+                      startActivity(launch)
                   } catch (_: Exception) { }
-                  return BrowserRoot(ROOT, extras)
+                  sendBroadcast(
+                      Intent(PlaybackService.ACTION_OPEN).setPackage(packageName)
+                          .putExtra("url", url)
+                          .putExtra("autoplay", true)
+                  )
+              }
+
+              private fun resolveUrl(mediaId: String): String? {
+                  if (mediaId.startsWith("http")) return mediaId
+                  if (mediaId.startsWith("pl:") || mediaId.startsWith("sg:")) {
+                      val u = mediaId.substring(3)
+                      if (u.startsWith("http")) return u
+                  }
+                  return null
+              }
+
+              override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
+                  return BrowserRoot(ROOT, null)
               }
 
               override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
-                  val prefs = Prefs(this)
                   val out = ArrayList<MediaBrowserCompat.MediaItem>()
+                  val cat = readCatalog()
+                  // Katalog boşsa telefonda YT Music'i arka planda açtırmayı dene
+                  if (cat.playlists.isEmpty() && cat.songs.isEmpty() && parentId == ROOT) {
+                      try {
+                          val launch = Intent(this, MainActivity::class.java).apply {
+                              putExtra("ensure_music", true)
+                              addFlags(
+                                  Intent.FLAG_ACTIVITY_NEW_TASK or
+                                      Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                      Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                              )
+                          }
+                          startActivity(launch)
+                      } catch (_: Exception) { }
+                  }
                   when (parentId) {
                       ROOT -> {
-                          out.add(folder(HOME, "Ana sayfa"))
-                          out.add(folder(FAV, "Favoriler"))
-                          out.add(folder(RECENT, "Son dinlenenler"))
+                          out.add(folder(PLAYLISTS, "Listeler (${cat.playlists.size})"))
+                          out.add(folder(SONGS, "Şarkılar (${cat.songs.size})"))
+                          if (cat.playlists.isEmpty() && cat.songs.isEmpty()) {
+                              out.add(song("https://music.youtube.com/", "YouTube Music'i telefonda aç", "Listeler burada görünür", null))
+                              for (e in Prefs(this).history().take(15)) {
+                                  if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url, null))
+                              }
+                          } else {
+                              for (p in cat.playlists.take(15)) {
+                                  out.add(song("pl:" + p.url, p.title, p.artist.ifBlank { "Liste" }, p.art))
+                              }
+                          }
                       }
-                      HOME, RECENT -> {
-                          for (e in prefs.history().take(40)) {
-                              if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
-                          }
-                          if (out.isEmpty()) {
-                              out.add(song("https://music.youtube.com/", "YouTube Music", "Aç"))
+                      PLAYLISTS -> {
+                          if (cat.playlists.isEmpty()) {
+                              out.add(song("https://music.youtube.com/", "Liste yok", "Telefonda YT Music ana sayfa açık olsun", null))
+                          } else {
+                              for (p in cat.playlists) {
+                                  out.add(song("pl:" + p.url, p.title, p.artist.ifBlank { "Liste" }, p.art))
+                              }
                           }
                       }
-                      FAV -> {
-                          for (e in prefs.bookmarks().take(40)) {
-                              if (e.url.startsWith("http")) out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
-                          }
-                          if (out.isEmpty()) {
-                              out.add(song("https://music.youtube.com/", "Favori yok · Music aç", "YouTube Music"))
+                      SONGS -> {
+                          if (cat.songs.isEmpty()) {
+                              out.add(song("https://music.youtube.com/", "Şarkı yok", "Telefonda YT Music açık olsun", null))
+                          } else {
+                              for (sItem in cat.songs) {
+                                  val id = if (sItem.url.startsWith("http")) "sg:" + sItem.url else "sg:" + sItem.title
+                                  out.add(song(id, sItem.title, sItem.artist.ifBlank { "Şarkı" }, sItem.art))
+                              }
                           }
                       }
                   }
@@ -7696,14 +7910,19 @@ jobs:
 
               override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
                   val q = query.trim()
-                  val prefs = Prefs(this)
                   val out = ArrayList<MediaBrowserCompat.MediaItem>()
                   if (q.isNotEmpty()) {
-                      val searchUrl = "https://music.youtube.com/search?q=" + android.net.Uri.encode(q)
-                      out.add(song(searchUrl, "\"$q\" ara", "YouTube Music"))
-                      for (e in (prefs.bookmarks() + prefs.history())) {
-                          if (e.title.contains(q, true) || e.url.contains(q, true)) {
-                              out.add(song(e.url, e.title.ifBlank { e.url }, e.url))
+                      out.add(song("https://music.youtube.com/search?q=" + Uri.encode(q), "\"$q\" ara", "YouTube Music", null))
+                      val cat = readCatalog()
+                      for (p in cat.playlists) {
+                          if (p.title.contains(q, true) || p.artist.contains(q, true)) {
+                              out.add(song("pl:" + p.url, p.title, p.artist, p.art))
+                          }
+                      }
+                      for (sItem in cat.songs) {
+                          if (sItem.title.contains(q, true) || sItem.artist.contains(q, true)) {
+                              val id = if (sItem.url.startsWith("http")) "sg:" + sItem.url else "sg:" + sItem.title
+                              out.add(song(id, sItem.title, sItem.artist, sItem.art))
                           }
                       }
                   }
@@ -7711,9 +7930,43 @@ jobs:
               }
 
               override fun onDestroy() {
+                  if (instance === this) instance = null
                   try { session?.isActive = false; session?.release() } catch (_: Exception) { }
                   session = null
                   super.onDestroy()
+              }
+
+              private data class CatItem(val title: String, val artist: String, val url: String, val art: String)
+              private data class Catalog(val playlists: List<CatItem>, val songs: List<CatItem>)
+
+              private fun readCatalog(): Catalog {
+                  val raw = try { Prefs(this).autoCatalog } catch (_: Exception) { "" }
+                  if (raw.isBlank()) return Catalog(emptyList(), emptyList())
+                  return try {
+                      val o = JSONObject(raw)
+                      val pl = ArrayList<CatItem>()
+                      val sg = ArrayList<CatItem>()
+                      val pla = o.optJSONArray("playlists") ?: JSONArray()
+                      for (i in 0 until pla.length()) {
+                          val it = pla.optJSONObject(i) ?: continue
+                          val url = it.optString("url")
+                          val title = it.optString("title")
+                          if (url.startsWith("http") && title.isNotBlank()) {
+                              pl.add(CatItem(title, it.optString("artist"), url, it.optString("art")))
+                          }
+                      }
+                      val sga = o.optJSONArray("songs") ?: JSONArray()
+                      for (i in 0 until sga.length()) {
+                          val it = sga.optJSONObject(i) ?: continue
+                          val title = it.optString("title")
+                          if (title.isNotBlank()) {
+                              sg.add(CatItem(title, it.optString("artist"), it.optString("url"), it.optString("art")))
+                          }
+                      }
+                      Catalog(pl, sg)
+                  } catch (_: Exception) {
+                      Catalog(emptyList(), emptyList())
+                  }
               }
 
               private fun folder(id: String, title: String): MediaBrowserCompat.MediaItem {
@@ -7721,22 +7974,44 @@ jobs:
                   return MediaBrowserCompat.MediaItem(d, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
               }
 
-              private fun song(id: String, title: String, subtitle: String): MediaBrowserCompat.MediaItem {
-                  val d = MediaDescriptionCompat.Builder()
+              private fun song(id: String, title: String, subtitle: String, art: String?): MediaBrowserCompat.MediaItem {
+                  val b = MediaDescriptionCompat.Builder()
                       .setMediaId(id)
                       .setTitle(title.take(80))
                       .setSubtitle(subtitle.take(80))
-                      .build()
-                  return MediaBrowserCompat.MediaItem(d, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
+                  if (!art.isNullOrBlank() && art.startsWith("http")) {
+                      try { b.setIconUri(Uri.parse(art)) } catch (_: Exception) { }
+                  }
+                  val playId = when {
+                      id.startsWith("http") -> id
+                      id.startsWith("pl:") || id.startsWith("sg:") -> id.substring(3)
+                      else -> id
+                  }
+                  if (playId.startsWith("http")) {
+                      try { b.setMediaUri(Uri.parse(playId)) } catch (_: Exception) { }
+                  }
+                  return MediaBrowserCompat.MediaItem(b.build(), MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
               }
 
               companion object {
                   const val ROOT = "root"
-                  const val HOME = "home"
-                  const val FAV = "fav"
-                  const val RECENT = "recent"
+                  const val PLAYLISTS = "playlists"
+                  const val SONGS = "songs"
+
+                  @Volatile var instance: RotaMediaBrowserService? = null
+
+                  fun notifyCatalogChanged() {
+                      try {
+                          instance?.let { svc ->
+                              svc.notifyChildrenChanged(ROOT)
+                              svc.notifyChildrenChanged(PLAYLISTS)
+                              svc.notifyChildrenChanged(SONGS)
+                          }
+                      } catch (_: Exception) { }
+                  }
               }
           }
+
           EOF
 
           cat > app/src/main/java/com/pusula/browser/DownloadNotifier.kt <<'EOF'
@@ -7888,6 +8163,11 @@ jobs:
                 set(v) { sp.edit().putBoolean("barBottom", v).apply() }
               var pins: String get() = sp.getString("pins", "") ?: ""
                 set(v) { sp.edit().putString("pins", v).apply() }
+
+              /** Android Auto: YT Music sayfasından çekilen listeler/şarkılar JSON */
+              var autoCatalog: String
+                  get() = sp.getString("autoCatalog", "") ?: ""
+                  set(v) { sp.edit().putString("autoCatalog", v).apply() }
               var askedNotif: Boolean get() = sp.getBoolean("askedNotif", false)
                 set(v) { sp.edit().putBoolean("askedNotif", v).apply() }
               var adBlock: Boolean get() = sp.getBoolean("adBlock", true)
