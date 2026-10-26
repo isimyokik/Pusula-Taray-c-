@@ -764,12 +764,12 @@ jobs:
               private fun buildPipParams(ratio: android.util.Rational = android.util.Rational(16, 9)): android.app.PictureInPictureParams {
                   val b = android.app.PictureInPictureParams.Builder().setAspectRatio(ratio)
                   val acts = ArrayList<android.app.RemoteAction>()
-                  acts.add(pipAction(11, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
+                  acts.add(pipAction(21, R.drawable.ic_pip_prev, "Önceki", PlaybackService.ACTION_PREVIOUS))
                   // Oynuyorsa duraklat ikonu, duruyorsa oynat ikonu
                   val midIcon = if (lastPlaying) R.drawable.ic_pip_pause else R.drawable.ic_pip_play
                   val midLabel = if (lastPlaying) "Duraklat" else "Oynat"
-                  acts.add(pipAction(12, midIcon, midLabel, PlaybackService.ACTION_TOGGLE))
-                  acts.add(pipAction(13, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
+                  acts.add(pipAction(22, midIcon, midLabel, if (lastPlaying) PlaybackService.ACTION_PAUSE else PlaybackService.ACTION_PLAY))
+                  acts.add(pipAction(23, R.drawable.ic_pip_next, "Sonraki", PlaybackService.ACTION_NEXT))
                   b.setActions(acts)
                   return b.build()
               }
@@ -884,6 +884,7 @@ jobs:
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
+                      if (isInPictureInPictureMode) { try { toast("PiP komut: " + act.substringAfterLast('_')) } catch (_: Exception) { } }
                       if (act == PlaybackService.ACTION_CLOSE) {
                           // Bildirim ✕: tüm medya hemen durur, bildirim geri gelmez
                           mediaDismissedUntil = android.os.SystemClock.elapsedRealtime() + 4000L
@@ -7335,11 +7336,14 @@ jobs:
 
               private fun closeAll() {
                   resumeAfterFocus = false
+                  blockUntil = android.os.SystemClock.elapsedRealtime() + 5000L
                   send(ACTION_CLOSE)
                   playing = false
                   abandonFocus()
                   idleHandler.removeCallbacks(idleStop)
                   try { session?.isActive = false } catch (_: Exception) { }
+                  try { session?.release() } catch (_: Exception) { }
+                  session = null
                   try { stopForeground(Service.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
                   try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) } catch (_: Exception) { }
                   foregroundStarted = false
@@ -7519,7 +7523,10 @@ jobs:
                   @Volatile var running = false
                   @Volatile var sessionToken: MediaSession.Token? = null
 
+                  @Volatile var blockUntil = 0L
+
                   fun update(ctx: Context, playing: Boolean, title: String, artist: String, pip: Boolean = false, pos: Long = -1L, dur: Long = -2L, art: String = "") {
+                      if (android.os.SystemClock.elapsedRealtime() < blockUntil) return
                       val i = Intent(ctx, PlaybackService::class.java).setAction(ACTION_UPDATE)
                           .putExtra("playing", playing).putExtra("title", title).putExtra("artist", artist).putExtra("pip", pip).putExtra("pos", pos).putExtra("dur", dur).putExtra("art", art)
                       try { ContextCompat.startForegroundService(ctx, i) } catch (_: Exception) { }
