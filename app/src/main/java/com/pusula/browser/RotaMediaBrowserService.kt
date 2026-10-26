@@ -25,10 +25,8 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
         super.onCreate()
         instance = this
         val s = MediaSessionCompat(this, "RotaAuto")
-        s.setFlags(
-            MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-        )
+        // Telefon PlaybackService oturumu ile çakışmasın: bayraklar araba bağlanınca
+        s.setFlags(0)
         s.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() { send(PlaybackService.ACTION_PLAY) }
             override fun onPause() { send(PlaybackService.ACTION_PAUSE) }
@@ -139,7 +137,13 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
             clientPackageName.contains("projection")
         if (isCar) {
             autoClientConnected = true
-            try { session?.isActive = true } catch (_: Exception) { }
+            try {
+                session?.setFlags(
+                    MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+                        MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+                )
+                session?.isActive = true
+            } catch (_: Exception) { }
             try { requestPhoneOpenMusic() } catch (_: Exception) { }
         }
         return BrowserRoot(ROOT, null)
