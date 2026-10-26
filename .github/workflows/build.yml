@@ -629,6 +629,7 @@ jobs:
 
               private var hasMedia = false
               private var lastPlaying = false
+              private var mediaDismissedUntil = 0L
               private var lastTitle = ""
               private var lastArtist = ""
               private var lastArtUrl = ""
@@ -686,6 +687,7 @@ jobs:
                       }
                   } catch (_: Exception) { return }
                   title = cleanMeta(title); artist = cleanMeta(artist)
+                  if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
                   if (!has) {
                       if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
                       return
@@ -882,6 +884,19 @@ jobs:
               private val mediaControlReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       val act = intent?.action ?: return
+                      if (act == PlaybackService.ACTION_CLOSE) {
+                          // Bildirim ✕: tüm medya hemen durur, bildirim geri gelmez
+                          mediaDismissedUntil = android.os.SystemClock.elapsedRealtime() + 4000L
+                          hasMedia = false
+                          lastPlaying = false
+                          val stopJs = "(function(){try{window.__userPause=true;document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='';if(!m.paused&&!m.ended)m.pause();});}catch(e){}})();"
+                          for (t in (tabs.toList() + listOfNotNull(miniTab))) {
+                              try { t.web.evaluateJavascript(stopJs, null) } catch (_: Exception) { }
+                          }
+                          handler.removeCallbacks(backgroundMediaPump)
+                          if (isInPictureInPictureMode) updatePipActions()
+                          return
+                      }
                       if (act == PlaybackService.ACTION_BACK10 || act == PlaybackService.ACTION_FWD10) {
                           val d = if (act == PlaybackService.ACTION_BACK10) -10 else 10
                           try { (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
@@ -1046,6 +1061,7 @@ jobs:
                   })
 
                   val mediaFilter = IntentFilter().apply {
+                      addAction(PlaybackService.ACTION_CLOSE)
                       addAction(PlaybackService.ACTION_PLAY)
                       addAction(PlaybackService.ACTION_TOGGLE)
                       addAction(PlaybackService.ACTION_PAUSE)
@@ -5473,57 +5489,105 @@ jobs:
                       "}\n" +
                       "next();\n" +
                       "}\n" +
+                      "var armed=true,sawClosed=false,busy=false,busyT=0,locked=false,tr=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
+                      "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
+                      "function rubber(d){if(d<=0)return 0;var R=window.innerHeight*1.1;return R*(1-Math.exp(-d/R));}\n" +
+                      "function setOff(v){if(!pg)return;pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');}\n" +
+                      "function cleanAll(){\n" +
+                      "if(pg){['transform','transition','will-change','opacity'].forEach(function(k){pg.style.removeProperty(k);});}\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "busy=false;\n" +
+                      "}\n" +
+                      "function springBack(){\n" +
+                      "if(!pg)return;\n" +
+                      "busy=true;busyT=Date.now();\n" +
+                      "pg.style.setProperty('transition','transform .5s cubic-bezier(.3,1.3,.5,1)','important');\n" +
+                      "setOff(0);\n" +
+                      "setTimeout(cleanAll,560);\n" +
+                      "}\n" +
+                      "function closeDown(v){\n" +
+                      "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
+                      "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
+                      "var d=Math.max(170,Math.min(320,left/Math.max(v,0.9)));\n" +
+                      "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
+                      "setOff(H);\n" +
+                      "setTimeout(function(){\n" +
+                      "pg.style.setProperty('transition','none','important');\n" +
+                      "pg.style.setProperty('opacity','0','important');\n" +
+                      "pg.style.removeProperty('transform');\n" +
+                      "document.documentElement.classList.add('rota-noanim');\n" +
+                      "var ok=false;\n" +
+                      "try{ok=tryNative();}catch(z){}\n" +
+                      "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
+                      "var t0=Date.now();\n" +
+                      "(function poll(){\n" +
+                      "if(!pageOpen()){cleanAll();return;}\n" +
+                      "if(Date.now()-t0>1500){\n" +
+                      "document.documentElement.classList.remove('rota-noanim');\n" +
+                      "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
+                      "pg.style.removeProperty('opacity');\n" +
+                      "void pg.offsetWidth;\n" +
+                      "armed=true;\n" +
+                      "springBack();\n" +
+                      "return;\n" +
+                      "}\n" +
+                      "setTimeout(poll,50);\n" +
+                      "})();\n" +
+                      "},d);\n" +
+                      "}\n" +
+                      "setInterval(function(){\n" +
+                      "try{\n" +
+                      "if(!pageOpen())sawClosed=true;\n" +
+                      "else if(sawClosed&&!armed&&!busy)armed=true;\n" +
+                      "if(busy&&Date.now()-busyT>4000){cleanAll();}\n" +
+                      "}catch(z){}\n" +
+                      "},300);\n" +
                       "document.addEventListener('touchstart',function(e){\n" +
-                      "tracking=false;locked=false;\n" +
-                      "if(busy&&Date.now()-busyT>2500){busy=false;try{clean();}catch(z){}}\n" +
-                      "if(busy)return;\n" +
-                      "if(!e.touches||e.touches.length!==1)return;\n" +
+                      "tr=false;locked=false;\n" +
+                      "if(busy||!armed||!e.touches||e.touches.length!==1)return;\n" +
                       "if(!pageOpen())return;\n" +
                       "var path=(e.composedPath&&e.composedPath())||[];\n" +
-                      "var pidx=path.indexOf(pageEl());\n" +
+                      "var p=pageEl();\n" +
+                      "var pidx=path.indexOf(p);\n" +
+                      "if(pidx<0)return;\n" +
                       "for(var i=0;i<path.length;i++){\n" +
                       "var n=path[i];\n" +
                       "if(!n||n.nodeType!==1)continue;\n" +
                       "if(n.matches&&n.matches('#progress-bar,tp-yt-paper-slider,input[type=range],#volume-slider,ytmusic-player-queue-item[selected] #reorder'))return;\n" +
-                      "if(pidx>=0&&i<pidx&&n!==document.documentElement&&n!==document.body&&n.scrollTop>0&&n.scrollHeight>n.clientHeight+2)return;\n" +
+                      "if(i<pidx&&n.scrollTop>0&&n.scrollHeight>n.clientHeight+2)return;\n" +
                       "}\n" +
-                      "var t=e.touches[0];\n" +
-                      "sx=t.clientX;sy=t.clientY;off=0;smp=[];pg=pageEl();tracking=true;\n" +
+                      "pg=p;sx=e.touches[0].clientX;sy=e.touches[0].clientY;off=0;smp=[];tr=true;\n" +
                       "},{passive:true,capture:true});\n" +
                       "document.addEventListener('touchmove',function(e){\n" +
-                      "if(!tracking)return;\n" +
-                      "if(!e.touches||e.touches.length!==1){if(locked)springBack();tracking=false;locked=false;return;}\n" +
+                      "if(!tr)return;\n" +
+                      "if(!e.touches||e.touches.length!==1){if(locked)springBack();tr=false;locked=false;return;}\n" +
                       "var t=e.touches[0],dy=t.clientY-sy,dx=t.clientX-sx;\n" +
                       "if(!locked){\n" +
-                      "if(dy<-10||Math.abs(dx)>14&&Math.abs(dx)>dy){tracking=false;return;}\n" +
+                      "if(dy<-10||(Math.abs(dx)>14&&Math.abs(dx)>dy)){tr=false;return;}\n" +
                       "if(dy>8&&dy>Math.abs(dx)*1.3){\n" +
                       "locked=true;sy=t.clientY;dy=0;\n" +
                       "pg.style.setProperty('will-change','transform','important');\n" +
-                      "peekOn();\n" +
                       "pg.style.setProperty('transition','none','important');\n" +
                       "}else return;\n" +
                       "}\n" +
                       "if(e.cancelable)e.preventDefault();\n" +
-                      "off=rubber(dy);\n" +
-                      "setOff(off);\n" +
+                      "off=rubber(dy);setOff(off);\n" +
                       "var now=Date.now();smp.push([now,t.clientY]);\n" +
                       "while(smp.length>2&&now-smp[0][0]>100)smp.shift();\n" +
                       "},{passive:false,capture:true});\n" +
                       "function endTouch(cancel){\n" +
-                      "if(!tracking)return;\n" +
-                      "tracking=false;\n" +
+                      "if(!tr)return;\n" +
+                      "tr=false;\n" +
                       "if(!locked)return;\n" +
                       "locked=false;\n" +
                       "var v=0;\n" +
-                      "if(smp.length>1){\n" +
-                      "var a=smp[0],b=smp[smp.length-1];\n" +
-                      "if(b[0]>a[0])v=(b[1]-a[1])/(b[0]-a[0]);\n" +
-                      "}\n" +
-                      "if(!cancel&&(off>window.innerHeight*0.25||(v>0.55&&off>20)))commit(v);\n" +
+                      "if(smp.length>1){var a=smp[0],b=smp[smp.length-1];if(b[0]>a[0])v=(b[1]-a[1])/(b[0]-a[0]);}\n" +
+                      "if(!cancel&&(off>window.innerHeight*0.25||(v>0.55&&off>20)))closeDown(v);\n" +
                       "else springBack();\n" +
                       "}\n" +
                       "document.addEventListener('touchend',function(){endTouch(false);},{passive:true,capture:true});\n" +
                       "document.addEventListener('touchcancel',function(){endTouch(true);},{passive:true,capture:true});\n" +
+                      "try{var __pk=document.getElementById('__rota_peek');if(__pk)__pk.remove();document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');}catch(z){}\n" +
                       "}catch(e){}})();\n"
 
                   const val KEEP_PLAYING_JS =
@@ -7271,7 +7335,7 @@ jobs:
 
               private fun closeAll() {
                   resumeAfterFocus = false
-                  send(ACTION_PAUSE)
+                  send(ACTION_CLOSE)
                   playing = false
                   abandonFocus()
                   idleHandler.removeCallbacks(idleStop)
