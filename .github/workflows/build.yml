@@ -689,9 +689,12 @@ jobs:
                                   hw.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
                               }
                           } else {
-                              val u = t.web.url ?: ""
-                              if (u.contains("music.youtube.com")) {
-                                  t.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                              val tab = t
+                              if (tab != null) {
+                                  val u = tab.web.url ?: ""
+                                  if (u.contains("music.youtube.com")) {
+                                      tab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                                  }
                               }
                           }
                       } catch (_: Exception) { }
