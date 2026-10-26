@@ -291,10 +291,12 @@ class MainActivity : AppCompatActivity() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
-        // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
-        if ((changed || playing) && (playing || PlaybackService.running)) {
+        // Medya varken bildirimi güncelle (duraklatınca da; servis ayakta olsun)
+        if (has) {
             sentPos = pos; sentAt = now; sentPlaying = playing
-            PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
+            // PiP değilse quiet kanal kullanma → bildirim çubuğunda görünsün
+            val forPip = isInPictureInPictureMode
+            PlaybackService.update(this, playing, title, artist, forPip, pos, dur, artUrl)
         }
         // Auto medya kartı: başlık/kapak her değişimde (eski resim kilitlenmesin)
         if (has && (title.isNotBlank() || playing)) {
