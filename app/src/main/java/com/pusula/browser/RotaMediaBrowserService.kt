@@ -53,7 +53,7 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
                             .setState(PlaybackStateCompat.STATE_BUFFERING, 0L, 1f)
                             .build()
                     )
-                    session?.isActive = true
+                    if (autoClientConnected) session?.isActive = true
                 } catch (_: Exception) { }
                 openAndPlay(url)
             }
@@ -91,7 +91,8 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         )
-        s.isActive = true
+        // Telefon bildirim oturumu (PlaybackService) ile çakışmasın: Auto bağlanana kadar pasif
+        s.isActive = false
         session = s
         sessionToken = s.sessionToken
     }
@@ -132,15 +133,15 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
     }
 
     override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
-        // Auto istemcisi bağlandı → telefonda Rota + YT Music (throttle içeride)
-        try {
-            if (clientPackageName.contains("gearhead") ||
-                clientPackageName.contains("android.car") ||
-                clientPackageName.contains("projection")
-            ) {
-                requestPhoneOpenMusic()
-            }
-        } catch (_: Exception) { }
+        // Sadece araba istemcisinde Auto oturumunu aç — telefon bildirim oturumuna dokunma
+        val isCar = clientPackageName.contains("gearhead") ||
+            clientPackageName.contains("android.car") ||
+            clientPackageName.contains("projection")
+        if (isCar) {
+            autoClientConnected = true
+            try { session?.isActive = true } catch (_: Exception) { }
+            try { requestPhoneOpenMusic() } catch (_: Exception) { }
+        }
         return BrowserRoot(ROOT, null)
     }
 
@@ -222,6 +223,7 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        autoClientConnected = false
         try { session?.isActive = false; session?.release() } catch (_: Exception) { }
         session = null
         super.onDestroy()
@@ -384,7 +386,7 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
                     .setState(st, positionMs.coerceAtLeast(0L), if (playing) 1f else 0f)
                     .build()
             )
-            s.isActive = true
+            if (autoClientConnected) s.isActive = true
         } catch (_: Exception) { }
     }
 
@@ -421,6 +423,7 @@ class RotaMediaBrowserService : MediaBrowserServiceCompat() {
         const val SONGS = "songs"
 
         @Volatile var instance: RotaMediaBrowserService? = null
+        @Volatile var autoClientConnected: Boolean = false
         @Volatile private var lastMusicOpenMs = 0L
 
         /** Arabadan Rota seçilince telefonda YT Music (telefon launcher davranışına dokunmaz). */
