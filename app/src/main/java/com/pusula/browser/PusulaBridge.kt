@@ -11,9 +11,12 @@ class PusulaBridge(private val prefs: Prefs) {
     private fun hex(v: Int): String = "#%06X".format(0xFFFFFF and v)
 
     private fun pinsJson(): Any {
-        val raw = prefs.pins
-        if (raw.isEmpty()) return JSONObject.NULL
-        return try { JSONArray(raw) } catch (e: Exception) { JSONObject.NULL }
+        val raw = prefs.pins.trim()
+        if (raw.isEmpty() || raw == "[]") return JSONObject.NULL
+        return try {
+            val arr = JSONArray(raw)
+            if (arr.length() == 0) JSONObject.NULL else arr
+        } catch (e: Exception) { JSONObject.NULL }
     }
 
     @JavascriptInterface
