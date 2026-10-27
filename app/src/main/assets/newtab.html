@@ -5,21 +5,31 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Yeni Sekme</title>
 <style>
-  :root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff}
+  :root{--bg:#0b1020;--surface:#131b33;--field:#1d2848;--text:#eaf0ff;--sub:#8fa0c8;--acc:#4c8dff;--acc2:#8a5cff;--acc3:#36d1ff}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0}
   body{background:var(--bg);color:var(--text);font-family:Roboto,-apple-system,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
   .glow{position:fixed;inset:0;pointer-events:none;
-    background:radial-gradient(420px 300px at 85% -40px,color-mix(in srgb,var(--acc) 38%,transparent),transparent 70%),
-               radial-gradient(380px 280px at -10% 18%,color-mix(in srgb,var(--acc2) 30%,transparent),transparent 70%)}
-  main{position:relative;max-width:560px;margin:0 auto;padding:34px 18px 40px}
+    background:radial-gradient(460px 340px at 88% -60px,color-mix(in srgb,var(--acc) 40%,transparent),transparent 70%),
+               radial-gradient(420px 320px at -12% 16%,color-mix(in srgb,var(--acc2) 32%,transparent),transparent 70%),
+               radial-gradient(520px 360px at 50% 112%,color-mix(in srgb,var(--acc3) 22%,transparent),transparent 72%)}
+  html.light .glow{opacity:.75}
+  .wall{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  .wall svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .wall .tw{animation:tw 4s ease-in-out infinite alternate}
+  .wall .dr{animation:dr 18s ease-in-out infinite alternate}
+  @keyframes tw{from{opacity:.25}to{opacity:1}}
+  @keyframes dr{from{transform:translateX(-14px)}to{transform:translateX(14px)}}
+  @media (prefers-reduced-motion:reduce){.wall .tw,.wall .dr{animation:none}}
+  main{position:relative;z-index:1;max-width:560px;margin:0 auto;padding:34px 18px 40px}
   .hello{color:var(--sub);font-size:14px;margin:0 0 2px}
   h1{font-size:40px;line-height:1.1;margin:0 0 22px;font-weight:800;letter-spacing:-.5px;
-     background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+     background:linear-gradient(90deg,var(--acc),var(--acc2) 60%,var(--acc3));-webkit-background-clip:text;background-clip:text;color:transparent}
   form{display:flex;gap:8px;margin-bottom:26px}
   .sbox{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:54px;border-radius:27px;padding:0 18px;
         background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);
-        box-shadow:0 8px 24px rgba(0,0,0,.18)}
+        box-shadow:0 10px 30px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  html.light .sbox{box-shadow:0 8px 24px rgba(40,60,100,.12)}
   .sbox:focus-within{border-color:var(--acc)}
   .sbox input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-size:16px;outline:none;height:100%}
   .sbox input::placeholder{color:var(--sub)}
@@ -32,7 +42,7 @@
         box-shadow:0 8px 18px rgba(0,0,0,.25);color:#fff;font-weight:700}
   a.t span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)}
   .list{display:flex;flex-direction:column;gap:8px}
-  a.row{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);padding:11px 14px;border-radius:16px;
+  a.row{-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);padding:11px 14px;border-radius:16px;
         background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid color-mix(in srgb,var(--text) 8%,transparent);min-width:0}
   a.row b{display:block;font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   a.row small{display:block;color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -59,6 +69,7 @@
 </head>
 <body>
 <div class="glow"></div>
+<div class="wall" id="wall"></div>
 <main id="main">
   <div id="home">
     <p class="hello" id="hello"></p>
@@ -80,16 +91,97 @@
 <script>
 (function(){
   var cfg = {engine:"Google",search:"https://www.google.com/search?q=%s",bookmarks:[],history:[]};
-  try { if (window.Pusula) { var c = JSON.parse(window.Pusula.config()); if (c && c.search) cfg = c; } } catch (e) {}
   var r = document.documentElement.style;
-  if (cfg.bg) {
-    r.setProperty("--bg",cfg.bg); r.setProperty("--surface",cfg.surface); r.setProperty("--field",cfg.field);
-    r.setProperty("--text",cfg.text); r.setProperty("--sub",cfg.sub); r.setProperty("--acc",cfg.accent); r.setProperty("--acc2",cfg.accent2);
-  }
   var isPrivate = /[?&]private=1/.test(location.search);
+  function readCfg(){
+    try { if (window.Pusula) { var c = JSON.parse(window.Pusula.config()); if (c && c.search) return c; } } catch (e) {}
+    return null;
+  }
+  var c0 = readCfg(); if (c0) cfg = c0;
+
+  // ---- Duvar kâğıtları: renkler tema değişkenlerinden (var(--acc...)) gelir ----
+  function F(v, o){ return 'style="fill:var(' + v + ');opacity:' + o + '"'; }
+  function seeded(n){ var s = n; return function(){ s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+  var WALLS = {
+    orbs: function(){ return ''; },
+    stars: function(L){
+      var rnd = seeded(7), out = '';
+      for (var i = 0; i < 70; i++) {
+        var x = rnd() * 400, y = rnd() * 560, rr = rnd() * 1.3 + .3, d = (rnd() * 4).toFixed(1);
+        out += '<circle class="tw" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + rr.toFixed(2) + '" style="fill:var(--text);animation-delay:-' + d + 's;animation-duration:' + (3 + rnd() * 3).toFixed(1) + 's"/>';
+      }
+      return '<svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice">' + out +
+        '<circle cx="330" cy="120" r="44" ' + F('--acc3', .14) + '/><circle cx="330" cy="120" r="22" ' + F('--text', .85) + '/><circle cx="341" cy="113" r="20" style="fill:var(--bg)"/></svg>';
+    },
+    aurora: function(L){
+      var o = L ? .35 : .55;
+      return '<svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice"><defs><filter id="bl" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="26"/></filter>' +
+        '<linearGradient id="ag1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:var(--acc)"/><stop offset="1" style="stop-color:var(--acc3)"/></linearGradient>' +
+        '<linearGradient id="ag2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:var(--acc2)"/><stop offset="1" style="stop-color:var(--acc)"/></linearGradient></defs>' +
+        '<g filter="url(#bl)" class="dr"><path d="M-40 150 C 80 40, 160 230, 260 120 S 400 60, 460 150 L 460 260 C 340 190, 250 330, 150 240 S 20 220, -40 270 Z" fill="url(#ag1)" opacity="' + o + '"/>' +
+        '<path d="M-40 300 C 60 220, 170 360, 280 270 S 410 250, 460 320 L 460 400 C 330 350, 240 470, 140 390 S 10 370, -40 410 Z" fill="url(#ag2)" opacity="' + (o * .8) + '"/></g></svg>';
+    },
+    hills: function(L){
+      var k = L ? .55 : 1;
+      return '<svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMax slice">' +
+        '<circle cx="90" cy="130" r="54" ' + F('--acc3', .16 * k) + '/><circle cx="90" cy="130" r="26" ' + F('--acc3', .5 * k) + '/>' +
+        '<path d="M0 640 C 90 580, 170 600, 250 560 S 370 540, 400 560 L 400 800 L 0 800 Z" ' + F('--acc2', .22 * k) + '/>' +
+        '<path d="M0 690 C 80 640, 190 680, 270 630 S 380 620, 400 640 L 400 800 L 0 800 Z" ' + F('--acc', .3 * k) + '/>' +
+        '<path d="M0 740 C 100 700, 180 740, 280 700 S 370 700, 400 710 L 400 800 L 0 800 Z" ' + F('--acc3', .38 * k) + '/></svg>';
+    },
+    dunes: function(L){
+      return '<svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMax slice">' +
+        '<circle cx="300" cy="150" r="60" ' + F('--acc3', .22) + '/><circle cx="300" cy="150" r="32" ' + F('--acc3', .6) + '/>' +
+        '<path d="M0 620 C 70 570, 150 640, 240 600 S 360 560, 400 590 L 400 800 L 0 800 Z" ' + F('--acc3', .22) + '/>' +
+        '<path d="M0 680 C 90 630, 170 700, 260 660 S 370 630, 400 650 L 400 800 L 0 800 Z" ' + F('--acc', .26) + '/>' +
+        '<path d="M0 735 C 100 700, 190 750, 290 715 S 380 700, 400 710 L 400 800 L 0 800 Z" ' + F('--acc2', .3) + '/></svg>';
+    },
+    sunset: function(L){
+      var k = L ? .6 : 1, st = '';
+      for (var i = 0; i < 6; i++) st += '<rect x="0" y="' + (404 + i * 15) + '" width="400" height="' + (2 + i * 1.4) + '" style="fill:var(--bg)"/>';
+      return '<svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMax slice"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--acc3)"/><stop offset=".55" style="stop-color:var(--acc)"/><stop offset="1" style="stop-color:var(--acc2)"/></linearGradient></defs>' +
+        '<circle cx="200" cy="470" r="150" ' + F('--acc', .1 * k) + '/><circle cx="200" cy="470" r="96" style="fill:url(#sg);opacity:' + (.9 * k) + '"/>' + st +
+        '<path d="M0 520 L0 800 L400 800 L400 520 C 340 490, 300 540, 240 515 S 120 480, 60 520 S 20 515, 0 520 Z" style="fill:var(--bg)"/>' +
+        '<path d="M0 600 C 100 560, 180 620, 280 585 S 370 570, 400 590 L 400 800 L 0 800 Z" ' + F('--acc2', .22 * k) + '/></svg>';
+    },
+    waves: function(L){
+      var k = L ? .8 : 1;
+      return '<svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMax slice">' +
+        '<g class="dr"><path d="M-40 620 C 20 595, 80 645, 140 620 S 260 595, 320 620 S 420 645, 460 620 L 460 800 L -40 800 Z" ' + F('--acc3', .2 * k) + '/></g>' +
+        '<path d="M-20 665 C 40 640, 100 690, 160 665 S 280 640, 340 665 S 420 690, 440 665 L 440 800 L -20 800 Z" ' + F('--acc', .25 * k) + '/>' +
+        '<g class="dr" style="animation-direction:alternate-reverse"><path d="M-40 715 C 20 690, 80 740, 140 715 S 260 690, 320 715 S 420 740, 460 715 L 460 800 L -40 800 Z" ' + F('--acc2', .3 * k) + '/></g></svg>';
+    },
+    grid: function(L){
+      var g = '', i;
+      for (i = 0; i <= 14; i++) g += '<line x1="' + (200 + (i - 7) * 14) + '" y1="520" x2="' + (200 + (i - 7) * 90) + '" y2="800" style="stroke:var(--acc);stroke-width:1;opacity:.5"/>';
+      for (i = 0; i < 8; i++) { var y = 520 + Math.pow(i / 7, 1.9) * 280; g += '<line x1="0" y1="' + y.toFixed(1) + '" x2="400" y2="' + y.toFixed(1) + '" style="stroke:var(--acc);stroke-width:1;opacity:.45"/>'; }
+      return '<svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMax slice"><defs><linearGradient id="gf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="1"/></linearGradient>' +
+        '<mask id="gm"><rect x="0" y="500" width="400" height="300" fill="url(#gf)"/></mask></defs>' +
+        '<g mask="url(#gm)" opacity="' + (L ? .5 : .8) + '">' + g + '</g>' +
+        '<circle cx="200" cy="520" r="70" ' + F('--acc3', .12) + '/></svg>';
+    }
+  };
+
+  function applyTheme(c){
+    var wall = c.wall || "orbs", light = (c.dark === false);
+    if (c.bg) {
+      r.setProperty("--bg",c.bg); r.setProperty("--surface",c.surface); r.setProperty("--field",c.field);
+      r.setProperty("--text",c.text); r.setProperty("--sub",c.sub); r.setProperty("--acc",c.accent); r.setProperty("--acc2",c.accent2);
+      r.setProperty("--acc3", c.accent3 || c.accent2);
+    }
+    if (isPrivate) {
+      r.setProperty("--bg","#150d2b"); r.setProperty("--surface","#241447"); r.setProperty("--field","#34205f");
+      r.setProperty("--text","#f3ecff"); r.setProperty("--sub","#b7a4e6"); r.setProperty("--acc","#a46bff"); r.setProperty("--acc2","#ff5cc8"); r.setProperty("--acc3","#5c7cff");
+      wall = "stars"; light = false;
+    }
+    document.documentElement.classList.toggle("light", light);
+    var w = document.getElementById("wall");
+    if (w) w.innerHTML = (WALLS[wall] || WALLS.orbs)(light);
+  }
+  // Uygulama tarafı tema değiştirince sayfa yenilenmeden çağrılır
+  window.__rotaTheme = function(){ var c = readCfg(); if (c) { for (var k in c) if (k !== "pins" && k !== "bookmarks" && k !== "history") cfg[k] = c[k]; } applyTheme(cfg); };
+  applyTheme(cfg);
   if (isPrivate) {
-    r.setProperty("--bg","#150d2b"); r.setProperty("--surface","#241447"); r.setProperty("--field","#34205f");
-    r.setProperty("--text","#f3ecff"); r.setProperty("--sub","#b7a4e6"); r.setProperty("--acc","#a46bff"); r.setProperty("--acc2","#ff5cc8");
     document.getElementById("home").hidden = true; document.getElementById("priv").hidden = false;
   }
   var h = new Date().getHours();
