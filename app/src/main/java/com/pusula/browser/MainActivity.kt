@@ -2711,10 +2711,19 @@ fun onMusicCatalog(raw: String?) {
             override fun onTouchEvent(e: MotionEvent): Boolean {
                 vt?.addMovement(e)
                 when (e.actionMasked) {
-                    MotionEvent.ACTION_MOVE -> if (dragging) {
-                        val p = Math.max(0f, (e.rawY - sy) * sg())
-                        col.translationY = p * sg()
-                        dimTo(p / Math.max(1, col.height).toFloat())
+                    MotionEvent.ACTION_MOVE -> {
+                        // Tıklanabilir çocuğu olmayan boşluklarda (tutamaç, uç kenar, dolgu) dokunuş
+                        // doğrudan buraya gelir ve onInterceptTouchEvent çağrılmaz; sürükleme burada da başlamalı.
+                        if (!dragging) {
+                            val dy0 = (e.rawY - sy) * sg()
+                            val dx0 = kotlin.math.abs(e.rawX - sx)
+                            if (dy0 > slop && dy0 > dx0 * 1.2f) { dragging = true; sy = e.rawY }
+                        }
+                        if (dragging) {
+                            val p = Math.max(0f, (e.rawY - sy) * sg())
+                            col.translationY = p * sg()
+                            dimTo(p / Math.max(1, col.height).toFloat())
+                        }
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         if (dragging) {
