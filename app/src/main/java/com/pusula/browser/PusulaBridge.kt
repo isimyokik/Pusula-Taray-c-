@@ -20,6 +20,7 @@ class PusulaBridge(private val prefs: Prefs) {
 
     @JavascriptInterface
     fun savePins(json: String) {
+        // Kayıt yazılınca pins anahtarı oluşur; varsayılan seed gerekmez
         // Kayıt her zaman yazılsın (yeni sekme silinmesin); config hâlâ trusted ister
         try {
             prefs.pins = JSONArray(json).toString()
@@ -29,6 +30,7 @@ class PusulaBridge(private val prefs: Prefs) {
     @JavascriptInterface
     fun config(): String {
         if (!trusted) return "{}"
+        try { prefs.ensureDefaultPinsIfNeeded() } catch (_: Exception) { }
         val e = Engines.get(prefs.engine)
         val th = Themes.get(prefs.theme)
         val bm = JSONArray()
