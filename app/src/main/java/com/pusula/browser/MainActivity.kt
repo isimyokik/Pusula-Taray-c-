@@ -1220,16 +1220,19 @@ fun onMusicCatalog(raw: String?) {
 
     private fun switchTo(i: Int) {
         if (i !in tabs.indices) return
-        shown?.let {
-            tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }
-            content.removeView(it)
-        }
-        // Diğer sekmelerdeki medyayı durdurma — sekmeler bağımsız
+        tabs.getOrNull(cur)?.let { capturePreview(it) }
+        // WebView hiyerarşide kalsın (GONE) — medya diğer sekmede susmasın
         cur = i
         val t = tabs[i]
+        for (tab in tabs) {
+            val w = tab.web
+            if (w.parent == null) {
+                content.addView(w, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+            w.visibility = if (tab === t) View.VISIBLE else View.GONE
+        }
         shown = t.web
-        content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        t.web.onResume()
+        try { t.web.onResume() } catch (_: Exception) { }
 
         try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
 
@@ -1858,11 +1861,7 @@ fun onMusicCatalog(raw: String?) {
             findBar.visibility == View.VISIBLE -> closeFind()
             urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
             web != null && web.canGoBack() -> web.goBack()
-            // Sekmeler bağımsız: geri ile sekmeyi kapatma; diğer sekmeye geç
-            tabs.size > 1 -> {
-                val other = if (cur > 0) cur - 1 else 1
-                if (other in tabs.indices) switchTo(other)
-            }
+            // Sekmeyi kapatma / değiştirmeme — sadece çıkış uyarısı
             else -> themedConfirm("Uygulamadan çıkılsın mı?", onYes = { finish() }, onNo = {})
         }
     }
@@ -2740,6 +2739,9 @@ fun onMusicCatalog(raw: String?) {
                 return true
             }
         })
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay(); menuDialog = null }
+        menuDialog = d
         d.show()
     }
 
@@ -4543,6 +4545,11 @@ fun onMusicCatalog(raw: String?) {
 
 fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val d = Dialog(this)
+        try {
+            d.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            d.window?.setGravity(Gravity.CENTER)
+            d.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        } catch (_: Exception) { }
         try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
@@ -4568,6 +4575,11 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
 
     private fun themedConfirm(message: String, onYes: () -> Unit, onNo: () -> Unit) {
         val d = Dialog(this)
+        try {
+            d.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            d.window?.setGravity(Gravity.CENTER)
+            d.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        } catch (_: Exception) { }
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
         col.setPadding(dp(20), dp(18), dp(20), dp(14))
