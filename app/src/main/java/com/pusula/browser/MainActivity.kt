@@ -1877,7 +1877,7 @@ fun onMusicCatalog(raw: String?) {
             urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
             web != null && web.canGoBack() -> web.goBack()
             // Sekmeyi kapatma / değiştirmeme — sadece çıkış uyarısı
-            else -> themedConfirm("Uygulamadan çıkılsın mı?", onYes = { finish() }, onNo = {})
+            else -> themedConfirm("Uygulamadan çıkılsın mı?", onYes = { finish() }, onNo = {}, yesLabel = "Uygulamadan çık", noLabel = "İptal")
         }
     }
 
@@ -4588,7 +4588,13 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         d.show()
     }
 
-    private fun themedConfirm(message: String, onYes: () -> Unit, onNo: () -> Unit) {
+    private fun themedConfirm(
+        message: String,
+        onYes: () -> Unit,
+        onNo: () -> Unit,
+        yesLabel: String = "Tamam",
+        noLabel: String = "Vazgeç"
+    ) {
         val d = Dialog(this)
         d.requestWindowFeature(Window.FEATURE_NO_TITLE)
         val wrap = FrameLayout(this)
@@ -4607,13 +4613,19 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         col.addView(msg)
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
-        val no = textBtn("Vazgeç") { d.dismiss(); onNo() }
-        no.setTextColor(cSub)
-        val yes = textBtn("Tamam") { d.dismiss(); onYes() }
-        yes.setTextColor(cAccent)
+        // Oval (hap) şeklinde dolu butonlar: solda İptal (soluk), sağda Onay (vurgu rengi)
+        val no = textBtn(noLabel) { d.dismiss(); onNo() }
+        no.setTextColor(cText)
+        no.setTypeface(null, Typeface.BOLD)
+        no.background = ripple(shape(cField, 24))
+        val yes = textBtn(yesLabel) { d.dismiss(); onYes() }
+        yes.setTextColor(Color.WHITE)
         yes.setTypeface(null, Typeface.BOLD)
-        row.addView(no, LinearLayout.LayoutParams(0, dp(44), 1f))
-        row.addView(yes, LinearLayout.LayoutParams(0, dp(44), 1f))
+        yes.background = ripple(GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(cAccent, cAccent2)).apply {
+            cornerRadius = dp(24).toFloat()
+        })
+        row.addView(no, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
+        row.addView(yes, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         col.addView(row)
         val lp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         lp.gravity = Gravity.CENTER
