@@ -864,12 +864,44 @@ fun onMusicCatalog(raw: String?) {
         syncUi()
     }
 
-    /** Açık YouTube sekmelerinde okunabilirlik betiğini yeni temaya göre yeniden çalıştırır (YT Music hariç). */
+    /**
+     * YouTube'un KENDİ koyu/açık temasını kullanır (renk ezmesi yok): PREF çerezindeki f6 koyu bitini (0x400)
+     * uygulama temasına göre ekler/kaldırır, diğer PREF ayarlarına dokunmaz. Değiştiyse true döner.
+     */
+    private fun syncYoutubeCookie(): Boolean {
+        return try {
+            val cm = CookieManager.getInstance()
+            val raw = cm.getCookie("https://m.youtube.com") ?: cm.getCookie("https://www.youtube.com") ?: ""
+            val pref = raw.split(";").map { it.trim() }.firstOrNull { it.startsWith("PREF=") }?.removePrefix("PREF=") ?: ""
+            val map = LinkedHashMap<String, String>()
+            for (p in pref.split("&")) {
+                if (p.isEmpty()) continue
+                val i = p.indexOf('=')
+                if (i > 0) map[p.substring(0, i)] = p.substring(i + 1)
+            }
+            val old = map["f6"]?.toLongOrNull(16) ?: 0L
+            val nw = if (dark) (old or 0x400L) else (old and 0x400L.inv())
+            if (nw == old && (map.containsKey("f6") || !dark)) return false
+            if (nw == 0L) map.remove("f6") else map["f6"] = java.lang.Long.toHexString(nw)
+            val v = map.entries.joinToString("&") { it.key + "=" + it.value }
+            val exp = "; Max-Age=31536000; Path=/; Secure"
+            for (host in listOf(".youtube.com", "m.youtube.com", "www.youtube.com")) {
+                val dom = if (host.startsWith(".")) "; Domain=$host" else ""
+                cm.setCookie("https://$host", "PREF=$v$dom$exp")
+            }
+            cm.flush()
+            true
+        } catch (_: Exception) { false }
+    }
+
+    private fun isYt(u: String) = (u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")
+
+    /** Tema değişince çerezi eşitler, açık YouTube sekmelerini yeniler. */
     private fun pushThemeToYoutubeTabs() {
+        if (!syncYoutubeCookie()) return
         for (t in tabs.toList()) {
-            val u = t.url
-            if (!(u.contains("youtube.com") || u.contains("youtu.be")) || u.contains("music.youtube.com")) continue
-            try { t.web.evaluateJavascript(if (dark) FORCE_DARK_YT_JS else FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
+            if (!isYt(t.url)) continue
+            try { t.web.reload() } catch (_: Exception) { }
         }
     }
 
@@ -2020,6 +2052,7 @@ fun onMusicCatalog(raw: String?) {
             val u = url ?: ""
             tab.bridge.trusted = u.startsWith(ASSET_PREFIX)
             tab.url = u
+            if (isYt(u)) syncYoutubeCookie()
             tab.progress = 5
             if (tab.errorLoading) tab.errorLoading = false else tab.errorUrl = null
             if (tabs.getOrNull(cur) === tab) { setBarShown(true); syncUi() }
@@ -2043,9 +2076,9 @@ fun onMusicCatalog(raw: String?) {
                 val title = view?.title
                 prefs.addHistory(if (title.isNullOrBlank()) u else title, u)
             }
-            // Uygulama açık temadayken YouTube arayüzünü de açığa zorla
-            if ((u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")) {
-                try { view?.evaluateJavascript(if (dark) FORCE_DARK_YT_JS else FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
+            // YouTube kendi koyu/açık temasıyla açılsın: çerez uygulama temasına uymuyorsa düzeltip bir kez yenile
+            if (isYt(u)) {
+                if (syncYoutubeCookie()) { try { view?.reload() } catch (_: Exception) { } }
             }
             // YouTube ortadaki logo / büyük oynat katmanı + sayfa içi mini player
             if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
@@ -5966,56 +5999,6 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         stop();
         }catch(e){}})();
         """
-
-        // Uygulama açık temadayken YouTube / YT Music arayüzünü de açık tona zorlar
-        // YouTube okunabilirlik betiği: uygulama temasına göre (koyu/açık) renk değişkenlerini ve ana bileşenleri boyar,
-        // 
-        const val YT_THEME_CORE_JS = """
-(function(){try{
-var hn=location.hostname;
-if(hn.indexOf('youtube.com')<0||hn.indexOf('music.')===0)return;
-if(!window.__rotaYt){
-window.__rotaYt=true;
-var PD={bg:'#0f0f0f',raised:'#212121',menu:'#282828',tx:'#f1f1f1',tx2:'#aaaaaa',inv:'#0f0f0f',icI:'#909090',icA:'#f1f1f1',ga:'#181818',gb:'#0f0f0f',gc:'#212121',add:'rgba(255,255,255,.1)',out:'rgba(255,255,255,.2)',cta:'#3ea6ff',lay:'rgba(255,255,255,.1)'};
-var PL={bg:'#ffffff',raised:'#ffffff',menu:'#ffffff',tx:'#0f0f0f',tx2:'#606060',inv:'#ffffff',icI:'#909090',icA:'#0f0f0f',ga:'#f9f9f9',gb:'#f2f2f2',gc:'#ffffff',add:'rgba(0,0,0,.05)',out:'rgba(0,0,0,.2)',cta:'#065fd4',lay:'rgba(0,0,0,.1)'};
-var BLOCKS='ytd-app,ytd-page-manager,ytd-watch-flexy,ytd-browse,ytd-search,ytm-app,ytm-mobile-topbar-renderer,ytm-pivot-bar-renderer,#header,header,.header,.topbar,.nav-bar,.guide,.miniplayer,ytd-comments,ytd-comment-thread-renderer,ytd-comment-renderer,ytm-comment-section-renderer,ytm-comment-thread-renderer,ytm-comment-renderer,ytd-engagement-panel-section-list-renderer,ytd-item-section-renderer,#content,#contents,#primary,#secondary,#columns,ytd-video-primary-info-renderer,ytd-video-secondary-info-renderer,ytd-watch-metadata,ytd-video-owner-renderer,yt-formatted-string,#title,.title,h1,h2,h3,#description,#description-inline-expander,.comment-text,.content-text,#content-text,ytd-comment-view-model,ytm-comment-view-model';
-var TEXTS='yt-formatted-string,span,a,p,h1,h2,h3,h4,#title,#video-title,.title,.ytd-comment-renderer #content-text,ytd-comment-renderer #author-text,ytm-comment-renderer .comment-text,ytm-comment-renderer .author';
-function css(P,dk){
-return 'html,html[dark]{color-scheme:'+(dk?'dark':'light')+'!important;'+
-'--yt-spec-base-background:'+P.bg+'!important;--yt-spec-raised-background:'+P.raised+'!important;--yt-spec-menu-background:'+P.menu+'!important;'+
-'--yt-spec-text-primary:'+P.tx+'!important;--yt-spec-text-secondary:'+P.tx2+'!important;--yt-spec-text-primary-inverse:'+P.inv+'!important;'+
-'--yt-spec-icon-inactive:'+P.icI+'!important;--yt-spec-icon-active-other:'+P.icA+'!important;--yt-spec-brand-icon-inactive:'+P.icI+'!important;'+
-'--yt-spec-general-background-a:'+P.ga+'!important;--yt-spec-general-background-b:'+P.gb+'!important;--yt-spec-general-background-c:'+P.gc+'!important;'+
-'--yt-spec-additive-background:'+P.add+'!important;--yt-spec-outline:'+P.out+'!important;--yt-spec-call-to-action:'+P.cta+'!important;'+
-'--yt-spec-brand-link-text:'+P.cta+'!important;--yt-spec-10-percent-layer:'+P.lay+'!important}'+
-'html,body{background:'+P.bg+'!important;color:'+P.tx+'!important}'+
-BLOCKS+'{background-color:'+P.bg+'!important;color:'+P.tx+'!important}'+
-TEXTS+'{color:'+P.tx+'!important}'+
-'a{color:'+P.cta+'!important}';
-}
-function apply(){
-try{
-var dk=!!window.__rotaDark,P=dk?PD:PL,de=document.documentElement;
-de.style.colorScheme=dk?'dark':'light';
-if(dk)de.setAttribute('dark','true');else de.removeAttribute('dark');
-if(document.body){document.body.style.setProperty('background-color',P.bg,'important');document.body.style.setProperty('color',P.tx,'important');}
-var st=document.getElementById('__rota_ytcss');
-if(!st){st=document.createElement('style');st.id='__rota_ytcss';de.appendChild(st);}
-var t=css(P,dk);if(st.textContent!==t)st.textContent=t;
-}catch(e){}
-}
-window.__rotaApplyYt=apply;
-var tm=0;function later(){if(tm)return;tm=setTimeout(function(){tm=0;apply();},250);}
-setInterval(apply,1200);
-window.addEventListener('scroll',later,{passive:true});
-try{new MutationObserver(later).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
-}
-if(window.__rotaApplyYt)window.__rotaApplyYt();
-}catch(e){}})();
-"""
-
-        const val FORCE_LIGHT_YT_JS = "window.__rotaDark=false;" + YT_THEME_CORE_JS
-        const val FORCE_DARK_YT_JS = "window.__rotaDark=true;" + YT_THEME_CORE_JS
 
         // Normal videolar altyazısız başlar (reklam dışında). Kullanıcı sonradan açarsa karışılmaz.
         const val CAPTIONS_OFF_JS =
