@@ -708,8 +708,14 @@ fun onMusicCatalog(raw: String?) {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_newtab", false) && intent.dataString.isNullOrBlank()) {
+            openTab(null)
+            return
+        }
         val u = intent.dataString ?: return
-        openTab(u, appMode = intent.getBooleanExtra("pusula_app", false))
+        val app = intent.getBooleanExtra("pusula_app", false)
+        openTab(u, appMode = app)
     }
 
     override fun onPause() {
@@ -1142,6 +1148,13 @@ fun onMusicCatalog(raw: String?) {
     }
 
     private fun startBrowsing() {
+        val s = startUrl; startUrl = null
+        val sa = startAppMode; startAppMode = false
+        // Ana ekran kısayolu: ana Rota oturumunu yükleme / karıştırma
+        if (sa && !s.isNullOrBlank()) {
+            openTab(s, appMode = true)
+            return
+        }
         if (tabs.isEmpty()) {
             when (prefs.startMode) {
                 "home" -> openTab(Engines.get(prefs.engine).home)
@@ -1166,9 +1179,10 @@ fun onMusicCatalog(raw: String?) {
                 }
             }
         }
-        val s = startUrl; startUrl = null
-        val sa = startAppMode; startAppMode = false
-        if (s != null) openTab(s, appMode = sa)
+        if (s != null) openTab(s, appMode = false)
+        else if (intent?.getBooleanExtra("open_newtab", false) == true) {
+            openTab(null)
+        }
     }
 
     private fun currentWeb(): WebView? = if (cur in tabs.indices) tabs[cur].web else null
@@ -1930,11 +1944,13 @@ fun onMusicCatalog(raw: String?) {
     /** Sekme adreslerini ve her sekmenin geri/ileri geçmişini kaydeder. */
     private fun saveTabs() {
         if (tabs.isEmpty()) return
+        // Ana ekran kısayolu (appMode) sekmeleri ana oturuma yazılmaz
+        if (tabs.none { !it.incognito && !it.appMode }) return
         val urls = ArrayList<String>()
         val keep = HashSet<String>()
         var curSaved = 0
         for ((idx, t) in tabs.withIndex()) {
-            if (t.incognito) continue
+            if (t.incognito || t.appMode) continue
             if (idx == cur) curSaved = urls.size
             val i = urls.size
             val u = t.pendingUrl ?: t.url
@@ -2111,8 +2127,10 @@ fun onMusicCatalog(raw: String?) {
             tab.progress = 100
             tab.networkRetryUsed = false
             if (url != null && url.startsWith(ASSET_PREFIX)) {
+                tab.bridge.trusted = true
                 try { view?.evaluateJavascript("if(window.__rotaTheme)window.__rotaTheme();", null) } catch (_: Exception) { }
             }
+            try { capturePreview(tab) } catch (_: Exception) { }
             if (tab.silent) handler.postDelayed({ revealSilent(tab) }, 350)
             val u = url ?: return
             if (u.startsWith("http") && !tab.incognito) {
@@ -2660,7 +2678,48 @@ fun onMusicCatalog(raw: String?) {
         return out
     }
 
-    private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
+    
+    /** Yeni sekme “Hızlı erişim” kutularına site ekler (kalıcı). */
+    private fun addToQuickPins(title: String, url: String) {
+        try {
+            val arr = try {
+                if (prefs.pins.isBlank()) JSONArray() else JSONArray(prefs.pins)
+            } catch (_: Exception) { JSONArray() }
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                if (o.optString("u") == url) {
+                    toast("Zaten hızlı erişimde")
+                    return
+                }
+            }
+            arr.put(JSONObject()
+                .put("t", title.take(40))
+                .put("u", url)
+                .put("e", "🔗")
+                .put("g", (0..6).random()))
+            val json = arr.toString()
+            prefs.pins = json
+            try {
+                getSharedPreferences("pusula", MODE_PRIVATE).edit().putString("pins", json).commit()
+            } catch (_: Exception) { }
+            toast("Hızlı erişime eklendi")
+        } catch (_: Exception) {
+            toast("Eklenemedi")
+        }
+    }
+
+    /** Hızlı erişim (yeni sekme) sayfasını ana ekrana ekler — ana Rota, appMode değil. */
+    private fun pinQuickAccessHome() {
+        val launch = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            putExtra("open_newtab", true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        pinShortcut("rota-quick-access", "Rota Hızlı Erişim", launch, null)
+    }
+
+private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
         try {
             val shaped = icon?.let { try { toShortcutBitmap(it) } catch (_: Exception) { null } }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -2794,8 +2853,16 @@ fun onMusicCatalog(raw: String?) {
         })
 
         // Üst aksiyonlar
-        col.addView(row(if (marked) "⭐" else "☆", if (marked) "Yer iminden kaldır" else "Yer imlerine ekle") {
+        col.addView(row(if (marked) "🔖" else "📑", if (marked) "Yer iminden kaldır" else "Yer imlerine ekle") {
             prefs.toggleBookmark(if (t.title.isBlank()) t.url else t.title, t.url); toast("Yer imleri güncellendi")
+        })
+        if (t.url.startsWith("http")) {
+            col.addView(row("📌", "Hızlı erişime ekle") {
+                addToQuickPins(if (t.title.isBlank()) shownUrl(t.url) else t.title, t.url)
+            })
+        }
+        col.addView(row("⚡", "Hızlı erişim — ana ekrana") {
+            pinQuickAccessHome()
         })
         if (canHome) {
             col.addView(row("🏠", "Ana ekrana ekle") { addCurrentToHomeScreen() })
@@ -4698,6 +4765,11 @@ fun onMusicCatalog(raw: String?) {
     }
 
     private fun showTabs() {
+        for (tb in tabs) {
+            if (tb.preview == null) {
+                try { capturePreview(tb) } catch (_: Exception) { }
+            }
+        }
         tabs.getOrNull(cur)?.let { capturePreview(it) }
         val d = Dialog(this)
         pushUiOverlay()
