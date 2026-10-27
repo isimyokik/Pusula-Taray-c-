@@ -4103,11 +4103,10 @@ fun onMusicCatalog(raw: String?) {
                     }
                 }
                 row.setOnLongClickListener {
-                    themedConfirm("\"${e.title}\" kaydı silinsin mi?", onYes = {
-                        prefs.removeDownload(e.path)
+                    themedDeleteDownload(e.title, e.path) {
                         d.dismiss()
                         showDownloads()
-                    }, onNo = {})
+                    }
                     true
                 }
                 val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -4443,8 +4442,77 @@ fun onMusicCatalog(raw: String?) {
     }
 
 
-    private fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
+    private 
+    /** İndirme: sadece listeden veya telefon dosyasıyla sil. */
+    private fun themedDeleteDownload(title: String, path: String, after: () -> Unit) {
         val d = Dialog(this)
+        try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(dp(20), dp(18), dp(20), dp(14))
+        val bg = GradientDrawable()
+        bg.setColor(cSurface)
+        bg.cornerRadius = dp(22).toFloat()
+        col.background = bg
+        val msg = TextView(this)
+        msg.text = """ + title + "" silinsin mi?"
+        msg.textSize = 15f
+        msg.setTextColor(cText)
+        msg.setPadding(0, 0, 0, dp(12))
+        col.addView(msg)
+
+        fun rowBtn(label: String, color: Int, runAfter: Boolean, action: () -> Unit) {
+            val b = textBtn(label) {
+                d.dismiss()
+                action()
+                if (runAfter) after()
+            }
+            b.setTextColor(color)
+            b.gravity = Gravity.CENTER
+            col.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(6)
+            })
+        }
+        rowBtn("Sadece listeden kaldır", cSub, true) {
+            prefs.removeDownload(path)
+            toast("Kayıt silindi")
+        }
+        rowBtn("Telefondan da sil", cAccent, true) {
+            var ok = false
+            try {
+                val f = java.io.File(path)
+                if (f.exists()) ok = f.delete()
+                if (!ok && Build.VERSION.SDK_INT >= 29) {
+                    try {
+                        contentResolver.query(
+                            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            arrayOf(android.provider.MediaStore.MediaColumns._ID),
+                            android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=?",
+                            arrayOf(f.name),
+                            null
+                        )?.use { c ->
+                            if (c.moveToFirst()) {
+                                val id = c.getLong(0)
+                                val u = android.content.ContentUris.withAppendedId(
+                                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
+                                )
+                                ok = contentResolver.delete(u, null, null) > 0
+                            }
+                        }
+                    } catch (_: Exception) { }
+                }
+            } catch (_: Exception) { }
+            prefs.removeDownload(path)
+            toast(if (ok) "Dosya telefonda silindi" else "Kayıt silindi (dosyaya erişilemedi)")
+        }
+        rowBtn("Vazgeç", cSub, false) { }
+        d.setContentView(col)
+        d.show()
+    }
+
+fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
+        val d = Dialog(this)
+        try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
         col.setPadding(dp(20), dp(18), dp(20), dp(14))
