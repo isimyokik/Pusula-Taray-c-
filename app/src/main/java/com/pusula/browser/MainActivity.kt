@@ -157,6 +157,10 @@ class MainActivity : AppCompatActivity() {
     private var sentAt = 0L
     private var sentPlaying = false
     private var lastDur = -1L
+    /** Bildirim / PiP düğmelerinin bağlı olduğu gerçek medya sekmesi (YouTube veya YouTube Music). */
+    private var mediaSrc: BTab? = null
+    private fun mediaTarget(): BTab? =
+        miniTab ?: mediaSrc?.takeIf { s -> tabs.any { it === s } } ?: tabs.getOrNull(cur)
     private lateinit var dockBar: LinearLayout
     private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
     private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -181,26 +185,59 @@ class MainActivity : AppCompatActivity() {
     private var catalogPollTick = 0
 
     private fun pollMedia() {
-        // Medya: önce mini, sonra YouTube/Music sekmesi (arka planda çalan), yoksa aktif sekme
+        // Tüm medya sekmeleri sorgulanır; çalan sekme kaynak seçilir (YouTube / YT Music çakışması olmasın)
         fun isMediaUrl(u: String): Boolean {
             val x = u.lowercase()
             return x.contains("youtube.com") || x.contains("youtu.be") || x.contains("music.youtube")
         }
-        val t = miniTab
-            ?: tabs.firstOrNull { isMediaUrl(it.url) && it !== tabs.getOrNull(cur) }
-            ?: tabs.getOrNull(cur)
-            ?: return
-        try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
+        val cands = ArrayList<BTab>()
+        miniTab?.let { cands.add(it) }
+        tabs.getOrNull(cur)?.let { c0 -> if (cands.none { c -> c === c0 }) cands.add(c0) }
+        for (t in tabs) if (isMediaUrl(t.url) && cands.none { c -> c === t }) cands.add(t)
+        if (cands.isEmpty()) return
+        val results = arrayOfNulls<String>(cands.size)
+        var left = cands.size
+        for ((i, t) in cands.withIndex()) {
+            try {
+                t.web.evaluateJavascript(MEDIA_STATE_JS) { raw ->
+                    results[i] = raw
+                    left--
+                    if (left == 0) pickMediaSource(cands, results)
+                }
+            } catch (_: Exception) {
+                left--
+                if (left == 0) pickMediaSource(cands, results)
+            }
+        }
         catalogPollTick++
         if (catalogPollTick % 8 == 0) {
             try {
-                val musicTab = tabs.firstOrNull { it.url.contains("music.youtube.com") } ?: t
-                val u = musicTab.web.url ?: ""
-                if (u.contains("music.youtube.com")) {
-                    musicTab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                val musicTab = tabs.firstOrNull { it.url.contains("music.youtube.com") }
+                if (musicTab != null) {
+                    val u = musicTab.web.url ?: ""
+                    if (u.contains("music.youtube.com")) {
+                        musicTab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                    }
                 }
             } catch (_: Exception) { }
         }
+    }
+
+    /** Sonuçlardan gerçek medya kaynağını seçer: önce bakılan sekme çalıyorsa o, sonra önceki kaynak, sonra çalan herhangi biri. */
+    private fun pickMediaSource(cands: List<BTab>, res: Array<String?>) {
+        fun has(r: String?): Boolean = r != null && r != "null" && r != "\"\"" && r.length > 2
+        fun playing(r: String?): Boolean = has(r) && r!!.contains("\\\"p\\\":true")
+        val cur0 = tabs.getOrNull(cur)
+        val idxs = cands.indices
+        val pick: Int? =
+            idxs.firstOrNull { playing(res[it]) && cands[it] === cur0 }
+            ?: idxs.firstOrNull { playing(res[it]) && cands[it] === mediaSrc }
+            ?: idxs.firstOrNull { playing(res[it]) }
+            ?: idxs.firstOrNull { has(res[it]) && cands[it] === mediaSrc }
+            ?: idxs.firstOrNull { has(res[it]) }
+        if (pick == null) { onMediaState(""); return }
+        mediaSrc = cands[pick]
+        onMediaState(res[pick])
     }
 
     private fun onMediaState(raw: String?) {
@@ -473,13 +510,13 @@ fun onMusicCatalog(raw: String?) {
             }
             if (act == PlaybackService.ACTION_BACK10 || act == PlaybackService.ACTION_FWD10) {
                 val d = if (act == PlaybackService.ACTION_BACK10) -10 else 10
-                try { (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
+                try { mediaTarget()?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
                 return
             }
             if (act == PlaybackService.ACTION_SEEK) {
                 val sec = intent.getLongExtra("pos", 0L) / 1000.0
                 try {
-                    (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(
+                    mediaTarget()?.web?.evaluateJavascript(
                         "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
                         "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(v)v.currentTime=" + sec + ";}catch(e){}})();", null)
                 } catch (_: Exception) { }
@@ -519,7 +556,7 @@ fun onMusicCatalog(raw: String?) {
                 else -> return
             }
             val targets = if (act == PlaybackService.ACTION_PAUSE) (tabs.toList() + listOfNotNull(miniTab))
-                          else listOfNotNull(miniTab ?: tabs.getOrNull(cur))
+                          else listOfNotNull(mediaTarget())
             targets.forEach { t ->
                 try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
             }
