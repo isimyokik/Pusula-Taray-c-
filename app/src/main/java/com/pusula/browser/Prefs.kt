@@ -40,8 +40,26 @@ class Prefs(context: Context) {
     var barBottom: Boolean get() = sp.getBoolean("barBottom", true)
       set(v) { sp.edit().putBoolean("barBottom", v).apply() }
     var pins: String get() = sp.getString("pins", "") ?: ""
-      // commit: yeni sekme açılınca kayıt kaybolmasın
       set(v) { sp.edit().putString("pins", v).commit() }
+
+    /** İlk kurulumda bir kez varsayılan hızlı erişimi yazar. Kullanıcı sildiyse (pins anahtarı var) tekrar eklemez. */
+    fun ensureDefaultPinsIfNeeded() {
+        if (sp.contains("pins")) return
+        val arr = org.json.JSONArray()
+        val items = arrayOf(
+            arrayOf("YouTube", "https://m.youtube.com/", "▶"),
+            arrayOf("Google", "https://www.google.com/", "🔎"),
+            arrayOf("Müzik", "https://music.youtube.com/", "🎵"),
+            arrayOf("Haberler", "https://news.google.com/?hl=tr", "📰"),
+            arrayOf("Harita", "https://maps.google.com/", "🗺️"),
+            arrayOf("Wikipedia", "https://tr.wikipedia.org/", "📚"),
+            arrayOf("Çeviri", "https://translate.google.com/", "🌐")
+        )
+        for ((idx, it) in items.withIndex()) {
+            arr.put(org.json.JSONObject().put("t", it[0]).put("u", it[1]).put("e", it[2]).put("g", idx))
+        }
+        sp.edit().putString("pins", arr.toString()).commit()
+    }
 
     /** Android Auto: YT Music sayfasından çekilen listeler/şarkılar JSON */
     var autoCatalog: String
