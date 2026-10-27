@@ -880,8 +880,9 @@ fun onMusicCatalog(raw: String?) {
                 if (i > 0) map[p.substring(0, i)] = p.substring(i + 1)
             }
             val old = map["f6"]?.toLongOrNull(16) ?: 0L
-            val nw = if (dark) (old or 0x400L) else (old and 0x400L.inv())
-            if (nw == old && (map.containsKey("f6") || !dark)) return false
+            // 0x400 = koyu tema, 0x80000 = açık tema (YouTube'un kendi ayarı; "cihaz teması"na bırakmıyoruz)
+            val nw = if (dark) ((old or 0x400L) and 0x80000L.inv()) else ((old or 0x80000L) and 0x400L.inv())
+            if (nw == old && map.containsKey("f6")) return false
             if (nw == 0L) map.remove("f6") else map["f6"] = java.lang.Long.toHexString(nw)
             val v = map.entries.joinToString("&") { it.key + "=" + it.value }
             val exp = "; Max-Age=31536000; Path=/; Secure"
@@ -894,10 +895,29 @@ fun onMusicCatalog(raw: String?) {
         } catch (_: Exception) { false }
     }
 
+    /** Sayfaların prefers-color-scheme değeri cihaz temasına değil uygulama temasına uysun; WebView kendi karartmasını yapmasın. */
+    @Suppress("DEPRECATION")
+    private fun applyWebColorScheme(web: WebView) {
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING))
+                androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(web.settings, false)
+        } catch (_: Exception) { }
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                androidx.webkit.WebSettingsCompat.setForceDark(web.settings,
+                    if (dark) androidx.webkit.WebSettingsCompat.FORCE_DARK_ON else androidx.webkit.WebSettingsCompat.FORCE_DARK_OFF)
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY))
+                    androidx.webkit.WebSettingsCompat.setForceDarkStrategy(web.settings,
+                        androidx.webkit.WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY)
+            }
+        } catch (_: Exception) { }
+    }
+
     private fun isYt(u: String) = (u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")
 
     /** Tema değişince çerezi eşitler, açık YouTube sekmelerini yeniler. */
     private fun pushThemeToYoutubeTabs() {
+        for (t in tabs.toList()) applyWebColorScheme(t.web)
         if (!syncYoutubeCookie()) return
         for (t in tabs.toList()) {
             if (!isYt(t.url)) continue
@@ -1159,6 +1179,7 @@ fun onMusicCatalog(raw: String?) {
         val bridge = PusulaBridge(prefs)
         val tab = BTab(web, bridge, incognito)
         val s = web.settings
+        applyWebColorScheme(web)
         s.javaScriptEnabled = true
         s.domStorageEnabled = true
         try { s.databaseEnabled = true } catch (_: Exception) { }
