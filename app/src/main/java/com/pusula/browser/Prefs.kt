@@ -33,15 +33,16 @@ class Prefs(context: Context) {
       set(v) { sp.edit().putString("engine", v).apply() }
     var bgPlay: Boolean get() = sp.getBoolean("bgPlay", true)
       set(v) { sp.edit().putBoolean("bgPlay", v).apply() }
-    var theme: String get() = sp.getString("theme", "gece") ?: "gece"
+    var theme: String get() = sp.getString("theme", "lavanta") ?: "lavanta"
       set(v) { sp.edit().putString("theme", v).apply() }
     var autoHideBar: Boolean get() = sp.getBoolean("autoHideBar", true)
       set(v) { sp.edit().putBoolean("autoHideBar", v).apply() }
-    var barBottom: Boolean get() = sp.getBoolean("barBottom", false)
+    var barBottom: Boolean get() = sp.getBoolean("barBottom", true)
       set(v) { sp.edit().putBoolean("barBottom", v).apply() }
     var pins: String get() = sp.getString("pins", "") ?: ""
       set(v) { sp.edit().putString("pins", v).apply() }
-    /** YT Music sayfasından çekilen listeler/şarkılar JSON */
+
+    /** Android Auto: YT Music sayfasından çekilen listeler/şarkılar JSON */
     var autoCatalog: String
         get() = sp.getString("autoCatalog", "") ?: ""
         set(v) { sp.edit().putString("autoCatalog", v).apply() }
