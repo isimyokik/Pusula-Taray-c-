@@ -117,6 +117,8 @@ class MainActivity : AppCompatActivity() {
 
     private val tabs = ArrayList<BTab>()
     private var cur = -1
+    /** Ayarlar/indirilenler vb. diyalog açıkken otomatik PiP yapma */
+    private var uiOverlayCount = 0
     private var shown: WebView? = null
     private var miniTab: BTab? = null
     private var miniOverlay: FrameLayout? = null
@@ -179,15 +181,23 @@ class MainActivity : AppCompatActivity() {
     private var catalogPollTick = 0
 
     private fun pollMedia() {
-        val t = miniTab ?: tabs.getOrNull(cur) ?: return
+        // Medya: önce mini, sonra YouTube/Music sekmesi (arka planda çalan), yoksa aktif sekme
+        fun isMediaUrl(u: String): Boolean {
+            val x = u.lowercase()
+            return x.contains("youtube.com") || x.contains("youtu.be") || x.contains("music.youtube")
+        }
+        val t = miniTab
+            ?: tabs.firstOrNull { isMediaUrl(it.url) && it !== tabs.getOrNull(cur) }
+            ?: tabs.getOrNull(cur)
+            ?: return
         try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
-        // Auto listeleri: sadece YT Music sekmesinde, medya yoluna dokunmadan
         catalogPollTick++
         if (catalogPollTick % 8 == 0) {
             try {
-                val u = t.web.url ?: ""
+                val musicTab = tabs.firstOrNull { it.url.contains("music.youtube.com") } ?: t
+                val u = musicTab.web.url ?: ""
                 if (u.contains("music.youtube.com")) {
-                    t.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                    musicTab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
                 }
             } catch (_: Exception) { }
         }
@@ -716,8 +726,15 @@ fun onMusicCatalog(raw: String?) {
     }
 
     /** Ana ekrana basınca YouTube videosu çalıyorsa kendiliğinden küçük pencereye geçer. */
-    override fun onUserLeaveHint() {
+    override 
+    private fun pushUiOverlay() { uiOverlayCount++ }
+    private fun popUiOverlay() { if (uiOverlayCount > 0) uiOverlayCount-- }
+    private fun hasUiOverlay(): Boolean = uiOverlayCount > 0
+
+fun onUserLeaveHint() {
         super.onUserLeaveHint()
+        // İndirilenler / ayarlar / sekmeler açıkken PiP yapma
+        if (hasUiOverlay()) return
         if (Build.VERSION.SDK_INT >= 26 && !isInPictureInPictureMode && hasMedia && lastPlaying && (miniTab != null || youtubeVideoTab())) {
             enterPip()
         }
@@ -1208,12 +1225,7 @@ fun onMusicCatalog(raw: String?) {
             tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }
             content.removeView(it)
         }
-        for (idx in tabs.indices) {
-            if (idx != i) {
-                try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {}
-            }
-        }
-
+        // Diğer sekmelerdeki medyayı durdurma — sekmeler bağımsız
         cur = i
         val t = tabs[i]
         shown = t.web
@@ -1847,8 +1859,12 @@ fun onMusicCatalog(raw: String?) {
             findBar.visibility == View.VISIBLE -> closeFind()
             urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
             web != null && web.canGoBack() -> web.goBack()
-            tabs.size > 1 -> closeTab(cur)
-            else -> finish()
+            // Sekmeler bağımsız: geri ile sekmeyi kapatma; diğer sekmeye geç
+            tabs.size > 1 -> {
+                val other = if (cur > 0) cur - 1 else 1
+                if (other in tabs.indices) switchTo(other)
+            }
+            else -> themedConfirm("Uygulamadan çıkılsın mı?", onYes = { finish() }, onNo = {})
         }
     }
 
@@ -4000,6 +4016,8 @@ fun onMusicCatalog(raw: String?) {
     private fun showDownloads() {
         val items = ArrayList(prefs.downloads())
         val d = Dialog(this)
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay() }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
@@ -4298,6 +4316,8 @@ fun onMusicCatalog(raw: String?) {
     private fun showTabs() {
         tabs.getOrNull(cur)?.let { capturePreview(it) }
         val d = Dialog(this)
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay() }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
@@ -4448,35 +4468,46 @@ fun onMusicCatalog(raw: String?) {
         try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
-        col.setPadding(dp(20), dp(18), dp(20), dp(14))
+        col.setPadding(dp(22), dp(20), dp(22), dp(18))
         val bg = GradientDrawable()
         bg.setColor(cSurface)
-        bg.cornerRadius = dp(22).toFloat()
+        bg.cornerRadius = dp(24).toFloat()
         col.background = bg
         val msg = TextView(this)
-        msg.text = "\"" + title + "\" silinsin mi?"
-        msg.textSize = 15f
+        msg.text = "«" + title + "» silinsin mi?"
+        msg.textSize = 16f
+        msg.setTypeface(null, Typeface.BOLD)
         msg.setTextColor(cText)
-        msg.setPadding(0, 0, 0, dp(12))
+        msg.setPadding(0, 0, 0, dp(16))
         col.addView(msg)
 
-        fun rowBtn(label: String, color: Int, runAfter: Boolean, action: () -> Unit) {
-            val b = textBtn(label) {
+        fun ovalBtn(label: String, fill: Int, textColor: Int, runAfter: Boolean, action: () -> Unit) {
+            val b = TextView(this)
+            b.text = label
+            b.textSize = 15f
+            b.setTypeface(null, Typeface.BOLD)
+            b.setTextColor(textColor)
+            b.gravity = Gravity.CENTER
+            b.setPadding(dp(16), dp(14), dp(16), dp(14))
+            val shape = GradientDrawable()
+            shape.setColor(fill)
+            shape.cornerRadius = dp(28).toFloat()
+            b.background = shape
+            b.isClickable = true
+            b.setOnClickListener {
                 d.dismiss()
                 action()
                 if (runAfter) after()
             }
-            b.setTextColor(color)
-            b.gravity = Gravity.CENTER
             col.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(6)
+                topMargin = dp(10)
             })
         }
-        rowBtn("Sadece listeden kaldır", cSub, true) {
+        ovalBtn("Sadece listeden kaldır", cField, cText, true) {
             prefs.removeDownload(path)
             toast("Kayıt silindi")
         }
-        rowBtn("Telefondan da sil", cAccent, true) {
+        ovalBtn("Telefondan da sil", cAccent, Color.WHITE, true) {
             var ok = false
             try {
                 val f = java.io.File(path)
@@ -4504,10 +4535,12 @@ fun onMusicCatalog(raw: String?) {
             prefs.removeDownload(path)
             toast(if (ok) "Dosya telefonda silindi" else "Kayıt silindi (dosyaya erişilemedi)")
         }
-        rowBtn("Vazgeç", cSub, false) { }
+        ovalBtn("Vazgeç", cField, cSub, false) { }
         d.setContentView(col)
         d.show()
     }
+
+
 
 fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val d = Dialog(this)
@@ -4629,6 +4662,8 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
 
     private fun showSettings() {
         val d = Dialog(this)
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay() }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
