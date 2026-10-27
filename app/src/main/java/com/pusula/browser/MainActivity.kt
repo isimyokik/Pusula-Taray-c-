@@ -157,6 +157,10 @@ class MainActivity : AppCompatActivity() {
     private var sentAt = 0L
     private var sentPlaying = false
     private var lastDur = -1L
+    /** Bildirim / PiP düğmelerinin bağlı olduğu gerçek medya sekmesi (YouTube veya YouTube Music). */
+    private var mediaSrc: BTab? = null
+    private fun mediaTarget(): BTab? =
+        miniTab ?: mediaSrc?.takeIf { s -> tabs.any { it === s } } ?: tabs.getOrNull(cur)
     private lateinit var dockBar: LinearLayout
     private val roleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterRole() }
     private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -181,26 +185,59 @@ class MainActivity : AppCompatActivity() {
     private var catalogPollTick = 0
 
     private fun pollMedia() {
-        // Medya: önce mini, sonra YouTube/Music sekmesi (arka planda çalan), yoksa aktif sekme
+        // Tüm medya sekmeleri sorgulanır; çalan sekme kaynak seçilir (YouTube / YT Music çakışması olmasın)
         fun isMediaUrl(u: String): Boolean {
             val x = u.lowercase()
             return x.contains("youtube.com") || x.contains("youtu.be") || x.contains("music.youtube")
         }
-        val t = miniTab
-            ?: tabs.firstOrNull { isMediaUrl(it.url) && it !== tabs.getOrNull(cur) }
-            ?: tabs.getOrNull(cur)
-            ?: return
-        try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
+        val cands = ArrayList<BTab>()
+        miniTab?.let { cands.add(it) }
+        tabs.getOrNull(cur)?.let { c0 -> if (cands.none { c -> c === c0 }) cands.add(c0) }
+        for (t in tabs) if (isMediaUrl(t.url) && cands.none { c -> c === t }) cands.add(t)
+        if (cands.isEmpty()) return
+        val results = arrayOfNulls<String>(cands.size)
+        var left = cands.size
+        for ((i, t) in cands.withIndex()) {
+            try {
+                t.web.evaluateJavascript(MEDIA_STATE_JS) { raw ->
+                    results[i] = raw
+                    left--
+                    if (left == 0) pickMediaSource(cands, results)
+                }
+            } catch (_: Exception) {
+                left--
+                if (left == 0) pickMediaSource(cands, results)
+            }
+        }
         catalogPollTick++
         if (catalogPollTick % 8 == 0) {
             try {
-                val musicTab = tabs.firstOrNull { it.url.contains("music.youtube.com") } ?: t
-                val u = musicTab.web.url ?: ""
-                if (u.contains("music.youtube.com")) {
-                    musicTab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                val musicTab = tabs.firstOrNull { it.url.contains("music.youtube.com") }
+                if (musicTab != null) {
+                    val u = musicTab.web.url ?: ""
+                    if (u.contains("music.youtube.com")) {
+                        musicTab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
+                    }
                 }
             } catch (_: Exception) { }
         }
+    }
+
+    /** Sonuçlardan gerçek medya kaynağını seçer: önce bakılan sekme çalıyorsa o, sonra önceki kaynak, sonra çalan herhangi biri. */
+    private fun pickMediaSource(cands: List<BTab>, res: Array<String?>) {
+        fun has(r: String?): Boolean = r != null && r != "null" && r != "\"\"" && r.length > 2
+        fun playing(r: String?): Boolean = has(r) && r!!.contains("\\\"p\\\":true")
+        val cur0 = tabs.getOrNull(cur)
+        val idxs = cands.indices
+        val pick: Int? =
+            idxs.firstOrNull { playing(res[it]) && cands[it] === cur0 }
+            ?: idxs.firstOrNull { playing(res[it]) && cands[it] === mediaSrc }
+            ?: idxs.firstOrNull { playing(res[it]) }
+            ?: idxs.firstOrNull { has(res[it]) && cands[it] === mediaSrc }
+            ?: idxs.firstOrNull { has(res[it]) }
+        if (pick == null) { onMediaState(""); return }
+        mediaSrc = cands[pick]
+        onMediaState(res[pick])
     }
 
     private fun onMediaState(raw: String?) {
@@ -473,13 +510,13 @@ fun onMusicCatalog(raw: String?) {
             }
             if (act == PlaybackService.ACTION_BACK10 || act == PlaybackService.ACTION_FWD10) {
                 val d = if (act == PlaybackService.ACTION_BACK10) -10 else 10
-                try { (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
+                try { mediaTarget()?.web?.evaluateJavascript(seekRelJs(d), null) } catch (_: Exception) { }
                 return
             }
             if (act == PlaybackService.ACTION_SEEK) {
                 val sec = intent.getLongExtra("pos", 0L) / 1000.0
                 try {
-                    (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(
+                    mediaTarget()?.web?.evaluateJavascript(
                         "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
                         "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];if(v)v.currentTime=" + sec + ";}catch(e){}})();", null)
                 } catch (_: Exception) { }
@@ -519,7 +556,7 @@ fun onMusicCatalog(raw: String?) {
                 else -> return
             }
             val targets = if (act == PlaybackService.ACTION_PAUSE) (tabs.toList() + listOfNotNull(miniTab))
-                          else listOfNotNull(miniTab ?: tabs.getOrNull(cur))
+                          else listOfNotNull(mediaTarget())
             targets.forEach { t ->
                 try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
             }
@@ -751,6 +788,8 @@ fun onMusicCatalog(raw: String?) {
         super.onUserLeaveHint()
         // İndirilenler / ayarlar / sekmeler açıkken PiP yapma
         if (hasUiOverlay()) return
+        // "Arka planda çalma" kapalıysa küçük pencereye geçme: medya normal yoldan (onPause) durur
+        if (!prefs.bgPlay) return
         if (Build.VERSION.SDK_INT >= 26 && !isInPictureInPictureMode && hasMedia && lastPlaying && (miniTab != null || youtubeVideoTab())) {
             enterPip()
         }
@@ -821,7 +860,17 @@ fun onMusicCatalog(raw: String?) {
             topBar.setBackgroundColor(if (t.incognito) 0xFF1B0F38.toInt() else cBg)
         }
         pushThemeToNewTabs()
+        pushThemeToYoutubeTabs()
         syncUi()
+    }
+
+    /** Açık YouTube sekmelerinde okunabilirlik betiğini yeni temaya göre yeniden çalıştırır (YT Music hariç). */
+    private fun pushThemeToYoutubeTabs() {
+        for (t in tabs.toList()) {
+            val u = t.url
+            if (!(u.contains("youtube.com") || u.contains("youtu.be")) || u.contains("music.youtube.com")) continue
+            try { t.web.evaluateJavascript(if (dark) FORCE_DARK_YT_JS else FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
+        }
     }
 
     /** Açık tüm karşılama (yeni sekme) sayfalarına yeni temayı anında uygular; uygulayamazsa sayfayı yeniler. */
@@ -1225,8 +1274,14 @@ fun onMusicCatalog(raw: String?) {
         if (!settingsDirty) return
         settingsDirty = false
         val c = tabs.getOrNull(cur) ?: return
-        if (c.url.startsWith("http")) c.web.reload()
+        if (c.url.startsWith("http")) {
+            // Ayar yenilemesinde "Sayfadan ayrılınsın mı?" sorusu çıkmasın
+            skipBeforeUnloadUntil = android.os.SystemClock.uptimeMillis() + 5000L
+            c.web.reload()
+        }
     }
+
+    private var skipBeforeUnloadUntil = 0L
 
     private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false, appMode: Boolean = false): BTab? {
         if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme açılabilir"); return null }
@@ -1989,8 +2044,8 @@ fun onMusicCatalog(raw: String?) {
                 prefs.addHistory(if (title.isNullOrBlank()) u else title, u)
             }
             // Uygulama açık temadayken YouTube arayüzünü de açığa zorla
-            if (!dark && (u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")) {
-                try { view?.evaluateJavascript(FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
+            if ((u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")) {
+                try { view?.evaluateJavascript(if (dark) FORCE_DARK_YT_JS else FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
             }
             // YouTube ortadaki logo / büyük oynat katmanı + sayfa içi mini player
             if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
@@ -2102,6 +2157,10 @@ fun onMusicCatalog(raw: String?) {
             return true
         }
         override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+            if (android.os.SystemClock.uptimeMillis() < skipBeforeUnloadUntil) {
+                result?.confirm()
+                return true
+            }
             themedChoice(
                 "Sayfadan ayrılınsın mı?",
                 "Bu sayfada yaptığın değişiklikler kaydedilmemiş olabilir. Şimdi ayrılırsan kaybolabilirler.",
@@ -4069,8 +4128,8 @@ fun onMusicCatalog(raw: String?) {
         }.start()
     }
 
-    /** Uygulama içi İndirilenler listesi. select=true: tikli seçim modu. */
-    private fun showDownloads(select: Boolean = false) {
+    /** Uygulama içi İndirilenler listesi. */
+    private fun showDownloads() {
         val items = ArrayList(prefs.downloads())
         val d = Dialog(this)
         pushUiOverlay()
@@ -4080,46 +4139,22 @@ fun onMusicCatalog(raw: String?) {
         rootV.setBackgroundColor(cBg)
         rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
 
-        val selected = LinkedHashSet<String>()
-        val boxes = ArrayList<Pair<android.widget.CheckBox, String>>()
-        var delBtn: TextView? = null
-        var titleTv: TextView? = null
-        fun refreshSel() {
-            titleTv?.text = "Seçilen: ${selected.size}"
-            delBtn?.text = if (selected.isEmpty()) "Sil" else "Sil (${selected.size})"
-            delBtn?.alpha = if (selected.isEmpty()) 0.45f else 1f
-        }
-
         val head = LinearLayout(this)
         head.orientation = LinearLayout.HORIZONTAL
         head.gravity = Gravity.CENTER_VERTICAL
         val tt = TextView(this)
-        tt.text = if (select) "Seçilen: 0" else "İndirilenler"
+        tt.text = "İndirilenler"
         tt.textSize = 20f
         tt.setTypeface(null, Typeface.BOLD)
         tt.setTextColor(cText)
-        titleTv = tt
         head.addView(tt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         if (items.isNotEmpty()) {
-            if (!select) {
-                val clear = textBtn("Temizle") {
-                    // Hepsini silmek yerine seçmeli temizlik
-                    d.dismiss()
-                    showDownloads(true)
-                }
-                clear.setTextColor(cAccent)
-                head.addView(clear)
-            } else {
-                val all = textBtn("Tümünü seç") {
-                    val allOn = selected.size == items.size
-                    selected.clear()
-                    if (!allOn) for (e in items) selected.add(e.path)
-                    for ((cb, pth) in boxes) cb.isChecked = selected.contains(pth)
-                    refreshSel()
-                }
-                all.setTextColor(cAccent)
-                head.addView(all)
+            val clear = textBtn("Temizle") {
+                // Seçmeli silme: önce neyin silineceği seçilir, sonra listeden mi telefondan mı silineceği sorulur
+                showDownloadsSelect { d.dismiss(); showDownloads() }
             }
+            clear.setTextColor(cAccent)
+            head.addView(clear)
         }
         rootV.addView(head)
 
@@ -4142,15 +4177,6 @@ fun onMusicCatalog(raw: String?) {
                 row.gravity = Gravity.CENTER_VERTICAL
                 row.setPadding(dp(12), dp(12), dp(12), dp(12))
                 row.background = shape(cSurface, 14)
-                if (select) {
-                    val cb = android.widget.CheckBox(this)
-                    val st = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-                    cb.buttonTintList = ColorStateList(st, intArrayOf(cAccent, cSub))
-                    cb.isClickable = false
-                    cb.isFocusable = false
-                    boxes.add(cb to e.path)
-                    row.addView(cb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(4) })
-                }
                 val icon = TextView(this)
                 icon.text = when {
                     e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
@@ -4178,50 +4204,41 @@ fun onMusicCatalog(raw: String?) {
                 info.addView(nameTv)
                 info.addView(subTv)
                 row.addView(info, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                if (select) {
-                    row.setOnClickListener {
-                        val box = boxes.firstOrNull { it.second == e.path }?.first
-                        if (selected.contains(e.path)) selected.remove(e.path) else selected.add(e.path)
-                        box?.isChecked = selected.contains(e.path)
-                        refreshSel()
-                    }
-                } else {
-                    row.setOnClickListener {
-                        try {
-                            val f = java.io.File(e.path)
-                            if (f.exists()) {
-                                val kind = mediaKindOf(e.title, e.mime)
-                                if (kind != null) {
-                                    openMediaPlayer(f, e.title, kind == "audio")
-                                } else if (isLocalViewable(e.title, e.mime)) {
-                                    openLocalDocument(f, e)
-                                } else {
-                                    val uri = androidx.core.content.FileProvider.getUriForFile(this, "com.pusula.browser.files", f)
-                                    val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
-                                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    try {
-                                        startActivity(Intent.createChooser(open, "Aç"))
-                                    } catch (_: Exception) {
-                                        toast("Bu dosyayı açacak uygulama yok: " + e.title)
-                                    }
-                                }
-                            } else if (e.url.startsWith("http")) {
-                                openTab(e.url)
-                                d.dismiss()
-                            } else {
-                                toast("Dosya bulunamadı")
-                            }
-                        } catch (_: Exception) {
-                            toast("Dosya açılamadı")
-                        }
-                    }
-                    row.setOnLongClickListener {
-                        themedDeleteDownload(e.title, e.path) {
+                row.setOnClickListener {
+                    try {
+                        val f = java.io.File(e.path)
+                        if (f.exists()) {
+                            val kind = mediaKindOf(e.title, e.mime)
+                                      if (kind != null) {
+                                          openMediaPlayer(f, e.title, kind == "audio")
+                                      } else if (isLocalViewable(e.title, e.mime)) {
+                                          openLocalDocument(f, e)
+                                      } else {
+                                          val uri = androidx.core.content.FileProvider.getUriForFile(this, "com.pusula.browser.files", f)
+                                          val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
+                                          open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                          try {
+                                              startActivity(Intent.createChooser(open, "Aç"))
+                                          } catch (_: Exception) {
+                                              toast("Bu dosyayı açacak uygulama yok: " + e.title)
+                                          }
+                                      }
+                                  } else if (e.url.startsWith("http")) {
+                            openTab(e.url)
                             d.dismiss()
-                            showDownloads()
+                        } else {
+                            toast("Dosya bulunamadı")
                         }
-                        true
+                    } catch (_: Exception) {
+                        toast("Dosya açılamadı")
                     }
+                }
+                row.setOnLongClickListener {
+                    themedDeleteDownload(e.title, e.path) {
+                        d.dismiss()
+                        showDownloads()
+                    }
+                    true
                 }
                 val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 lp.bottomMargin = dp(8)
@@ -4231,43 +4248,174 @@ fun onMusicCatalog(raw: String?) {
             rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
 
-        if (select && items.isNotEmpty()) {
-            val bar = LinearLayout(this)
-            bar.orientation = LinearLayout.HORIZONTAL
-            bar.gravity = Gravity.CENTER_VERTICAL
-            val cancel = textBtn("Vazgeç") {
-                d.dismiss()
-                showDownloads()
-            }
-            cancel.setTextColor(cSub)
-            cancel.gravity = Gravity.CENTER
-            bar.addView(cancel, LinearLayout.LayoutParams(0, dp(48), 1f))
-            val del = textBtn("Sil") {
-                if (selected.isEmpty()) {
-                    toast("Önce silinecekleri seç")
-                } else {
-                    val paths = ArrayList(selected)
-                    themedDeleteDownloads(
-                        if (paths.size == 1) "Seçilen dosya silinsin mi?" else "Seçilen ${paths.size} dosya silinsin mi?",
-                        paths
-                    ) {
-                        d.dismiss()
-                        showDownloads()
+        val close = textBtn("Kapat") { d.dismiss() }
+        close.setTextColor(cSub)
+        close.gravity = Gravity.CENTER
+        rootV.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+
+        sheetWindow(d, rootV, true)
+        d.show()
+    }
+
+    /** Dosyayı telefondan siler (önce doğrudan, olmazsa MediaStore üzerinden). */
+    private fun deleteDownloadFile(path: String): Boolean {
+        var ok = false
+        try {
+            val f = java.io.File(path)
+            if (f.exists()) ok = f.delete()
+            if (!ok && Build.VERSION.SDK_INT >= 29) {
+                try {
+                    contentResolver.query(
+                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        arrayOf(android.provider.MediaStore.MediaColumns._ID),
+                        android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=?",
+                        arrayOf(f.name),
+                        null
+                    )?.use { c ->
+                        if (c.moveToFirst()) {
+                            val id = c.getLong(0)
+                            val u = android.content.ContentUris.withAppendedId(
+                                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
+                            )
+                            ok = contentResolver.delete(u, null, null) > 0
+                        }
                     }
-                }
+                } catch (_: Exception) { }
             }
-            del.setTextColor(cAccent)
-            del.gravity = Gravity.CENTER
-            delBtn = del
-            bar.addView(del, LinearLayout.LayoutParams(0, dp(48), 1f))
-            rootV.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-            refreshSel()
-        } else {
-            val close = textBtn("Kapat") { d.dismiss() }
-            close.setTextColor(cSub)
-            close.gravity = Gravity.CENTER
-            rootV.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        } catch (_: Exception) { }
+        return ok
+    }
+
+    /** Seçilen indirmeler için "telefondan da sil / sadece listeden kaldır" sorusu. */
+    private fun themedDeleteMany(picked: List<Prefs.DownloadEntry>, after: () -> Unit) {
+        val n = picked.size
+        val msg = if (n == 1) "«" + picked[0].title + "» silinsin mi?" else "Seçilen $n dosya silinsin mi?"
+        themedChoice(
+            "Silme seçeneği",
+            msg + "\n\nSadece listeden kaldırırsan dosyalar telefonunda kalır.",
+            listOf(
+                Triple("Telefondan da sil", true) {
+                    var okCount = 0
+                    for (e in picked) {
+                        if (deleteDownloadFile(e.path)) okCount++
+                        prefs.removeDownload(e.path)
+                    }
+                    toast(if (okCount == n) "$n dosya telefondan silindi" else "$okCount dosya silindi, kalanlar için sadece kayıt kaldırıldı")
+                    after()
+                },
+                Triple("Sadece listeden kaldır", false) {
+                    for (e in picked) prefs.removeDownload(e.path)
+                    toast("$n kayıt listeden kaldırıldı")
+                    after()
+                },
+                Triple("Vazgeç", false) { }
+            ),
+            onCancel = { }
+        )
+    }
+
+    /** Silinecek indirmeleri çentikle seçme ekranı (tümünü seç / tek tek). */
+    private fun showDownloadsSelect(onDone: () -> Unit) {
+        val items = ArrayList(prefs.downloads())
+        if (items.isEmpty()) return
+        val selected = BooleanArray(items.size)
+        val d = Dialog(this)
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay() }
+        val rootV = LinearLayout(this)
+        rootV.orientation = LinearLayout.VERTICAL
+        rootV.setBackgroundColor(cBg)
+        rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+
+        val head = LinearLayout(this)
+        head.orientation = LinearLayout.HORIZONTAL
+        head.gravity = Gravity.CENTER_VERTICAL
+        val tt = TextView(this)
+        tt.text = "Silinecekleri seç"
+        tt.textSize = 20f
+        tt.setTypeface(null, Typeface.BOLD)
+        tt.setTextColor(cText)
+        head.addView(tt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val cancel = textBtn("Vazgeç") { d.dismiss() }
+        cancel.setTextColor(cSub)
+        head.addView(cancel, LinearLayout.LayoutParams(dp(84), dp(40)))
+        rootV.addView(head)
+
+        val selectAll = textBtn("Tümünü seç / kaldır") { }
+        selectAll.setTextColor(cAccent)
+        selectAll.setTypeface(null, Typeface.BOLD)
+        rootV.addView(selectAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+        val delBtn = TextView(this)
+        fun updateCount() {
+            val n = selected.count { it }
+            delBtn.text = if (n == 0) "Silmek için seç" else "Seçilenleri sil ($n)"
+            delBtn.alpha = if (n == 0) 0.45f else 1f
         }
+
+        val checks = ArrayList<android.widget.CheckBox>()
+        val scroll = ScrollView(this)
+        val listCol = LinearLayout(this)
+        listCol.orientation = LinearLayout.VERTICAL
+        listCol.setPadding(0, dp(8), 0, dp(12))
+        for (i in items.indices) {
+            val e = items[i]
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(8), dp(10), dp(12), dp(10))
+            row.background = shape(cSurface, 14)
+            val cb = android.widget.CheckBox(this)
+            try { cb.buttonTintList = ColorStateList.valueOf(cAccent) } catch (_: Exception) { }
+            cb.setOnCheckedChangeListener { _, v -> selected[i] = v; updateCount() }
+            checks.add(cb)
+            row.addView(cb, LinearLayout.LayoutParams(dp(40), dp(40)))
+            val icon = TextView(this)
+            icon.text = when {
+                e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
+                e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") -> "🎵"
+                e.mime.startsWith("image") -> "🖼️"
+                e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
+                else -> "📁"
+            }
+            icon.textSize = 20f
+            row.addView(icon, LinearLayout.LayoutParams(dp(32), dp(32)).apply { rightMargin = dp(8) })
+            val nameTv = TextView(this)
+            nameTv.text = e.title
+            nameTv.textSize = 15f
+            nameTv.setTextColor(cText)
+            nameTv.maxLines = 2
+            nameTv.ellipsize = android.text.TextUtils.TruncateAt.END
+            row.addView(nameTv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.setOnClickListener { cb.isChecked = !cb.isChecked }
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            lp.bottomMargin = dp(8)
+            listCol.addView(row, lp)
+        }
+        scroll.addView(listCol)
+        rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        var allOn = false
+        selectAll.setOnClickListener {
+            allOn = !allOn
+            for (c in checks) c.isChecked = allOn
+        }
+
+        delBtn.textSize = 15f
+        delBtn.setTypeface(null, Typeface.BOLD)
+        delBtn.setTextColor(Color.WHITE)
+        delBtn.gravity = Gravity.CENTER
+        val dg = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFFFF5A5F.toInt(), 0xFFD6245A.toInt()))
+        dg.cornerRadius = dp(26).toFloat()
+        delBtn.background = dg
+        delBtn.setOnClickListener {
+            val picked = ArrayList<Prefs.DownloadEntry>()
+            for (i in items.indices) if (selected[i]) picked.add(items[i])
+            if (picked.isEmpty()) { toast("Önce silinecekleri seç"); return@setOnClickListener }
+            themedDeleteMany(picked) { d.dismiss(); onDone() }
+        }
+        updateCount()
+        rootV.addView(delBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
 
         sheetWindow(d, rootV, true)
         d.show()
@@ -4591,42 +4739,8 @@ fun onMusicCatalog(raw: String?) {
     }
 
 
-    /** İndirme: sadece listeden veya telefon dosyasıyla sil (tek dosya). */
+    /** İndirme: sadece listeden veya telefon dosyasıyla sil. */
     private fun themedDeleteDownload(title: String, path: String, after: () -> Unit) {
-        themedDeleteDownloads("«" + title + "» silinsin mi?", listOf(path), after)
-    }
-
-    /** Telefondaki indirme dosyasını siler (MediaStore yedeğiyle). */
-    private fun deleteDownloadFile(path: String): Boolean {
-        var ok = false
-        try {
-            val f = java.io.File(path)
-            if (f.exists()) ok = f.delete()
-            if (!ok && Build.VERSION.SDK_INT >= 29) {
-                try {
-                    contentResolver.query(
-                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                        arrayOf(android.provider.MediaStore.MediaColumns._ID),
-                        android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=?",
-                        arrayOf(f.name),
-                        null
-                    )?.use { c ->
-                        if (c.moveToFirst()) {
-                            val id = c.getLong(0)
-                            val u = android.content.ContentUris.withAppendedId(
-                                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
-                            )
-                            ok = contentResolver.delete(u, null, null) > 0
-                        }
-                    }
-                } catch (_: Exception) { }
-            }
-        } catch (_: Exception) { }
-        return ok
-    }
-
-    /** Bir veya birden çok indirme için: Sadece listeden kaldır / Telefondan da sil / Vazgeç. */
-    private fun themedDeleteDownloads(message: String, paths: List<String>, after: () -> Unit) {
         val d = Dialog(this)
         try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
         val col = LinearLayout(this)
@@ -4637,7 +4751,7 @@ fun onMusicCatalog(raw: String?) {
         bg.cornerRadius = dp(24).toFloat()
         col.background = bg
         val msg = TextView(this)
-        msg.text = message
+        msg.text = "«" + title + "» silinsin mi?"
         msg.textSize = 16f
         msg.setTypeface(null, Typeface.BOLD)
         msg.setTextColor(cText)
@@ -4667,25 +4781,43 @@ fun onMusicCatalog(raw: String?) {
             })
         }
         ovalBtn("Sadece listeden kaldır", cField, cText, true) {
-            for (pth in paths) prefs.removeDownload(pth)
-            toast(if (paths.size > 1) "${paths.size} kayıt silindi" else "Kayıt silindi")
+            prefs.removeDownload(path)
+            toast("Kayıt silindi")
         }
         ovalBtn("Telefondan da sil", cAccent, Color.WHITE, true) {
-            var okCount = 0
-            for (pth in paths) {
-                if (deleteDownloadFile(pth)) okCount++
-                prefs.removeDownload(pth)
-            }
-            toast(
-                if (okCount == paths.size) {
-                    if (paths.size > 1) "$okCount dosya telefonda silindi" else "Dosya telefonda silindi"
-                } else "Kayıt silindi ($okCount/${paths.size} dosya silinebildi)"
-            )
+            var ok = false
+            try {
+                val f = java.io.File(path)
+                if (f.exists()) ok = f.delete()
+                if (!ok && Build.VERSION.SDK_INT >= 29) {
+                    try {
+                        contentResolver.query(
+                            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            arrayOf(android.provider.MediaStore.MediaColumns._ID),
+                            android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=?",
+                            arrayOf(f.name),
+                            null
+                        )?.use { c ->
+                            if (c.moveToFirst()) {
+                                val id = c.getLong(0)
+                                val u = android.content.ContentUris.withAppendedId(
+                                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
+                                )
+                                ok = contentResolver.delete(u, null, null) > 0
+                            }
+                        }
+                    } catch (_: Exception) { }
+                }
+            } catch (_: Exception) { }
+            prefs.removeDownload(path)
+            toast(if (ok) "Dosya telefonda silindi" else "Kayıt silindi (dosyaya erişilemedi)")
         }
         ovalBtn("Vazgeç", cField, cSub, false) { }
         d.setContentView(col)
         d.show()
     }
+
+
 
 fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val d = Dialog(this)
@@ -4902,7 +5034,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val title = TextView(this)
         title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
         head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val done = textBtn("Kaydet") { d.dismiss(); toast("Ayarlar kaydedildi") }
+        val done = textBtn("Bitti") { d.dismiss() }
         done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
         head.addView(done, LinearLayout.LayoutParams(dp(84), dp(40)))
         rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -5805,30 +5937,80 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         """
 
         // Uygulama açık temadayken YouTube / YT Music arayüzünü de açık tona zorlar
-        const val FORCE_LIGHT_YT_JS =
-            "(function(){" +
-            "if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;" +
-            "function apply(){" +
-            "try{" +
-            "document.documentElement.setAttribute('dark','false');" +
-            "document.documentElement.removeAttribute('dark');" +
-            "document.documentElement.style.colorScheme='light';" +
-            "if(document.body){document.body.style.backgroundColor='#fff';document.body.style.color='#0f0f0f';}" +
-            "var st=document.getElementById('__rota_light');" +
-            "if(!st){st=document.createElement('style');st.id='__rota_light';document.documentElement.appendChild(st);}" +
-            "st.textContent='" +
-            "html,body{background:#fff!important;color:#0f0f0f!important;color-scheme:light!important}" +
-            "ytm-mobile-topbar-renderer,ytm-pivot-bar-renderer,ytmusic-nav-bar,ytmusic-player-bar,ytmusic-player-page," +
-            "#header,header,.header,.topbar,.nav-bar,.guide,.miniplayer{background:#fff!important;color:#0f0f0f!important}" +
-            "ytm-mobile-topbar-renderer *,ytmusic-nav-bar *{color:#0f0f0f!important}" +
-            "ytd-app,ytd-page-manager,ytd-watch-flexy{background:#fff!important}" +
-            "';" +
-            "try{localStorage.setItem('yt-player-headers-readable','{\"prefs\":{\"f4\":80000}}');}catch(z){}" +
-            "try{document.cookie='PREF=f6=400&tz=Europe.Istanbul;path=/;domain=.youtube.com';}catch(z){}" +
-            "}catch(e){}" +
-            "}" +
-            "apply();setInterval(apply,1500);" +
-            "})();"
+        // YouTube okunabilirlik betiği: uygulama temasına göre YouTube'un renk değişkenlerini ayarlar,
+        // ardından ekrandaki her yazının zemin rengiyle kontrastını ölçüp gerekirse siyah/beyaza çevirir.
+        const val YT_THEME_CORE_JS = """
+(function(){try{
+if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;
+if(!window.__rotaYt){
+window.__rotaYt=true;
+var VL={'--yt-spec-base-background':'#ffffff','--yt-spec-raised-background':'#ffffff','--yt-spec-menu-background':'#ffffff','--yt-spec-general-background-a':'#f9f9f9','--yt-spec-general-background-b':'#f2f2f2','--yt-spec-general-background-c':'#ffffff','--yt-spec-text-primary':'#0f0f0f','--yt-spec-text-secondary':'#606060','--yt-spec-icon-active-other':'#0f0f0f','--yt-spec-icon-inactive':'#606060','--yt-spec-10-percent-layer':'rgba(0,0,0,0.1)','--yt-spec-badge-chip-background':'rgba(0,0,0,0.05)'};
+var VD={'--yt-spec-base-background':'#0f0f0f','--yt-spec-raised-background':'#212121','--yt-spec-menu-background':'#282828','--yt-spec-general-background-a':'#181818','--yt-spec-general-background-b':'#0f0f0f','--yt-spec-general-background-c':'#212121','--yt-spec-text-primary':'#ffffff','--yt-spec-text-secondary':'#aaaaaa','--yt-spec-icon-active-other':'#ffffff','--yt-spec-icon-inactive':'#aaaaaa','--yt-spec-10-percent-layer':'rgba(255,255,255,0.1)','--yt-spec-badge-chip-background':'rgba(255,255,255,0.1)'};
+function rgba(c){var m=/rgba?\(([^)]+)\)/.exec(c||'');if(!m)return null;var p=m[1].split(',').map(function(x){return parseFloat(x);});return {r:p[0],g:p[1],b:p[2],a:p.length>3?p[3]:1};}
+function lin(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);}
+function lum(c){return 0.2126*lin(c.r)+0.7152*lin(c.g)+0.0722*lin(c.b);}
+function ratio(a,b){var x=lum(a),y=lum(b);var hi=Math.max(x,y),lo=Math.min(x,y);return (hi+0.05)/(lo+0.05);}
+function bgOf(el){
+var n=el,depth=0;
+while(n&&n.nodeType===1&&depth<40){
+var c=rgba(getComputedStyle(n).backgroundColor);
+if(c&&c.a>0.6)return c;
+n=n.parentElement;depth++;
+}
+return window.__rotaDark?{r:15,g:15,b:15,a:1}:{r:255,g:255,b:255,a:1};
+}
+function fix(){
+var dk=!!window.__rotaDark,seen=[],cnt=0,H=window.innerHeight;
+var tw=document.createTreeWalker(document.body||document.documentElement,NodeFilter.SHOW_TEXT,null);
+var n;
+while((n=tw.nextNode())&&cnt<500){
+if(!n.nodeValue||!/\S/.test(n.nodeValue))continue;
+var el=n.parentElement;if(!el||seen.indexOf(el)>=0)continue;
+var tg=el.tagName;if(tg==='SCRIPT'||tg==='STYLE'||tg==='NOSCRIPT')continue;
+if(el.closest&&el.closest('.html5-video-player,#movie_player,.ytp-ad-module'))continue;
+var r=el.getBoundingClientRect();
+if(r.width===0||r.height===0||r.bottom<-300||r.top>H+300)continue;
+seen.push(el);cnt++;
+var cs=getComputedStyle(el);
+if(cs.visibility==='hidden'||cs.display==='none')continue;
+var fg=rgba(cs.color);if(!fg||fg.a<0.1)continue;
+var bg=bgOf(el);
+if(ratio(fg,bg)<3){
+var white=lum(bg)<0.4;
+el.style.setProperty('color',white?'#ffffff':'#0f0f0f','important');
+if(el.tagName==='A'||el.tagName==='SPAN'||el.tagName==='YT-FORMATTED-STRING'){try{el.style.setProperty('-webkit-text-fill-color',white?'#ffffff':'#0f0f0f','important');}catch(z){}}
+}
+}
+}
+function apply(){
+try{
+var dk=!!window.__rotaDark,de=document.documentElement,V=dk?VD:VL;
+de.style.colorScheme=dk?'dark':'light';
+if(dk)de.setAttribute('dark','true');else de.removeAttribute('dark');
+for(var k in V)de.style.setProperty(k,V[k],'important');
+var bgc=dk?'#0f0f0f':'#ffffff';
+de.style.setProperty('background-color',bgc,'important');
+if(document.body){document.body.style.setProperty('background-color',bgc,'important');document.body.style.setProperty('color',dk?'#ffffff':'#0f0f0f','important');}
+var st=document.getElementById('__rota_light');
+if(!st){st=document.createElement('style');st.id='__rota_light';document.documentElement.appendChild(st);}
+st.textContent='html,body{background:var(--yt-spec-base-background)!important;color-scheme:'+(dk?'dark':'light')+'!important}'+
+'ytm-mobile-topbar-renderer,ytm-pivot-bar-renderer{background:var(--yt-spec-base-background)!important;color:var(--yt-spec-text-primary)!important}'+
+'ytm-mobile-topbar-renderer *{color:var(--yt-spec-text-primary)!important}';
+fix();
+}catch(e){}
+}
+window.__rotaApplyYt=apply;
+var tm=0;function later(){if(tm)return;tm=setTimeout(function(){tm=0;apply();},250);}
+setInterval(apply,1200);
+window.addEventListener('scroll',later,{passive:true});
+try{new MutationObserver(later).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
+}
+if(window.__rotaApplyYt)window.__rotaApplyYt();
+}catch(e){}})();
+"""
+
+        const val FORCE_LIGHT_YT_JS = "window.__rotaDark=false;" + YT_THEME_CORE_JS
+        const val FORCE_DARK_YT_JS = "window.__rotaDark=true;" + YT_THEME_CORE_JS
 
         // Normal videolar altyazısız başlar (reklam dışında). Kullanıcı sonradan açarsa karışılmaz.
         const val CAPTIONS_OFF_JS =
