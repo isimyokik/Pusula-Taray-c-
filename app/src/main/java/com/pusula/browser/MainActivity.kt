@@ -1149,6 +1149,7 @@ fun onMusicCatalog(raw: String?) {
     }
 
     private fun startBrowsing() {
+        try { prefs.ensureDefaultPinsIfNeeded() } catch (_: Exception) { }
         val s = startUrl; startUrl = null
         val sa = startAppMode; startAppMode = false
         // Ana ekran kısayolu: ana Rota oturumunu yükleme / karıştırma
@@ -2702,7 +2703,8 @@ fun onMusicCatalog(raw: String?) {
     /** Yeni sekme “Hızlı erişim” kutularına site ekler (kalıcı). */
     private fun addToQuickPins(title: String, url: String) {
         try {
-            // Varsa olduğu gibi kullan; yoksa boş başla. Varsayılan 7'yi zorla ekleme.
+            // İlk kez (pins hiç yazılmamışsa) varsayılanları bir kez diske yaz
+            try { prefs.ensureDefaultPinsIfNeeded() } catch (_: Exception) { }
             val arr = try {
                 if (prefs.pins.isBlank()) JSONArray() else JSONArray(prefs.pins)
             } catch (_: Exception) { JSONArray() }
@@ -2722,7 +2724,6 @@ fun onMusicCatalog(raw: String?) {
                 } catch (_: Exception) { cleanUrl }
             }
             if (t.length > 40) t = t.take(40)
-            // e boş → newtab site logosunu (favicon) çeker
             arr.put(JSONObject()
                 .put("t", t)
                 .put("u", cleanUrl)
@@ -2738,6 +2739,8 @@ fun onMusicCatalog(raw: String?) {
             toast("Eklenemedi")
         }
     }
+
+
 
 
 
