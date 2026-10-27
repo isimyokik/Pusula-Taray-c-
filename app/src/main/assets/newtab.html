@@ -214,11 +214,12 @@
     try {
       if (!window.Pusula || !window.Pusula.config) return null;
       var c = JSON.parse(window.Pusula.config());
-      if (c && Array.isArray(c.pins)) return c.pins;
+      // Boş dizi = henüz anlamlı kayıt yok → null say
+      if (c && Array.isArray(c.pins) && c.pins.length > 0) return c.pins;
     } catch (e) {}
     return null;
   }
-  // Kayıtlı dizi varsa onu kullan (boş dizi de geçerli). Yoksa varsayılan.
+  // İlk açılış: kayıt yoksa uygulama varsayılanları. Kullanıcı silmedikçe varsayılanlar durur.
   var pins = loadPinsFromApp();
   if (pins == null) pins = DEFAULT_PINS.slice();
   function save(){
@@ -230,7 +231,9 @@
   }
   function refreshPinsFromApp(){
     var p = loadPinsFromApp();
+    // Boş/null ile ekrandaki dolu listeyi ezme (ekle sırasında varsayılanlar silinmesin)
     if (p == null) return;
+    if (p.length === 0 && pins.length > 0) return;
     pins = p;
     try { render(); } catch (e) {}
   }
@@ -317,7 +320,11 @@
       if (!u) { o.querySelector("#fe_u").focus(); return; }
       if (!t) t = u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
       if (idx >= 0) { pins[idx].t = t; pins[idx].u = u; pins[idx].e = e; }
-      else pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});
+      else {
+        // Liste boşsa varsayılanları koru, yeni öğeyi yanına ekle
+        if (!pins || pins.length === 0) pins = DEFAULT_PINS.slice();
+        pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});
+      }
       save(); closeSheet(); render();
     };
   }
