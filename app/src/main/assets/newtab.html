@@ -228,8 +228,16 @@
     try {
       if (window.Pusula && window.Pusula.savePins) {
         window.Pusula.savePins(JSON.stringify(pins));
+        lastPinsJson = JSON.stringify(pins);
       }
     } catch (e) {}
+  }
+  function iconUrlFor(u){
+    try {
+      var host = new URL(u).hostname;
+      if (!host) return "";
+      return "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=" + encodeURIComponent("https://" + host) + "&size=128";
+    } catch (e) { return ""; }
   }
   function refreshPinsFromApp(){
     var p = loadPinsFromApp();
@@ -268,6 +276,10 @@
   function fetchAndSaveIcon(a, pinIndex, u){
     var box = a.querySelector("i");
     if (!box || box.querySelector("img")) return;
+    if (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i) {
+      applyIcon(box, pins[pinIndex].i, true);
+      return;
+    }
     var host = ""; try { host = new URL(u).hostname; } catch (e) { return; }
     if (!host) return;
     var c = ["https://" + host + "/apple-touch-icon.png",
@@ -347,11 +359,16 @@
       var e = o.querySelector("#fe_e").value.trim();
       if (!u) { o.querySelector("#fe_u").focus(); return; }
       if (!t) t = u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
-      if (idx >= 0) { pins[idx].t = t; pins[idx].u = u; pins[idx].e = e; }
-      else {
-        // Liste boşsa varsayılanları koru, yeni öğeyi yanına ekle
+      if (idx >= 0) {
+        pins[idx].t = t; pins[idx].u = u; pins[idx].e = e;
+        // Simge yoksa logo URL'sini hemen kaydet (yeni sekmede tekrar indirmesin)
+        if (!e) pins[idx].i = iconUrlFor(u);
+        else delete pins[idx].i;
+      } else {
         if (!pins || pins.length === 0) pins = DEFAULT_PINS.slice();
-        pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});
+        var item = {t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)};
+        if (!e) item.i = iconUrlFor(u);
+        pins.push(item);
       }
       save(); closeSheet(); render();
     };
