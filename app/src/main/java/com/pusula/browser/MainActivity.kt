@@ -5996,9 +5996,10 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var restored={};" +
             "function vid(){try{" +
             "var q=new URLSearchParams(location.search).get('v');if(q&&q.length===11)return q;" +
-            "var p=location.pathname||'';" +
-            "var m=p.match(/\/(?:shorts|embed|live)\/([\\w-]{11})/);if(m)return m[1];" +
+            "var parts=(location.pathname||'').split('/');" +
+            "for(var i=0;i<parts.length-1;i++){if((parts[i]==='shorts'||parts[i]==='embed'||parts[i]==='live')&&parts[i+1]&&parts[i+1].length===11)return parts[i+1];}" +
             "}catch(e){}return '';}" +
+
             "function media(){return document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');}" +
             "function save(){try{" +
             "var id=vid(),v=media();if(!id||!v||!isFinite(v.currentTime))return;" +
