@@ -40,7 +40,8 @@ class Prefs(context: Context) {
     var barBottom: Boolean get() = sp.getBoolean("barBottom", true)
       set(v) { sp.edit().putBoolean("barBottom", v).apply() }
     var pins: String get() = sp.getString("pins", "") ?: ""
-      set(v) { sp.edit().putString("pins", v).apply() }
+      // commit: yeni sekme açılınca kayıt kaybolmasın
+      set(v) { sp.edit().putString("pins", v).commit() }
 
     /** Android Auto: YT Music sayfasından çekilen listeler/şarkılar JSON */
     var autoCatalog: String
