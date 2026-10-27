@@ -4455,7 +4455,7 @@ fun onMusicCatalog(raw: String?) {
         bg.cornerRadius = dp(22).toFloat()
         col.background = bg
         val msg = TextView(this)
-        msg.text = """ + title + "" silinsin mi?"
+        msg.text = "\"" + title + "\" silinsin mi?"
         msg.textSize = 15f
         msg.setTextColor(cText)
         msg.setPadding(0, 0, 0, dp(12))
