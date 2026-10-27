@@ -788,6 +788,8 @@ fun onMusicCatalog(raw: String?) {
         super.onUserLeaveHint()
         // İndirilenler / ayarlar / sekmeler açıkken PiP yapma
         if (hasUiOverlay()) return
+        // "Arka planda çalma" kapalıysa küçük pencereye geçme: medya normal yoldan (onPause) durur
+        if (!prefs.bgPlay) return
         if (Build.VERSION.SDK_INT >= 26 && !isInPictureInPictureMode && hasMedia && lastPlaying && (miniTab != null || youtubeVideoTab())) {
             enterPip()
         }
@@ -1262,8 +1264,14 @@ fun onMusicCatalog(raw: String?) {
         if (!settingsDirty) return
         settingsDirty = false
         val c = tabs.getOrNull(cur) ?: return
-        if (c.url.startsWith("http")) c.web.reload()
+        if (c.url.startsWith("http")) {
+            // Ayar yenilemesinde "Sayfadan ayrılınsın mı?" sorusu çıkmasın
+            skipBeforeUnloadUntil = android.os.SystemClock.uptimeMillis() + 5000L
+            c.web.reload()
+        }
     }
+
+    private var skipBeforeUnloadUntil = 0L
 
     private fun openTab(url: String?, load: Boolean = true, incognito: Boolean = false, appMode: Boolean = false): BTab? {
         if (tabs.size >= MAX_TABS) { toast("En fazla $MAX_TABS sekme açılabilir"); return null }
@@ -2139,6 +2147,10 @@ fun onMusicCatalog(raw: String?) {
             return true
         }
         override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+            if (android.os.SystemClock.uptimeMillis() < skipBeforeUnloadUntil) {
+                result?.confirm()
+                return true
+            }
             themedChoice(
                 "Sayfadan ayrılınsın mı?",
                 "Bu sayfada yaptığın değişiklikler kaydedilmemiş olabilir. Şimdi ayrılırsan kaybolabilirler.",
@@ -4851,7 +4863,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val title = TextView(this)
         title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
         head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val done = textBtn("Kaydet") { d.dismiss(); toast("Ayarlar kaydedildi") }
+        val done = textBtn("Bitti") { d.dismiss() }
         done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
         head.addView(done, LinearLayout.LayoutParams(dp(84), dp(40)))
         rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
