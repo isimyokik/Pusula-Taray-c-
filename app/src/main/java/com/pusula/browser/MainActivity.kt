@@ -102,8 +102,8 @@ class MainActivity : AppCompatActivity() {
         var openScript: ScriptHandler? = null
         var errorUrl: String? = null
         var errorLoading: Boolean = false
-        var fromPopup: Boolean = false
         var networkRetryUsed: Boolean = false
+        var fromPopup: Boolean = false
     }
 
     private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
@@ -117,10 +117,10 @@ class MainActivity : AppCompatActivity() {
 
     private val tabs = ArrayList<BTab>()
     private var cur = -1
+    /** Ayarlar/indirilenler vb. diyalog açıkken otomatik PiP yapma */
+    private var uiOverlayCount = 0
     private var shown: WebView? = null
     private var miniTab: BTab? = null
-    /** Auto katalog: gizli WebView (sekmeye eklenmez) */
-    private var autoMusicWeb: android.webkit.WebView? = null
     private var miniOverlay: FrameLayout? = null
     private var miniPlayBtn: TextView? = null
     private var mdOld: BTab? = null
@@ -181,78 +181,26 @@ class MainActivity : AppCompatActivity() {
     private var catalogPollTick = 0
 
     private fun pollMedia() {
-        val t = miniTab ?: tabs.getOrNull(cur)
-        try {
-            // Önce gizli Auto webview (arabada seçilen parça orada çalıyor olabilir)
-            val hw = autoMusicWeb
-            if (hw != null && (hw.url ?: "").contains("youtube")) {
-                hw.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) }
-            } else if (t != null) {
-                t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) }
-            }
-        } catch (_: Exception) { }
-        if (t == null && autoMusicWeb == null) return
+        // Medya: önce mini, sonra YouTube/Music sekmesi (arka planda çalan), yoksa aktif sekme
+        fun isMediaUrl(u: String): Boolean {
+            val x = u.lowercase()
+            return x.contains("youtube.com") || x.contains("youtu.be") || x.contains("music.youtube")
+        }
+        val t = miniTab
+            ?: tabs.firstOrNull { isMediaUrl(it.url) && it !== tabs.getOrNull(cur) }
+            ?: tabs.getOrNull(cur)
+            ?: return
+        try { t.web.evaluateJavascript(MEDIA_STATE_JS) { raw -> onMediaState(raw) } } catch (_: Exception) { }
         catalogPollTick++
-        if (catalogPollTick % 3 == 0) {
+        if (catalogPollTick % 8 == 0) {
             try {
-                if (prefs.autoCatalog.isBlank() || catalogPollTick % 12 == 0) {
-                    ensureAutoMusicLoaded()
-                }
-                val hw = autoMusicWeb
-                if (hw != null) {
-                    val u = hw.url ?: ""
-                    if (u.contains("music.youtube.com")) {
-                        hw.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
-                    }
-                } else {
-                    val tab = t
-                    if (tab != null) {
-                        val u = tab.web.url ?: ""
-                        if (u.contains("music.youtube.com")) {
-                            tab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
-                        }
-                    }
+                val musicTab = tabs.firstOrNull { it.url.contains("music.youtube.com") } ?: t
+                val u = musicTab.web.url ?: ""
+                if (u.contains("music.youtube.com")) {
+                    musicTab.web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) }
                 }
             } catch (_: Exception) { }
         }
-    }
-
-    private fun onMusicCatalog(raw: String?) {
-        try {
-            if (raw.isNullOrBlank() || raw == "null") return
-            val inner = try { JSONArray("[$raw]").getString(0) } catch (_: Exception) { raw.trim().trim('"') }
-            if (inner.isBlank() || inner == "{}") return
-            val o = JSONObject(inner)
-            val pl = o.optJSONArray("playlists") ?: JSONArray()
-            val sg = o.optJSONArray("songs") ?: JSONArray()
-            if (pl.length() == 0 && sg.length() == 0) return
-            // Öncekinden daha zenginse veya eşit değilse kaydet
-            val prev = prefs.autoCatalog
-            if (inner == prev) return
-            var prevPl = 0; var prevSg = 0
-            try {
-                val po = JSONObject(prev)
-                prevPl = po.optJSONArray("playlists")?.length() ?: 0
-                prevSg = po.optJSONArray("songs")?.length() ?: 0
-            } catch (_: Exception) { }
-            // Daha az sonuçla ezme (geçici boş tarama)
-            if (prev.isNotBlank() && pl.length() + sg.length() < prevPl + prevSg && pl.length() + sg.length() < 3) return
-            // byPlaylist: playlist sayfasındaysak şarkıları o listeye bağla
-            try {
-                val page = o.optString("page")
-                val merged = JSONObject(inner)
-                val by = try { JSONObject(prev).optJSONObject("byPlaylist") } catch (_: Exception) { null } ?: JSONObject()
-                if (page.contains("browse") || page.contains("playlist") || page.contains("channel")) {
-                    if (sg.length() > 0) by.put(page, sg)
-                }
-                // önceki byPlaylist koru
-                if (by.length() > 0) merged.put("byPlaylist", by)
-                prefs.autoCatalog = merged.toString()
-            } catch (_: Exception) {
-                prefs.autoCatalog = inner
-            }
-            RotaMediaBrowserService.notifyCatalogChanged()
-        } catch (_: Exception) { }
     }
 
     private fun onMediaState(raw: String?) {
@@ -295,13 +243,35 @@ class MainActivity : AppCompatActivity() {
             sentPos = pos; sentAt = now; sentPlaying = playing
             PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
         }
-        // Auto medya kartı: başlık/kapak her değişimde (eski resim kilitlenmesin)
-        if (has && (title.isNotBlank() || playing)) {
-            RotaMediaBrowserService.updateNowPlaying(title, artist, artUrl, playing, pos, if (dur > 0) dur else 0L)
-        }
         // PiP düğme simgesi oynat/duraklat durumuna göre güncellensin
         if (playChanged && isInPictureInPictureMode) updatePipActions()
     }
+
+fun onMusicCatalog(raw: String?) {
+        try {
+            if (raw.isNullOrBlank() || raw == "null") return
+            val inner = try { JSONArray("[$raw]").getString(0) } catch (_: Exception) { raw.trim().trim('"') }
+            if (inner.isBlank() || inner == "{}") return
+            val o = JSONObject(inner)
+            val pl = o.optJSONArray("playlists") ?: JSONArray()
+            val sg = o.optJSONArray("songs") ?: JSONArray()
+            if (pl.length() == 0 && sg.length() == 0) return
+            // Öncekinden daha zenginse veya eşit değilse kaydet
+            val prev = prefs.autoCatalog
+            if (inner == prev) return
+            var prevPl = 0; var prevSg = 0
+            try {
+                val po = JSONObject(prev)
+                prevPl = po.optJSONArray("playlists")?.length() ?: 0
+                prevSg = po.optJSONArray("songs")?.length() ?: 0
+            } catch (_: Exception) { }
+            // Daha az sonuçla ezme (geçici boş tarama)
+            if (prev.isNotBlank() && pl.length() + sg.length() < prevPl + prevSg && pl.length() + sg.length() < 3) return
+            prefs.autoCatalog = inner
+            RotaMediaBrowserService.notifyCatalogChanged()
+        } catch (_: Exception) { }
+    }
+
 
     private fun seekRelJs(d: Int): String =
         "(function(){try{var l=Array.from(document.querySelectorAll('video,audio'));" +
@@ -526,14 +496,12 @@ class MainActivity : AppCompatActivity() {
             }
             if (act == PlaybackService.ACTION_SEARCH) {
                 val q = intent.getStringExtra("q")?.trim().orEmpty()
-                val autoplay = intent.getBooleanExtra("autoplay", true)
-                if (q.isNotEmpty()) openFromAuto("https://music.youtube.com/search?q=" + Uri.encode(q), autoplay)
+                if (q.isNotEmpty()) openTab("https://music.youtube.com/search?q=" + Uri.encode(q), appMode = true)
                 return
             }
             if (act == PlaybackService.ACTION_OPEN) {
                 val u = intent.getStringExtra("url")?.trim().orEmpty()
-                val autoplay = intent.getBooleanExtra("autoplay", true)
-                if (u.startsWith("http")) openFromAuto(u, autoplay)
+                if (u.startsWith("http")) openTab(u, appMode = true)
                 return
             }
             val js = when (act) {
@@ -677,8 +645,6 @@ class MainActivity : AppCompatActivity() {
             addAction(PlaybackService.ACTION_OPEN)
         }
         ContextCompat.registerReceiver(this, mediaControlReceiver, mediaFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        handleAutoIntent(intent)
-        handler.postDelayed({ ensureAutoMusicLoaded() }, 2500L)
         startBrowsing()
         addOnPictureInPictureModeChangedListener { info -> onPipChanged(info.isInPictureInPictureMode) }
         handler.removeCallbacks(mediaStatePoll)
@@ -700,136 +666,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        setIntent(intent)
-        handleAutoIntent(intent)
+        val u = intent.dataString ?: return
+        openTab(u, appMode = intent.getBooleanExtra("pusula_app", false))
     }
-
-    private fun handleAutoIntent(intent: Intent?) {
-        if (intent == null) return
-        // Arabadan: görünür sekmede YT Music (boş sekme bırakma)
-        if (intent.getBooleanExtra("auto_open_music", false)) {
-            try {
-                val music = "https://music.youtube.com/"
-                val idx = tabs.indexOfFirst { (it.web.url ?: "").contains("music.youtube.com") }
-                if (idx >= 0) {
-                    switchTo(idx)
-                    val u = tabs[idx].web.url ?: ""
-                    if (u.contains("/watch") || u.length < 10) {
-                        try { tabs[idx].web.loadUrl(music) } catch (_: Exception) { }
-                    }
-                } else {
-                    openTab(music, appMode = true)
-                }
-            } catch (_: Exception) {
-                try { openTab("https://music.youtube.com/", appMode = true) } catch (_: Exception) { }
-            }
-        }
-        if (intent.getBooleanExtra("ensure_music", false)) {
-            ensureAutoMusicLoaded()
-        }
-        val fromAuto = intent.action == PlaybackService.ACTION_OPEN ||
-            intent.action == PlaybackService.ACTION_SEARCH
-        val url = when {
-            intent.action == PlaybackService.ACTION_SEARCH -> {
-                val q = intent.getStringExtra("q")?.trim().orEmpty()
-                if (q.isNotEmpty()) "https://music.youtube.com/search?q=" + Uri.encode(q) else ""
-            }
-            intent.action == PlaybackService.ACTION_OPEN ->
-                intent.getStringExtra("url")?.trim().orEmpty()
-            else -> intent.dataString?.trim().orEmpty()
-        }
-        if (!url.startsWith("http")) return
-        val autoplay = intent.getBooleanExtra("autoplay", fromAuto)
-        openFromAuto(url, autoplay)
-    }
-
-    private fun openFromAuto(url: String, autoplay: Boolean) {
-        if (!url.startsWith("http")) return
-        try {
-            ensureAutoMusicLoaded()
-            try { autoMusicWeb?.loadUrl(url) } catch (_: Exception) { }
-            // Telefon ön plandaysa görünür sekmede de aç (debug / kullanıcı bakıyorsa)
-            if (isResumedNow) {
-                try {
-                    val existing = tabs.indexOfFirst { t ->
-                        val u = t.web.url ?: return@indexOfFirst false
-                        u == url || (url.length > 20 && u.startsWith(url.take(url.length.coerceAtMost(60))))
-                    }
-                    if (existing >= 0) switchTo(existing)
-                    else openTab(url, appMode = true)
-                } catch (_: Exception) { }
-            }
-        } catch (_: Exception) {
-            try { autoMusicWeb?.loadUrl(url) } catch (_: Exception) { }
-        }
-        if (autoplay) {
-            scheduleForcePlay()
-            // MediaSession play komutu
-            handler.postDelayed({
-                try {
-                    sendBroadcast(Intent(PlaybackService.ACTION_PLAY).setPackage(packageName))
-                } catch (_: Exception) { }
-            }, 2500L)
-        }
-    }
-
-    private fun scheduleForcePlay() {
-        val delays = longArrayOf(700L, 1500L, 2800L, 4500L, 7000L)
-        for (d in delays) {
-            handler.postDelayed({
-                try {
-                    autoMusicWeb?.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null)
-                    (miniTab ?: tabs.getOrNull(cur))?.web?.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null)
-                } catch (_: Exception) { }
-            }, d)
-        }
-    }
-
-
-    /** Auto: YT Music gizli WebView — sekmeye eklenmez; ana sayfayı tarar */
-    private fun ensureAutoMusicLoaded() {
-        try {
-            val existing = autoMusicWeb
-            if (existing != null) {
-                val u = existing.url ?: ""
-                if (!u.contains("music.youtube.com") || u.contains("/watch")) {
-                    try { existing.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
-                } else {
-                    // Liste dolsun diye hafif kaydır (lazy load)
-                    try {
-                        existing.evaluateJavascript(
-                            "(function(){try{var a=document.scrollingElement||document.body;if(a){a.scrollTop=Math.min(a.scrollTop+800,a.scrollHeight);}window.scrollBy(0,600);}catch(e){}})();",
-                            null
-                        )
-                    } catch (_: Exception) { }
-                }
-                return
-            }
-            val web = BgWebView(this)
-            val s = web.settings
-            s.javaScriptEnabled = true
-            s.domStorageEnabled = true
-            s.mediaPlaybackRequiresUserGesture = false
-            s.loadsImagesAutomatically = true
-            try {
-                s.userAgentString = s.userAgentString.replace("; wv", "").replace(Regex("Version/\\d+\\.\\d+ "), "")
-            } catch (_: Exception) { }
-            web.layoutParams = android.widget.FrameLayout.LayoutParams(2, 2)
-            web.alpha = 0f
-            web.visibility = android.view.View.VISIBLE
-            try {
-                (findViewById<android.view.ViewGroup>(android.R.id.content))?.addView(web)
-            } catch (_: Exception) { }
-            autoMusicWeb = web
-            try { web.loadUrl("https://music.youtube.com/") } catch (_: Exception) { }
-            // Yükleme sonrası tekrar tara
-            handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 4000L)
-            handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 8000L)
-            handler.postDelayed({ try { web.evaluateJavascript(YT_MUSIC_CATALOG_JS) { raw -> onMusicCatalog(raw) } } catch (_: Exception) { } }, 14000L)
-        } catch (_: Exception) { }
-    }
-
-
 
     override fun onPause() {
         super.onPause()
@@ -863,7 +702,19 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             appInBackground = true
-            shown?.onPause()
+            // Arka planda çalma kapalı: YouTube sayfayı gizlenince kendi durur, YT Music durmaz — o yüzden tüm medyayı açıkça duraklat
+            val stopJs = "(function(){try{window.__userPause=true;document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='';if(!m.paused&&!m.ended)m.pause();});}catch(e){}})();"
+            for (t in (tabs.toList() + listOfNotNull(miniTab))) {
+                try { t.web.evaluateJavascript(stopJs, null) } catch (_: Exception) { }
+            }
+            lastPlaying = false
+            if (hasMedia) PlaybackService.update(this, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+            // Betiğin çalışması için WebView'ı kısa bir gecikmeyle durdur
+            handler.postDelayed({
+                if (appInBackground && !isResumedNow && !isInPictureInPictureMode) {
+                    try { shown?.onPause() } catch (_: Exception) { }
+                }
+            }, 350L)
         }
     }
 
@@ -886,9 +737,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun pushUiOverlay() { uiOverlayCount++ }
+    private fun popUiOverlay() { if (uiOverlayCount > 0) uiOverlayCount-- }
+    private fun hasUiOverlay(): Boolean = uiOverlayCount > 0
+
     /** Ana ekrana basınca YouTube videosu çalıyorsa kendiliğinden küçük pencereye geçer. */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
+        // İndirilenler / ayarlar / sekmeler açıkken PiP yapma
+        if (hasUiOverlay()) return
         if (Build.VERSION.SDK_INT >= 26 && !isInPictureInPictureMode && hasMedia && lastPlaying && (miniTab != null || youtubeVideoTab())) {
             enterPip()
         }
@@ -1387,21 +1244,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun switchTo(i: Int) {
         if (i !in tabs.indices) return
-        shown?.let {
-            tabs.getOrNull(cur)?.let { oldTab -> capturePreview(oldTab) }
-            content.removeView(it)
-        }
-        for (idx in tabs.indices) {
-            if (idx != i) {
-                try { tabs[idx].web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) {}
-            }
-        }
-
+        tabs.getOrNull(cur)?.let { capturePreview(it) }
+        // WebView hiyerarşide kalsın (GONE) — medya diğer sekmede susmasın
         cur = i
         val t = tabs[i]
+        for (tab in tabs) {
+            val w = tab.web
+            if (w.parent == null) {
+                content.addView(w, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+            w.visibility = if (tab === t) View.VISIBLE else View.GONE
+        }
         shown = t.web
-        content.addView(t.web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        t.web.onResume()
+        try { t.web.onResume() } catch (_: Exception) { }
 
         try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
 
@@ -1431,10 +1286,7 @@ class MainActivity : AppCompatActivity() {
         val t = tabs[index]
         val wasCurrent = index == cur
         if (wasCurrent) { content.removeView(t.web); shown = null }
-        t.web.stopLoading()
-        try { t.web.clearHistory() } catch (_: Exception) { }
-        // clearCache(true) diğer sekmelerin oturumunu/zor yüklemeyi bozabiliyor — yok
-        try { t.web.destroy() } catch (_: Exception) { }
+        t.web.stopLoading(); try { t.web.clearHistory() } catch (_: Exception) {}; try { t.web.destroy() } catch (_: Exception) {}
         tabs.removeAt(index)
         if (t.incognito) {
             CookieManager.getInstance().removeAllCookies(null)
@@ -1911,7 +1763,7 @@ class MainActivity : AppCompatActivity() {
         ov?.animate()?.alpha(0f)?.setDuration(150)?.start()
     }
 
-
+    
     private fun updateTabCount() { tabCount.text = tabs.size.toString() }
 
     private fun stateFile(i: Int) = java.io.File(filesDir, "tabstate_$i.bin")
@@ -2036,8 +1888,8 @@ class MainActivity : AppCompatActivity() {
             findBar.visibility == View.VISIBLE -> closeFind()
             urlField.hasFocus() -> { hideKeyboard(); urlField.clearFocus(); root.requestFocus() }
             web != null && web.canGoBack() -> web.goBack()
-            tabs.size > 1 -> closeTab(cur)
-            else -> finish()
+            // Sekmeyi kapatma / değiştirmeme — sadece çıkış uyarısı
+            else -> themedConfirm("Uygulamadan çıkılsın mı?", onYes = { finish() }, onNo = {})
         }
     }
 
@@ -2113,7 +1965,6 @@ class MainActivity : AppCompatActivity() {
         override fun onPageFinished(view: WebView?, url: String?) {
             tab.progress = 100
             tab.networkRetryUsed = false
-            tab.errorLoading = false
             if (url != null && url.startsWith(ASSET_PREFIX)) {
                 try { view?.evaluateJavascript("if(window.__rotaTheme)window.__rotaTheme();", null) } catch (_: Exception) { }
             }
@@ -2151,15 +2002,12 @@ class MainActivity : AppCompatActivity() {
                 code == android.webkit.WebViewClient.ERROR_CONNECT ||
                 code == android.webkit.WebViewClient.ERROR_TIMEOUT ||
                 code == android.webkit.WebViewClient.ERROR_IO ||
-                code == android.webkit.WebViewClient.ERROR_FAILED_SSL_HANDSHAKE ||
                 desc.contains("ERR_CONNECTION") || desc.contains("ERR_NAME_NOT_RESOLVED") ||
                 desc.contains("ERR_TIMED_OUT") || desc.contains("ERR_NETWORK_CHANGED")
             if (transient && !tab.networkRetryUsed) {
                 tab.networkRetryUsed = true
                 handler.postDelayed({
-                    try {
-                        if (tabs.any { it === tab }) view.loadUrl(failing)
-                    } catch (_: Exception) { }
+                    try { if (tabs.any { it === tab }) view.loadUrl(failing) } catch (_: Exception) { }
                 }, 1200L)
                 return
             }
@@ -2167,42 +2015,18 @@ class MainActivity : AppCompatActivity() {
                 code == android.webkit.WebViewClient.ERROR_HOST_LOOKUP -> "Site bulunamadı (DNS). VPN veya ağı kontrol et."
                 code == android.webkit.WebViewClient.ERROR_CONNECT -> "Bağlantı kurulamadı. VPN/ağ kopmuş olabilir."
                 code == android.webkit.WebViewClient.ERROR_TIMEOUT -> "Bağlantı zaman aşımı. Tekrar dene."
-                code == android.webkit.WebViewClient.ERROR_FAILED_SSL_HANDSHAKE -> "HTTPS el sıkışması başarısız (sertifika/VPN)."
                 else -> if (desc.isNotBlank()) desc else "Sayfa yüklenemedi"
             }
             showError(view, tab, failing, msg)
         }
 
-        override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: android.webkit.WebResourceResponse?) {
-            if (view == null || request == null || response == null) return
-            if (!request.isForMainFrame) return
-            val code = response.statusCode
-            if (code < 500) return
-            showError(view, tab, request.url.toString(), "Sunucu hatası HTTP $code — site geçici yanıt vermiyor")
-        }
-
-        
         override fun onReceivedSslError(view: WebView?, h: android.webkit.SslErrorHandler?, error: android.net.http.SslError?) {
-            // Chrome gibi: geçersiz sertifikada devam etme
             h?.cancel()
             if (view == null || error == null) return
             val failing = error.url ?: return
-            try {
-                val fh = android.net.Uri.parse(failing).host
-                val ph = android.net.Uri.parse(tab.url).host
-                if (fh != null && ph != null && !fh.equals(ph, true)) {
-                    val samePage = failing.substringBefore('#').trimEnd('/').equals(tab.url.substringBefore('#').trimEnd('/'), true)
-                    if (!samePage) return
-                }
-            } catch (_: Exception) { }
-            val reason = when (error.primaryError) {
-                android.net.http.SslError.SSL_EXPIRED -> "Sertifika süresi dolmuş"
-                android.net.http.SslError.SSL_IDMISMATCH -> "Sertifika bu siteye ait değil"
-                android.net.http.SslError.SSL_UNTRUSTED -> "Sertifika güvenilir değil (VPN ara sertifikası olabilir)"
-                android.net.http.SslError.SSL_DATE_INVALID -> "Cihaz tarihi hatalı olabilir"
-                else -> "Güvenli bağlantı (HTTPS) kurulamadı"
+            if (failing.substringBefore('#').trimEnd('/') == tab.url.substringBefore('#').trimEnd('/')) {
+                showError(view, tab, failing, "Güvenli bağlantı kurulamadı (sertifika hatası)")
             }
-            showError(view, tab, failing, reason)
         }
 
         override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
@@ -2945,6 +2769,9 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
         })
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay(); menuDialog = null }
+        menuDialog = d
         d.show()
     }
 
@@ -4220,6 +4047,8 @@ class MainActivity : AppCompatActivity() {
     private fun showDownloads() {
         val items = ArrayList(prefs.downloads())
         val d = Dialog(this)
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay() }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
@@ -4323,11 +4152,10 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 row.setOnLongClickListener {
-                    themedConfirm("\"${e.title}\" kaydı silinsin mi?", onYes = {
-                        prefs.removeDownload(e.path)
+                    themedDeleteDownload(e.title, e.path) {
                         d.dismiss()
                         showDownloads()
-                    }, onNo = {})
+                    }
                     true
                 }
                 val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -4519,6 +4347,8 @@ class MainActivity : AppCompatActivity() {
     private fun showTabs() {
         tabs.getOrNull(cur)?.let { capturePreview(it) }
         val d = Dialog(this)
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay() }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
@@ -4663,8 +4493,94 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
+    /** İndirme: sadece listeden veya telefon dosyasıyla sil. */
+    private fun themedDeleteDownload(title: String, path: String, after: () -> Unit) {
         val d = Dialog(this)
+        try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(dp(22), dp(20), dp(22), dp(18))
+        val bg = GradientDrawable()
+        bg.setColor(cSurface)
+        bg.cornerRadius = dp(24).toFloat()
+        col.background = bg
+        val msg = TextView(this)
+        msg.text = "«" + title + "» silinsin mi?"
+        msg.textSize = 16f
+        msg.setTypeface(null, Typeface.BOLD)
+        msg.setTextColor(cText)
+        msg.setPadding(0, 0, 0, dp(16))
+        col.addView(msg)
+
+        fun ovalBtn(label: String, fill: Int, textColor: Int, runAfter: Boolean, action: () -> Unit) {
+            val b = TextView(this)
+            b.text = label
+            b.textSize = 15f
+            b.setTypeface(null, Typeface.BOLD)
+            b.setTextColor(textColor)
+            b.gravity = Gravity.CENTER
+            b.setPadding(dp(16), dp(14), dp(16), dp(14))
+            val shape = GradientDrawable()
+            shape.setColor(fill)
+            shape.cornerRadius = dp(28).toFloat()
+            b.background = shape
+            b.isClickable = true
+            b.setOnClickListener {
+                d.dismiss()
+                action()
+                if (runAfter) after()
+            }
+            col.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            })
+        }
+        ovalBtn("Sadece listeden kaldır", cField, cText, true) {
+            prefs.removeDownload(path)
+            toast("Kayıt silindi")
+        }
+        ovalBtn("Telefondan da sil", cAccent, Color.WHITE, true) {
+            var ok = false
+            try {
+                val f = java.io.File(path)
+                if (f.exists()) ok = f.delete()
+                if (!ok && Build.VERSION.SDK_INT >= 29) {
+                    try {
+                        contentResolver.query(
+                            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            arrayOf(android.provider.MediaStore.MediaColumns._ID),
+                            android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=?",
+                            arrayOf(f.name),
+                            null
+                        )?.use { c ->
+                            if (c.moveToFirst()) {
+                                val id = c.getLong(0)
+                                val u = android.content.ContentUris.withAppendedId(
+                                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
+                                )
+                                ok = contentResolver.delete(u, null, null) > 0
+                            }
+                        }
+                    } catch (_: Exception) { }
+                }
+            } catch (_: Exception) { }
+            prefs.removeDownload(path)
+            toast(if (ok) "Dosya telefonda silindi" else "Kayıt silindi (dosyaya erişilemedi)")
+        }
+        ovalBtn("Vazgeç", cField, cSub, false) { }
+        d.setContentView(col)
+        d.show()
+    }
+
+
+
+fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
+        val d = Dialog(this)
+        try {
+            d.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            d.window?.setGravity(Gravity.CENTER)
+            d.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        } catch (_: Exception) { }
+        try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
         col.setPadding(dp(20), dp(18), dp(20), dp(14))
@@ -4689,18 +4605,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun themedConfirm(message: String, onYes: () -> Unit, onNo: () -> Unit) {
         val d = Dialog(this)
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val wrap = FrameLayout(this)
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
-        col.setPadding(dp(20), dp(18), dp(20), dp(14))
+        col.setPadding(dp(22), dp(20), dp(22), dp(16))
         val bg = GradientDrawable()
         bg.setColor(cSurface)
         bg.cornerRadius = dp(22).toFloat()
         col.background = bg
         val msg = TextView(this)
         msg.text = message.trim().ifEmpty { "Emin misin?" }
-        msg.textSize = 15f
+        msg.textSize = 16f
         msg.setTextColor(cText)
-        msg.setPadding(0, 0, 0, dp(14))
+        msg.setPadding(0, 0, 0, dp(16))
         col.addView(msg)
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
@@ -4712,8 +4630,19 @@ class MainActivity : AppCompatActivity() {
         row.addView(no, LinearLayout.LayoutParams(0, dp(44), 1f))
         row.addView(yes, LinearLayout.LayoutParams(0, dp(44), 1f))
         col.addView(row)
+        val lp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.gravity = Gravity.CENTER
+        lp.leftMargin = dp(28)
+        lp.rightMargin = dp(28)
+        wrap.addView(col, lp)
+        d.setContentView(wrap)
         d.setOnCancelListener { onNo() }
-        sheetWindow(d, col, false)
+        d.window?.let { w ->
+            w.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            w.setGravity(Gravity.CENTER)
+            w.setDimAmount(0.45f)
+        }
         d.show()
     }
 
@@ -4782,6 +4711,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSettings() {
         val d = Dialog(this)
+        pushUiOverlay()
+        d.setOnDismissListener { popUiOverlay() }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
@@ -5080,55 +5011,7 @@ class MainActivity : AppCompatActivity() {
                   """
 
         // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-        
-    const val YT_MUSIC_CATALOG_JS =
-        "(function(){try{" +
-        "if(!/music\\.youtube\\.com/i.test(location.hostname||''))return JSON.stringify({playlists:[],songs:[],page:location.href});" +
-        "var playlists=[],songs=[],seen={};" +
-        "function abs(u){if(!u)return '';u=String(u);if(u.indexOf('http')===0)return u.split('?')[0].indexOf('google')>=0?u:u;if(u.indexOf('//')===0)return location.protocol+u;return u;}" +
-        "function txt(el){if(!el)return '';return (el.getAttribute('title')||el.getAttribute('aria-label')||el.textContent||'').replace(/\\s+/g,' ').trim();}" +
-        "function pushP(title,sub,url,art){title=(title||'').replace(/\\s+/g,' ').trim();url=(url||'').trim();if(!title||title.length<2)return;if(!url||url.indexOf('http')!==0)return;" +
-        "if(/signin|accounts\\.google|language|feedback/i.test(url+title))return;if(seen['p'+url])return;seen['p'+url]=1;" +
-        "playlists.push({title:title.slice(0,90),artist:(sub||'').replace(/\\s+/g,' ').trim().slice(0,90),url:url,art:abs(art||'')});}" +
-        "function pushS(title,artist,url,art){title=(title||'').replace(/\\s+/g,' ').trim();if(!title||title.length<1)return;" +
-        "if(/^(oynat|play|next|previous|karıştır)/i.test(title))return;var id=url||(title+'|'+artist);if(seen['s'+id])return;seen['s'+id]=1;" +
-        "songs.push({title:title.slice(0,90),artist:(artist||'').replace(/\\s+/g,' ').trim().slice(0,90),url:(url||'').trim(),art:abs(art||'')});}" +
-        // two-row cards (listeler / albümler / çalma listeleri)
-        "document.querySelectorAll('ytmusic-two-row-item-renderer,ytmusic-responsive-list-item-renderer a[href*=\"browse\"],ytmusic-carousel-item-renderer').forEach(function(el){" +
-        "var root=el.tagName&&el.tagName.toLowerCase().indexOf('a')>=0?el.closest('ytmusic-two-row-item-renderer,ytmusic-carousel-item-renderer,ytmusic-responsive-list-item-renderer')||el:el;" +
-        "var a=root.querySelector?root.querySelector('a[href*=\"browse\"],a[href*=\"playlist\"],a[href*=\"channel\"],a[href]'): (root.href?root:null);" +
-        "if(!a)a=root.querySelector&&root.querySelector('a[href]');" +
-        "var href=a?(a.href||a.getAttribute('href')||''):'';" +
-        "if(href&&href.indexOf('http')!==0){try{href=new URL(href,location.href).href;}catch(z){}}" +
-        "var title=txt(root.querySelector&&root.querySelector('#title,yt-formatted-string#title,.title,a[title],yt-formatted-string[title]'));" +
-        "if(!title&&a)title=txt(a);" +
-        "var sub=txt(root.querySelector&&root.querySelector('#subtitle,.subtitle,yt-formatted-string.subtitle'));" +
-        "var img=root.querySelector&&root.querySelector('img');var art=img?(img.getAttribute('src')||img.src||''):'';" +
-        "if(href&&(/browse|playlist|channel/.test(href)||(root.tagName||'').toLowerCase().indexOf('two-row')>=0))pushP(title,sub,href,art);" +
-        "else if(href&&/watch/.test(href))pushS(title,sub,href,art);" +
-        "});" +
-        // şarkı satırları
-        "document.querySelectorAll('ytmusic-responsive-list-item-renderer,ytmusic-player-queue-item,ytmusic-list-item-renderer').forEach(function(el){" +
-        "var a=el.querySelector('a[href*=\"watch\"],a[href*=\"browse\"],a[href]');" +
-        "var href=a?(a.href||''):'';" +
-        "var title=txt(el.querySelector('.title,#title,yt-formatted-string.title,yt-formatted-string[class*=\"title\"]'));" +
-        "if(!title)title=txt(el.querySelector('yt-formatted-string'));" +
-        "var secs=el.querySelectorAll('.secondary-flex-columns yt-formatted-string,yt-formatted-string.flex-column,.subtitle yt-formatted-string,yt-formatted-string[class*=\"byline\"]');" +
-        "var artist=secs.length?txt(secs[0]):'';" +
-        "var img=el.querySelector('img');var art=img?(img.getAttribute('src')||img.src||''):'';" +
-        "if(href&&/browse|playlist/.test(href)&&!/watch/.test(href))pushP(title,artist,href,art);" +
-        "else pushS(title,artist,href,art);" +
-        "});" +
-        // genel link tarama (yedek)
-        "if(playlists.length<3){document.querySelectorAll('a[href*=\"/browse/\"],a[href*=\"list=\"]').forEach(function(a){" +
-        "var href=a.href||'';var title=txt(a);if(title.length<3){var p=a.closest('[id],[class]');title=txt(p);}pushP(title,'',href,'');});}" +
-        "if(songs.length<3){document.querySelectorAll('a[href*=\"watch?v=\"]').forEach(function(a){" +
-        "var title=txt(a);if(title.length<2)return;pushS(title,'',a.href,'');});}" +
-        "return JSON.stringify({playlists:playlists.slice(0,50),songs:songs.slice(0,60),page:location.href,ts:Date.now()});" +
-        "}catch(e){return JSON.stringify({playlists:[],songs:[],error:String(e),page:location.href});}})();"
-
-
-    const val YT_MUSIC_UX_JS =
+        const val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
             "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
             "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
@@ -5577,8 +5460,8 @@ class MainActivity : AppCompatActivity() {
             "if(tick%5===1)hideAdUi(true);" +
             "if(vd){" +
             "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
-            "try{vd.muted=true;vd.volume=0;}catch(x){}" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{m.muted=true;m.volume=0;}catch(z){}});" +
+            // muted kullanma — sadece volume=0 (reklam sesi); içerik muted kalmasın
+            "try{vd.volume=0;}catch(x){}" +
             "vd.style.visibility='hidden';" +
             "if(vd.playbackRate<8)vd.playbackRate=16;" +
             "}" +
@@ -5939,7 +5822,55 @@ class MainActivity : AppCompatActivity() {
         const val MEDIA_HOOK_JS =
             "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
 
-        const val MEDIA_STATE_JS =
+        const val YT_MUSIC_CATALOG_JS =
+        "(function(){try{" +
+        "if(!/music\\.youtube\\.com/i.test(location.hostname||''))return JSON.stringify({playlists:[],songs:[],page:location.href});" +
+        "var playlists=[],songs=[],seen={};" +
+        "function abs(u){if(!u)return '';u=String(u);if(u.indexOf('http')===0)return u.split('?')[0].indexOf('google')>=0?u:u;if(u.indexOf('//')===0)return location.protocol+u;return u;}" +
+        "function txt(el){if(!el)return '';return (el.getAttribute('title')||el.getAttribute('aria-label')||el.textContent||'').replace(/\\s+/g,' ').trim();}" +
+        "function pushP(title,sub,url,art){title=(title||'').replace(/\\s+/g,' ').trim();url=(url||'').trim();if(!title||title.length<2)return;if(!url||url.indexOf('http')!==0)return;" +
+        "if(/signin|accounts\\.google|language|feedback/i.test(url+title))return;if(seen['p'+url])return;seen['p'+url]=1;" +
+        "playlists.push({title:title.slice(0,90),artist:(sub||'').replace(/\\s+/g,' ').trim().slice(0,90),url:url,art:abs(art||'')});}" +
+        "function pushS(title,artist,url,art){title=(title||'').replace(/\\s+/g,' ').trim();if(!title||title.length<1)return;" +
+        "if(/^(oynat|play|next|previous|karıştır)/i.test(title))return;var id=url||(title+'|'+artist);if(seen['s'+id])return;seen['s'+id]=1;" +
+        "songs.push({title:title.slice(0,90),artist:(artist||'').replace(/\\s+/g,' ').trim().slice(0,90),url:(url||'').trim(),art:abs(art||'')});}" +
+        // two-row cards (listeler / albümler / çalma listeleri)
+        "document.querySelectorAll('ytmusic-two-row-item-renderer,ytmusic-responsive-list-item-renderer a[href*=\"browse\"],ytmusic-carousel-item-renderer').forEach(function(el){" +
+        "var root=el.tagName&&el.tagName.toLowerCase().indexOf('a')>=0?el.closest('ytmusic-two-row-item-renderer,ytmusic-carousel-item-renderer,ytmusic-responsive-list-item-renderer')||el:el;" +
+        "var a=root.querySelector?root.querySelector('a[href*=\"browse\"],a[href*=\"playlist\"],a[href*=\"channel\"],a[href]'): (root.href?root:null);" +
+        "if(!a)a=root.querySelector&&root.querySelector('a[href]');" +
+        "var href=a?(a.href||a.getAttribute('href')||''):'';" +
+        "if(href&&href.indexOf('http')!==0){try{href=new URL(href,location.href).href;}catch(z){}}" +
+        "var title=txt(root.querySelector&&root.querySelector('#title,yt-formatted-string#title,.title,a[title],yt-formatted-string[title]'));" +
+        "if(!title&&a)title=txt(a);" +
+        "var sub=txt(root.querySelector&&root.querySelector('#subtitle,.subtitle,yt-formatted-string.subtitle'));" +
+        "var img=root.querySelector&&root.querySelector('img');var art=img?(img.getAttribute('src')||img.src||''):'';" +
+        "if(href&&(/browse|playlist|channel/.test(href)||(root.tagName||'').toLowerCase().indexOf('two-row')>=0))pushP(title,sub,href,art);" +
+        "else if(href&&/watch/.test(href))pushS(title,sub,href,art);" +
+        "});" +
+        // şarkı satırları
+        "document.querySelectorAll('ytmusic-responsive-list-item-renderer,ytmusic-player-queue-item,ytmusic-list-item-renderer').forEach(function(el){" +
+        "var a=el.querySelector('a[href*=\"watch\"],a[href*=\"browse\"],a[href]');" +
+        "var href=a?(a.href||''):'';" +
+        "var title=txt(el.querySelector('.title,#title,yt-formatted-string.title,yt-formatted-string[class*=\"title\"]'));" +
+        "if(!title)title=txt(el.querySelector('yt-formatted-string'));" +
+        "var secs=el.querySelectorAll('.secondary-flex-columns yt-formatted-string,yt-formatted-string.flex-column,.subtitle yt-formatted-string,yt-formatted-string[class*=\"byline\"]');" +
+        "var artist=secs.length?txt(secs[0]):'';" +
+        "var img=el.querySelector('img');var art=img?(img.getAttribute('src')||img.src||''):'';" +
+        "if(href&&/browse|playlist/.test(href)&&!/watch/.test(href))pushP(title,artist,href,art);" +
+        "else pushS(title,artist,href,art);" +
+        "});" +
+        // genel link tarama (yedek)
+        "if(playlists.length<3){document.querySelectorAll('a[href*=\"/browse/\"],a[href*=\"list=\"]').forEach(function(a){" +
+        "var href=a.href||'';var title=txt(a);if(title.length<3){var p=a.closest('[id],[class]');title=txt(p);}pushP(title,'',href,'');});}" +
+        "if(songs.length<3){document.querySelectorAll('a[href*=\"watch?v=\"]').forEach(function(a){" +
+        "var title=txt(a);if(title.length<2)return;pushS(title,'',a.href,'');});}" +
+        "return JSON.stringify({playlists:playlists.slice(0,50),songs:songs.slice(0,60),page:location.href,ts:Date.now()});" +
+        "}catch(e){return JSON.stringify({playlists:[],songs:[],error:String(e),page:location.href});}})();"
+
+
+
+    const val MEDIA_STATE_JS =
             "(function(){try{" +
             "var l=Array.from(document.querySelectorAll('video,audio'));" +
             "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
