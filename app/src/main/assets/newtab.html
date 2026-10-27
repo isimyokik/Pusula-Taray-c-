@@ -201,7 +201,7 @@
   document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
 
   var G = ["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
-  var pins = (cfg.pins && cfg.pins.length >= 0 && Array.isArray(cfg.pins)) ? cfg.pins : [
+  var DEFAULT_PINS = [
     {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
     {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
     {t:"Müzik",u:"https://music.youtube.com/",e:"🎵",g:2},
@@ -210,7 +210,33 @@
     {t:"Wikipedia",u:"https://tr.wikipedia.org/",e:"📚",g:5},
     {t:"Çeviri",u:"https://translate.google.com/",e:"🌐",g:6}
   ];
-  function save(){ try { if (window.Pusula && window.Pusula.savePins) window.Pusula.savePins(JSON.stringify(pins)); } catch (e) {} }
+  function loadPinsFromApp(){
+    try {
+      if (!window.Pusula || !window.Pusula.config) return null;
+      var c = JSON.parse(window.Pusula.config());
+      if (c && Array.isArray(c.pins)) return c.pins;
+    } catch (e) {}
+    return null;
+  }
+  // Kayıtlı dizi varsa onu kullan (boş dizi de geçerli). Yoksa varsayılan.
+  var pins = loadPinsFromApp();
+  if (pins == null) pins = DEFAULT_PINS.slice();
+  function save(){
+    try {
+      if (window.Pusula && window.Pusula.savePins) {
+        window.Pusula.savePins(JSON.stringify(pins));
+      }
+    } catch (e) {}
+  }
+  function refreshPinsFromApp(){
+    var p = loadPinsFromApp();
+    if (p == null) return;
+    pins = p;
+    try { render(); } catch (e) {}
+  }
+  setTimeout(refreshPinsFromApp, 50);
+  setTimeout(refreshPinsFromApp, 250);
+  setTimeout(refreshPinsFromApp, 600);
   function tile(label, url, icon, bg){
     var a = document.createElement("a"); a.className = "t"; a.href = url;
     var i = document.createElement("i"); i.style.background = bg; i.textContent = icon;
