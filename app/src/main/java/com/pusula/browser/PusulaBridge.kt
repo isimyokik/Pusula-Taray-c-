@@ -45,6 +45,8 @@ class PusulaBridge(private val prefs: Prefs) {
             .put("sub", hex(th.sub))
             .put("accent", hex(th.accent))
             .put("accent2", hex(th.accent2))
+            .put("accent3", hex(th.accent3))
+            .put("wall", th.wall)
             .toString()
     }
 }
