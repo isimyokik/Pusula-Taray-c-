@@ -4442,7 +4442,6 @@ fun onMusicCatalog(raw: String?) {
     }
 
 
-    private 
     /** İndirme: sadece listeden veya telefon dosyasıyla sil. */
     private fun themedDeleteDownload(title: String, path: String, after: () -> Unit) {
         val d = Dialog(this)
