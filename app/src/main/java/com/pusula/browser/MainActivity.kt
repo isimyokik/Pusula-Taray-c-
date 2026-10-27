@@ -297,8 +297,13 @@ fun onMusicCatalog(raw: String?) {
             // Mini ölçeği/kayması PiP'e taşınmasın
             currentWeb()?.let { resetWebLayout(it) }
         }
+        // PiP'e geçerken onPause, PiP bayrağı henüz açılmadan çağrılabilir: bu sırada medya durdurulmasın
+        pipEntering = true
+        handler.postDelayed({ pipEntering = false }, 2500L)
         enterPipWith(android.util.Rational(16, 9))
     }
+
+    private var pipEntering = false
 
     /** Mini/PiP geçişlerinden sonra WebView kayma-ölçek kalmasın. */
     private fun resetWebLayout(w: WebView) {
@@ -675,7 +680,7 @@ fun onMusicCatalog(raw: String?) {
         isResumedNow = false
         saveTabs()
         CookieManager.getInstance().flush()
-        if (isInPictureInPictureMode) {
+        if (isInPictureInPictureMode || pipEntering) {
             try { shown?.onResume() } catch (_: Exception) { }
             return
         }
@@ -711,7 +716,7 @@ fun onMusicCatalog(raw: String?) {
             if (hasMedia) PlaybackService.update(this, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
             // Betiğin çalışması için WebView'ı kısa bir gecikmeyle durdur
             handler.postDelayed({
-                if (appInBackground && !isResumedNow && !isInPictureInPictureMode) {
+                if (appInBackground && !isResumedNow && !isInPictureInPictureMode && !pipEntering) {
                     try { shown?.onPause() } catch (_: Exception) { }
                 }
             }, 350L)
@@ -1208,8 +1213,17 @@ fun onMusicCatalog(raw: String?) {
     }
 
     /** Ayar değişince betikleri günceller ve açık sayfayı yeniler. */
+    private var settingsDirty = false
+
+    /** Ayar değişince betikler hemen güncellenir; açık sayfanın yenilenmesi ayarlar kapanınca (Kaydet) yapılır. */
     private fun settingsChanged() {
         for (t in tabs) syncScripts(t)
+        settingsDirty = true
+    }
+
+    private fun applySettingsReload() {
+        if (!settingsDirty) return
+        settingsDirty = false
         val c = tabs.getOrNull(cur) ?: return
         if (c.url.startsWith("http")) c.web.reload()
     }
@@ -2085,6 +2099,18 @@ fun onMusicCatalog(raw: String?) {
         override fun onHideCustomView() { hideCustom() }
         override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
             themedMessage(message ?: "", onDismiss = { result?.confirm() })
+            return true
+        }
+        override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+            themedChoice(
+                "Sayfadan ayrılınsın mı?",
+                "Bu sayfada yaptığın değişiklikler kaydedilmemiş olabilir. Şimdi ayrılırsan kaybolabilirler.",
+                listOf(
+                    Triple("Bu sayfada kal", true) { result?.cancel() },
+                    Triple("Kaydetmeden ayrıl", false) { result?.confirm() }
+                ),
+                onCancel = { result?.cancel() }
+            )
             return true
         }
         override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
@@ -4646,6 +4672,70 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         d.show()
     }
 
+    /** Başlıklı, oval tuşlu ve temaya uygun seçim kartı. buttons: (yazı, ana tuş mu, eylem). İptal edilirse onCancel çalışır. */
+    private fun themedChoice(title: String, message: String, buttons: List<Triple<String, Boolean, () -> Unit>>, onCancel: () -> Unit) {
+        val d = Dialog(this)
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val wrap = FrameLayout(this)
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(dp(22), dp(22), dp(22), dp(18))
+        val bg = GradientDrawable()
+        bg.setColor(cSurface)
+        bg.cornerRadius = dp(26).toFloat()
+        bg.setStroke(dp(1), cField)
+        col.background = bg
+        val tt = TextView(this)
+        tt.text = title
+        tt.textSize = 19f
+        tt.setTypeface(null, Typeface.BOLD)
+        tt.setTextColor(cText)
+        tt.setPadding(0, 0, 0, dp(8))
+        col.addView(tt)
+        val msg = TextView(this)
+        msg.text = message
+        msg.textSize = 14.5f
+        msg.setTextColor(cSub)
+        msg.setLineSpacing(0f, 1.15f)
+        msg.setPadding(0, 0, 0, dp(18))
+        col.addView(msg)
+        var done = false
+        for ((label, primary, act) in buttons) {
+            val b = TextView(this)
+            b.text = label
+            b.textSize = 15f
+            b.setTypeface(null, Typeface.BOLD)
+            b.gravity = Gravity.CENTER
+            if (primary) {
+                b.setTextColor(Color.WHITE)
+                val g = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(cAccent, cAccent2))
+                g.cornerRadius = dp(24).toFloat()
+                b.background = ripple(g)
+            } else {
+                b.setTextColor(cText)
+                b.background = ripple(shape(cField, 24))
+            }
+            b.setOnClickListener { if (!done) { done = true; d.dismiss(); act() } }
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
+            lp.topMargin = dp(8)
+            col.addView(b, lp)
+        }
+        val lp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.gravity = Gravity.CENTER
+        lp.leftMargin = dp(26)
+        lp.rightMargin = dp(26)
+        wrap.addView(col, lp)
+        d.setContentView(wrap)
+        d.setOnCancelListener { if (!done) { done = true; onCancel() } }
+        d.window?.let { w ->
+            w.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            w.setGravity(Gravity.CENTER)
+            w.setDimAmount(0.5f)
+        }
+        d.show()
+    }
+
     private fun startModeLabel(): String = when (prefs.startMode) {
         "home" -> "Ana sayfa"
         "blank" -> "Yeni sekme"
@@ -4712,7 +4802,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
     private fun showSettings() {
         val d = Dialog(this)
         pushUiOverlay()
-        d.setOnDismissListener { popUiOverlay() }
+        d.setOnDismissListener { popUiOverlay(); handler.postDelayed({ applySettingsReload() }, 120L) }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
@@ -4724,9 +4814,9 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val title = TextView(this)
         title.text = "Ayarlar"; title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
         head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val done = textBtn("Bitti") { d.dismiss() }
+        val done = textBtn("Kaydet") { d.dismiss(); toast("Ayarlar kaydedildi") }
         done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
-        head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
+        head.addView(done, LinearLayout.LayoutParams(dp(84), dp(40)))
         rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val list = LinearLayout(this)
