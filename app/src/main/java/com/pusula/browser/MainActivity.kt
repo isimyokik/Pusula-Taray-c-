@@ -103,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         var errorUrl: String? = null
         var errorLoading: Boolean = false
         var fromPopup: Boolean = false
+        var networkRetryUsed: Boolean = false
     }
 
     private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
