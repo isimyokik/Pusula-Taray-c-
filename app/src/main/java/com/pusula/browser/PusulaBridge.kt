@@ -18,8 +18,10 @@ class PusulaBridge(private val prefs: Prefs) {
 
     @JavascriptInterface
     fun savePins(json: String) {
-        if (!trusted) return
-        try { prefs.pins = JSONArray(json).toString() } catch (e: Exception) { }
+        // Kayıt her zaman yazılsın (yeni sekme silinmesin); config hâlâ trusted ister
+        try {
+            prefs.pins = JSONArray(json).toString()
+        } catch (e: Exception) { }
     }
 
     @JavascriptInterface
