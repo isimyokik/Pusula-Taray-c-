@@ -12,21 +12,25 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * İndirme bildirimleri: ilerleme SESSİZ kanalda canlı güncellenir (damlacık sesi yok),
- * ses yalnızca indirme bitince gelir.
+ * İlerleme: bildirim çubuğunda görünür, ses/titreşim YOK.
+ * Bitince: tek sesli tamamlandı bildirimi.
  */
 object DownloadNotifier {
-    private const val CH_PROGRESS = "dl_progress"
-    private const val CH_DONE = "dl_done"
+    private const val CH_PROGRESS = "dl_progress_v2"
+    private const val CH_DONE = "dl_done_v2"
 
     private fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val p = NotificationChannel(CH_PROGRESS, "İndirme ilerlemesi", NotificationManager.IMPORTANCE_LOW)
+        val p = NotificationChannel(CH_PROGRESS, "İndirme ilerlemesi", NotificationManager.IMPORTANCE_DEFAULT)
         p.setSound(null, null)
         p.enableVibration(false)
+        p.setShowBadge(false)
+        p.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         nm.createNotificationChannel(p)
-        nm.createNotificationChannel(NotificationChannel(CH_DONE, "İndirme tamamlandı", NotificationManager.IMPORTANCE_DEFAULT))
+        val d = NotificationChannel(CH_DONE, "İndirme tamamlandı", NotificationManager.IMPORTANCE_DEFAULT)
+        d.setShowBadge(false)
+        nm.createNotificationChannel(d)
     }
 
     private fun post(ctx: Context, id: Int, n: Notification) {
@@ -45,7 +49,18 @@ object DownloadNotifier {
         )
         Thread {
             val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            var lastPct = -2
+            // İlk bildirim hemen (kullanıcı görsün)
+            post(ctx, nid, NotificationCompat.Builder(ctx, CH_PROGRESS)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(name)
+                .setContentText("İndiriliyor…")
+                .setContentIntent(open)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setProgress(100, 0, true)
+                .build())
             while (true) {
                 var found = false
                 var status = -1
@@ -75,6 +90,7 @@ object DownloadNotifier {
                         .setContentText(if (ok) "İndirme tamamlandı" else "İndirme başarısız")
                         .setContentIntent(open)
                         .setAutoCancel(true)
+                        .setOnlyAlertOnce(true)
                         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                         .build()
                     post(ctx, doneId, n)
@@ -82,21 +98,19 @@ object DownloadNotifier {
                 }
 
                 val pct = if (total > 0) ((got * 100) / total).toInt().coerceIn(0, 100) else -1
-                if (pct != lastPct) {
-                    lastPct = pct
-                    val b = NotificationCompat.Builder(ctx, CH_PROGRESS)
-                        .setSmallIcon(android.R.drawable.stat_sys_download)
-                        .setContentTitle(name)
-                        .setContentText(if (pct >= 0) "İndiriliyor… %" + pct else "İndiriliyor…")
-                        .setContentIntent(open)
-                        .setOngoing(true)
-                        .setOnlyAlertOnce(true)
-                        .setSilent(true)
-                        .setPriority(NotificationCompat.PRIORITY_LOW)
-                        .setProgress(100, if (pct >= 0) pct else 0, pct < 0)
-                    post(ctx, nid, b.build())
-                }
-                try { Thread.sleep(800) } catch (_: InterruptedException) { return@Thread }
+                val text = if (pct >= 0) "İndiriliyor… %$pct" else "İndiriliyor…"
+                val b = NotificationCompat.Builder(ctx, CH_PROGRESS)
+                    .setSmallIcon(android.R.drawable.stat_sys_download)
+                    .setContentTitle(name)
+                    .setContentText(text)
+                    .setContentIntent(open)
+                    .setOngoing(true)
+                    .setOnlyAlertOnce(true)
+                    .setSilent(true)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setProgress(100, if (pct >= 0) pct else 0, pct < 0)
+                post(ctx, nid, b.build())
+                try { Thread.sleep(700) } catch (_: InterruptedException) { return@Thread }
             }
         }.start()
     }
