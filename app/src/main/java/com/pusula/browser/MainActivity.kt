@@ -1357,7 +1357,10 @@ fun onMusicCatalog(raw: String?) {
         switchTo(tabs.size - 1)
         applyHostUa(t, url)
         if (appMode) applyAppTaskDescription(url)
-        if (load) t.web.loadUrl(url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL))
+        val loadUrl = url ?: (if (incognito) NEWTAB_URL + "?private=1" else NEWTAB_URL)
+        // Hızlı erişim config/savePins için trusted, sayfa yüklenmeden önce
+        if (loadUrl.startsWith(ASSET_PREFIX)) t.bridge.trusted = true
+        if (load) t.web.loadUrl(loadUrl)
         return t
     }
 
@@ -2709,15 +2712,6 @@ fun onMusicCatalog(raw: String?) {
     }
 
     /** Hızlı erişim (yeni sekme) sayfasını ana ekrana ekler — ana Rota, appMode değil. */
-    private fun pinQuickAccessHome() {
-        val launch = Intent(this, MainActivity::class.java).apply {
-            action = Intent.ACTION_MAIN
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            putExtra("open_newtab", true)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        pinShortcut("rota-quick-access", "Rota Hızlı Erişim", launch, null)
-    }
 
 private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
         try {
@@ -2861,9 +2855,6 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 addToQuickPins(if (t.title.isBlank()) shownUrl(t.url) else t.title, t.url)
             })
         }
-        col.addView(row("⚡", "Hızlı erişim — ana ekrana") {
-            pinQuickAccessHome()
-        })
         if (canHome) {
             col.addView(row("🏠", "Ana ekrana ekle") { addCurrentToHomeScreen() })
         }
