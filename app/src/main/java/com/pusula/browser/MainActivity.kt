@@ -2392,13 +2392,19 @@ fun onMusicCatalog(raw: String?) {
             }
             val req = DownloadManager.Request(Uri.parse(url))
             if (mime != null) req.setMimeType(mime)
-            val cookie = CookieManager.getInstance().getCookie(url)
-                ?: CookieManager.getInstance().getCookie("https://www.youtube.com")
-            if (!cookie.isNullOrBlank()) req.addRequestHeader("Cookie", cookie)
-            req.addRequestHeader("User-Agent", ua ?: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-            if (url.contains("googlevideo.com") || url.contains("youtube.com") || url.contains("youtu.be")) {
-                req.addRequestHeader("Referer", "https://www.youtube.com/")
-                req.addRequestHeader("Origin", "https://www.youtube.com")
+            val gvUa = if (ua == null && url.contains("googlevideo.com")) ytDlUa else null
+            if (gvUa != null) {
+                // Linki alan YouTube istemcisiyle aynı kimlik (tarayıcı çerezi/Referer yok)
+                req.addRequestHeader("User-Agent", gvUa)
+            } else {
+                val cookie = CookieManager.getInstance().getCookie(url)
+                    ?: CookieManager.getInstance().getCookie("https://www.youtube.com")
+                if (!cookie.isNullOrBlank()) req.addRequestHeader("Cookie", cookie)
+                req.addRequestHeader("User-Agent", ua ?: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                if (url.contains("googlevideo.com") || url.contains("youtube.com") || url.contains("youtu.be")) {
+                    req.addRequestHeader("Referer", "https://www.youtube.com/")
+                    req.addRequestHeader("Origin", "https://www.youtube.com")
+                }
             }
             req.setTitle(name)
             // Sistem bildirimi kapalı; ilerleme ve bitiş bildirimini DownloadNotifier kendisi gösterir
@@ -3045,57 +3051,58 @@ fun onMusicCatalog(raw: String?) {
         } ?: "video_$id"
         val base = safeFileName(title, id)
         val watch = "https://www.youtube.com/watch?v=$id"
+        val noLink = "İndirilemedi: indirme linki bulunamadı"
 
-        fun isAudio(label: String, url: String): Boolean {
-            val t = "$label $url".lowercase()
-            return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
-                t.contains("mime=audio") || t.contains("itag=140") || t.contains("itag=251") ||
-                t.contains("itag=139") || t.contains("itag=249") || t.contains("itag=250")
+        // 1) InnerTube (PO token istemeyen istemci önce) → 2) açık sayfadan → yoksa hemen uyar
+        fetchViaInnertube(watch) { itLinks ->
+            if (startYtDownload(itLinks, audioOnly, base)) return@fetchViaInnertube
+            val t = tabs.getOrNull(cur)
+            if (t == null) { toast(noLink); return@fetchViaInnertube }
+            try {
+                t.web.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
+                    ytDlUa = null
+                    if (!startYtDownload(parseYtFormatLinks(raw), audioOnly, base)) toast(noLink)
+                }
+            } catch (_: Exception) { toast(noLink) }
         }
-        fun looksProgressive(url: String): Boolean {
-            val u = url.lowercase()
-            return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
-                u.contains("itag=37") ||
-                (u.contains("mime=video") && u.contains("audio")) ||
-                (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
-        }
-        fun pickAndStart(links: List<Pair<String, String>>) {
-            val audio = links.firstOrNull { isAudio(it.first, it.second) }?.second
-            val prog = links.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
-            when {
-                audioOnly && audio != null ->
-                    startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
-                !audioOnly && prog != null ->
-                    startDownload(prog, null, null, "video/mp4", "$base.mp4")
-                audio != null ->
-                    startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
-                else -> toast("İndirme linki alınamadı")
-            }
-        }
+    }
 
-        // 1) Açık sayfadan hızlı
-        val t = tabs.getOrNull(cur)
-        try {
-            t?.web?.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
-                val links = parseYtFormatLinks(raw)
-                if (links.isNotEmpty()) {
-                    pickAndStart(links)
-                    return@evaluateJavascript
-                }
-                // 2) InnerTube → 3) SaveFrom (sessiz)
-                fetchViaInnertube(watch) { itLinks ->
-                    if (itLinks.isNotEmpty()) pickAndStart(itLinks)
-                    else fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
-                }
-            } ?: fetchViaInnertube(watch) { itLinks ->
-                if (itLinks.isNotEmpty()) pickAndStart(itLinks)
-                else fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
+    private var ytDlUa: String? = null
+
+    private fun ytIsAudio(label: String, url: String): Boolean {
+        val t = "$label $url".lowercase()
+        return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
+            t.contains("mime=audio") || t.contains("itag=140") || t.contains("itag=251") ||
+            t.contains("itag=139") || t.contains("itag=249") || t.contains("itag=250")
+    }
+
+    private fun ytLooksProgressive(url: String): Boolean {
+        val u = url.lowercase()
+        return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
+            u.contains("itag=37") ||
+            (u.contains("mime=video") && u.contains("audio")) ||
+            (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
+    }
+
+    /** Uygun link varsa indirmeyi başlatır ve true döner; yoksa hiçbir şey yapmadan false döner. */
+    private fun startYtDownload(links: List<Pair<String, String>>, audioOnly: Boolean, base: String): Boolean {
+        if (links.isEmpty()) return false
+        val audio = links.firstOrNull { ytIsAudio(it.first, it.second) }?.second
+        val vOnly = links.firstOrNull { it.first.startsWith("MP4V") }?.second
+        val prog = links.firstOrNull {
+            !it.first.startsWith("MP4V") && !ytIsAudio(it.first, it.second) && ytLooksProgressive(it.second)
+        }?.second
+        return when {
+            audioOnly && audio != null -> {
+                startDownload(audio, null, null, "audio/mpeg", "$base.mp3"); true
             }
-        } catch (_: Exception) {
-            fetchViaInnertube(watch) { itLinks ->
-                if (itLinks.isNotEmpty()) pickAndStart(itLinks)
-                else fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
+            !audioOnly && prog != null -> {
+                startDownload(prog, null, null, "video/mp4", "$base.mp4"); true
             }
+            !audioOnly && vOnly != null && audio != null -> {
+                downloadAndMerge(vOnly, audio, "$base.mp4"); true
+            }
+            else -> false
         }
     }
 
@@ -3472,69 +3479,19 @@ fun onMusicCatalog(raw: String?) {
             return
         }
         val (id, title) = playlistQueue[playlistIndex]
-        val n = playlistIndex + 1
-        val total = playlistQueue.size
         val watch = "https://www.youtube.com/watch?v=$id"
         val base = safeFileName(title, id)
 
-        fun advance() {
-            playlistIndex++
-            handler.postDelayed({ processPlaylistQueue() }, 3000L)
-        }
-
-        fun tryDownload(links: List<Pair<String, String>>) {
-            fun isAudio(label: String, url: String): Boolean {
-                val t = "$label $url".lowercase()
-                return t.contains("mp3") || t.contains("audio") || t.contains("m4a") ||
-                    t.contains("mime=audio") || t.contains("itag=140") || t.contains("itag=251") ||
-                    t.contains("itag=139") || t.contains("itag=249") || t.contains("itag=250")
-            }
-            fun looksProgressive(url: String): Boolean {
-                val u = url.lowercase()
-                return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
-                    u.contains("itag=37") ||
-                    (u.contains("mime=video") && u.contains("audio")) ||
-                    (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
-            }
-            val audio = links.firstOrNull { isAudio(it.first, it.second) }?.second
-            val prog = links.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
-            when {
-                playlistAudioOnly && audio != null -> {
-                    startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
-                    advance()
-                }
-                !playlistAudioOnly && prog != null -> {
-                    startDownload(prog, null, null, "video/mp4", "$base.mp4")
-                    advance()
-                }
-                audio != null -> {
-                    // MP4 istendi ama sadece ses bulundu
-                    startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
-                    advance()
-                }
-                else -> {
-                    // SaveFrom yedek (sessiz)
-                    fetchLinksViaSavefromSilent(watch) { sfLinks ->
-                        val sfAudio = sfLinks.firstOrNull { isAudio(it.first, it.second) }?.second
-                        val sfProg = sfLinks.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
-                        when {
-                            playlistAudioOnly && sfAudio != null ->
-                                startDownload(sfAudio, null, null, "audio/mpeg", "$base.mp3")
-                            sfProg != null ->
-                                startDownload(sfProg, null, null, "video/mp4", "$base.mp4")
-                            sfAudio != null ->
-                                startDownload(sfAudio, null, null, "audio/mpeg", "$base.mp3")
-                            else -> { /* atla */ }
-                        }
-                        advance()
-                    }
-                }
-            }
-        }
-
         fetchViaInnertube(watch) { links ->
-            if (links.isNotEmpty()) tryDownload(links)
-            else fetchLinksViaSavefromSilent(watch) { tryDownload(it) }
+            if (startYtDownload(links, playlistAudioOnly, base)) {
+                playlistIndex++
+                handler.postDelayed({ processPlaylistQueue() }, 3000L)
+            } else {
+                // Link yok: bekletmeden uyar, sıradakine geç
+                toast("İndirilemedi (link bulunamadı): $title")
+                playlistIndex++
+                handler.postDelayed({ processPlaylistQueue() }, 600L)
+            }
         }
     }
 
@@ -3649,90 +3606,133 @@ fun onMusicCatalog(raw: String?) {
         } catch (_: Exception) { emptyList() }
     }
 
+    /**
+     * Önce PO token istemeyen ANDROID_VR istemcisiyle, olmazsa eski ANDROID ile link alır.
+     * Kullanılan istemcinin User-Agent'ı ytDlUa'da tutulur; indirme aynı kimlikle yapılır.
+     */
     private fun fetchViaInnertube(page: String, onDone: (List<Pair<String, String>>) -> Unit) {
         val id = videoIdOf(page) ?: page.substringAfter("v=", "").take(11).takeIf { it.length >= 8 }
         if (id == null) { onDone(emptyList()); return }
         Thread {
-            val links = ArrayList<Pair<String, String>>()
-            try {
-                val cookie = try {
-                    CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
-                } catch (_: Exception) { "" }
-                val body = JSONObject()
-                    .put("context", JSONObject().put("client", JSONObject()
-                        .put("clientName", "ANDROID")
-                        .put("clientVersion", "19.28.35")
+            var links: List<Pair<String, String>> = emptyList()
+            var usedUa: String? = null
+            for (cl in listOf("vr", "android")) {
+                val got = ArrayList<Pair<String, String>>()
+                val ua: String
+                val ver: String
+                val nameId: String
+                val client = JSONObject()
+                if (cl == "vr") {
+                    ver = "1.60.19"
+                    nameId = "28"
+                    ua = "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+                    client.put("clientName", "ANDROID_VR")
+                        .put("clientVersion", ver)
+                        .put("deviceMake", "Oculus")
+                        .put("deviceModel", "Quest 3")
+                        .put("osName", "Android")
+                        .put("osVersion", "12L")
+                        .put("androidSdkVersion", 32)
+                        .put("hl", "tr")
+                        .put("gl", "TR")
+                        .put("userAgent", ua)
+                } else {
+                    ver = "19.28.35"
+                    nameId = "3"
+                    ua = "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip"
+                    client.put("clientName", "ANDROID")
+                        .put("clientVersion", ver)
                         .put("androidSdkVersion", 33)
                         .put("hl", "tr")
                         .put("gl", "TR")
-                        .put("userAgent", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip")
-                    ))
-                    .put("videoId", id)
-                    .put("contentCheckOk", true)
-                    .put("racyCheckOk", true)
-                    .toString()
-                val url = java.net.URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
-                val c = url.openConnection() as java.net.HttpURLConnection
-                c.requestMethod = "POST"
-                c.connectTimeout = 8000
-                c.readTimeout = 8000
-                c.doOutput = true
-                c.setRequestProperty("Content-Type", "application/json")
-                c.setRequestProperty("User-Agent", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip")
-                c.setRequestProperty("X-YouTube-Client-Name", "3")
-                c.setRequestProperty("X-YouTube-Client-Version", "19.28.35")
-                if (cookie.isNotEmpty()) c.setRequestProperty("Cookie", cookie)
-                c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-                val code = c.responseCode
-                val stream = if (code in 200..299) c.inputStream else c.errorStream
-                val respText = stream?.bufferedReader()?.readText() ?: ""
-                c.disconnect()
-                if (respText.isNotEmpty()) {
-                    val root = JSONObject(respText)
-                    val sd = root.optJSONObject("streamingData") ?: JSONObject()
-                    fun eat(arr: JSONArray?, audioOnly: Boolean) {
-                        if (arr == null) return
-                        for (i in 0 until arr.length()) {
-                            val f = arr.optJSONObject(i) ?: continue
-                            val u = f.optString("url")
-                            if (!u.startsWith("http")) continue
-                            val mime = f.optString("mimeType").lowercase()
-                            val itag = f.optInt("itag")
-                            val q = f.optString("qualityLabel")
-                            val isAudio = audioOnly || mime.contains("audio") ||
-                                itag in listOf(139, 140, 141, 249, 250, 251)
-                            if (isAudio) links.add("MP3" to u)
-                            else {
-                                val progressive = itag in listOf(18, 22, 37) || u.contains("ratebypass") ||
-                                    (mime.contains("video") && mime.contains("audio"))
-                                if (progressive) {
-                                    val lab = when {
-                                        q.isNotBlank() -> "MP4 $q"
-                                        itag == 18 -> "MP4 360p"
-                                        itag == 22 -> "MP4 720p"
-                                        else -> "MP4"
+                        .put("userAgent", ua)
+                }
+                try {
+                    val cookie = if (cl == "android") {
+                        try { CookieManager.getInstance().getCookie("https://www.youtube.com") ?: "" } catch (_: Exception) { "" }
+                    } else ""
+                    val body = JSONObject()
+                        .put("context", JSONObject().put("client", client))
+                        .put("videoId", id)
+                        .put("contentCheckOk", true)
+                        .put("racyCheckOk", true)
+                        .toString()
+                    val url = java.net.URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
+                    val c = url.openConnection() as java.net.HttpURLConnection
+                    c.requestMethod = "POST"
+                    c.connectTimeout = 8000
+                    c.readTimeout = 8000
+                    c.doOutput = true
+                    c.setRequestProperty("Content-Type", "application/json")
+                    c.setRequestProperty("User-Agent", ua)
+                    c.setRequestProperty("X-YouTube-Client-Name", nameId)
+                    c.setRequestProperty("X-YouTube-Client-Version", ver)
+                    if (cookie.isNotEmpty()) c.setRequestProperty("Cookie", cookie)
+                    c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                    val code = c.responseCode
+                    val stream = if (code in 200..299) c.inputStream else c.errorStream
+                    val respText = stream?.bufferedReader()?.readText() ?: ""
+                    c.disconnect()
+                    if (respText.isNotEmpty()) {
+                        val root = JSONObject(respText)
+                        val sd = root.optJSONObject("streamingData") ?: JSONObject()
+                        // Hem ses hem video içeren (progressive) formatlar
+                        val fm = sd.optJSONArray("formats")
+                        if (fm != null) {
+                            for (i in 0 until fm.length()) {
+                                val f = fm.optJSONObject(i) ?: continue
+                                val u = f.optString("url")
+                                if (!u.startsWith("http")) continue
+                                val mime = f.optString("mimeType").lowercase()
+                                val itag = f.optInt("itag")
+                                val q = f.optString("qualityLabel")
+                                val isAudio = mime.contains("audio") || itag in listOf(139, 140, 141, 249, 250, 251)
+                                if (isAudio) {
+                                    got.add("MP3" to u)
+                                } else {
+                                    val progressive = itag in listOf(18, 22, 37) || u.contains("ratebypass") ||
+                                        (mime.contains("video") && mime.contains("audio"))
+                                    if (progressive) {
+                                        val lab = when {
+                                            q.isNotBlank() -> "MP4 $q"
+                                            itag == 18 -> "MP4 360p"
+                                            itag == 22 -> "MP4 720p"
+                                            else -> "MP4"
+                                        }
+                                        got.add(lab to u)
                                     }
-                                    links.add(lab to u)
                                 }
                             }
                         }
-                    }
-                    eat(sd.optJSONArray("formats"), false)
-                    val ad = sd.optJSONArray("adaptiveFormats")
-                    if (ad != null) {
-                        for (i in 0 until ad.length()) {
-                            val f = ad.optJSONObject(i) ?: continue
-                            val u = f.optString("url")
-                            if (!u.startsWith("http")) continue
-                            val mime = f.optString("mimeType").lowercase()
-                            val itag = f.optInt("itag")
-                            if (mime.contains("audio") || itag in listOf(139, 140, 141, 249, 250, 251)) {
-                                links.add("MP3" to u)
+                        // Ayrı ses (m4a öncelikli) ve ayrı video (birleştirmek için en iyi avc1 <= 720p)
+                        val ad = sd.optJSONArray("adaptiveFormats")
+                        var bestH = 0
+                        var bestV: String? = null
+                        if (ad != null) {
+                            for (i in 0 until ad.length()) {
+                                val f = ad.optJSONObject(i) ?: continue
+                                val u = f.optString("url")
+                                if (!u.startsWith("http")) continue
+                                val mime = f.optString("mimeType").lowercase()
+                                val itag = f.optInt("itag")
+                                if (mime.contains("audio") || itag in listOf(139, 140, 141, 249, 250, 251)) {
+                                    if (itag == 140) got.add(0, "MP3" to u) else got.add("MP3" to u)
+                                } else if (mime.contains("video/mp4") && mime.contains("avc1")) {
+                                    val h = f.optInt("height")
+                                    if (h in 1..720 && h > bestH) { bestH = h; bestV = u }
+                                }
                             }
                         }
+                        if (bestV != null) got.add("MP4V ${bestH}p" to bestV)
                     }
+                } catch (_: Exception) { }
+                if (got.any { it.first == "MP3" }) {
+                    links = got
+                    usedUa = ua
+                    break
                 }
-            } catch (_: Exception) { }
+            }
+            ytDlUa = usedUa
             handler.post { onDone(links) }
         }.start()
     }
@@ -3968,11 +3968,16 @@ fun onMusicCatalog(raw: String?) {
             conn.instanceFollowRedirects = true
             conn.connectTimeout = 20000
             conn.readTimeout = 120000
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
-            conn.setRequestProperty("Referer", "https://www.youtube.com/")
-            val cookie = CookieManager.getInstance().getCookie(url)
-                ?: CookieManager.getInstance().getCookie("https://www.youtube.com/")
-            if (cookie != null) conn.setRequestProperty("Cookie", cookie)
+            val gvUa = if (url.contains("googlevideo.com")) ytDlUa else null
+            if (gvUa != null) {
+                conn.setRequestProperty("User-Agent", gvUa)
+            } else {
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+                conn.setRequestProperty("Referer", "https://www.youtube.com/")
+                val cookie = CookieManager.getInstance().getCookie(url)
+                    ?: CookieManager.getInstance().getCookie("https://www.youtube.com/")
+                if (cookie != null) conn.setRequestProperty("Cookie", cookie)
+            }
             conn.inputStream.use { input ->
                 dest.outputStream().use { output -> input.copyTo(output) }
             }
@@ -4118,8 +4123,8 @@ fun onMusicCatalog(raw: String?) {
         }.start()
     }
 
-    /** Uygulama içi İndirilenler listesi. */
-    private fun showDownloads() {
+    /** Uygulama içi İndirilenler listesi. select=true: tikli seçim modu. */
+    private fun showDownloads(select: Boolean = false) {
         val items = ArrayList(prefs.downloads())
         val d = Dialog(this)
         pushUiOverlay()
@@ -4129,25 +4134,46 @@ fun onMusicCatalog(raw: String?) {
         rootV.setBackgroundColor(cBg)
         rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
 
+        val selected = LinkedHashSet<String>()
+        val boxes = ArrayList<Pair<android.widget.CheckBox, String>>()
+        var delBtn: TextView? = null
+        var titleTv: TextView? = null
+        fun refreshSel() {
+            titleTv?.text = "Seçilen: ${selected.size}"
+            delBtn?.text = if (selected.isEmpty()) "Sil" else "Sil (${selected.size})"
+            delBtn?.alpha = if (selected.isEmpty()) 0.45f else 1f
+        }
+
         val head = LinearLayout(this)
         head.orientation = LinearLayout.HORIZONTAL
         head.gravity = Gravity.CENTER_VERTICAL
         val tt = TextView(this)
-        tt.text = "İndirilenler"
+        tt.text = if (select) "Seçilen: 0" else "İndirilenler"
         tt.textSize = 20f
         tt.setTypeface(null, Typeface.BOLD)
         tt.setTextColor(cText)
+        titleTv = tt
         head.addView(tt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         if (items.isNotEmpty()) {
-            val clear = textBtn("Temizle") {
-                themedConfirm("Tüm indirme kayıtları silinsin mi?\n(Dosyalar telefonunda kalır)", onYes = {
-                    prefs.clearDownloads()
+            if (!select) {
+                val clear = textBtn("Temizle") {
+                    // Hepsini silmek yerine seçmeli temizlik
                     d.dismiss()
-                    toast("Temizlendi")
-                }, onNo = {})
+                    showDownloads(true)
+                }
+                clear.setTextColor(cAccent)
+                head.addView(clear)
+            } else {
+                val all = textBtn("Tümünü seç") {
+                    val allOn = selected.size == items.size
+                    selected.clear()
+                    if (!allOn) for (e in items) selected.add(e.path)
+                    for ((cb, pth) in boxes) cb.isChecked = selected.contains(pth)
+                    refreshSel()
+                }
+                all.setTextColor(cAccent)
+                head.addView(all)
             }
-            clear.setTextColor(cAccent)
-            head.addView(clear)
         }
         rootV.addView(head)
 
@@ -4170,6 +4196,15 @@ fun onMusicCatalog(raw: String?) {
                 row.gravity = Gravity.CENTER_VERTICAL
                 row.setPadding(dp(12), dp(12), dp(12), dp(12))
                 row.background = shape(cSurface, 14)
+                if (select) {
+                    val cb = android.widget.CheckBox(this)
+                    val st = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+                    cb.buttonTintList = ColorStateList(st, intArrayOf(cAccent, cSub))
+                    cb.isClickable = false
+                    cb.isFocusable = false
+                    boxes.add(cb to e.path)
+                    row.addView(cb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(4) })
+                }
                 val icon = TextView(this)
                 icon.text = when {
                     e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
@@ -4197,41 +4232,50 @@ fun onMusicCatalog(raw: String?) {
                 info.addView(nameTv)
                 info.addView(subTv)
                 row.addView(info, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                row.setOnClickListener {
-                    try {
-                        val f = java.io.File(e.path)
-                        if (f.exists()) {
-                            val kind = mediaKindOf(e.title, e.mime)
-                                      if (kind != null) {
-                                          openMediaPlayer(f, e.title, kind == "audio")
-                                      } else if (isLocalViewable(e.title, e.mime)) {
-                                          openLocalDocument(f, e)
-                                      } else {
-                                          val uri = androidx.core.content.FileProvider.getUriForFile(this, "com.pusula.browser.files", f)
-                                          val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
-                                          open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                                          try {
-                                              startActivity(Intent.createChooser(open, "Aç"))
-                                          } catch (_: Exception) {
-                                              toast("Bu dosyayı açacak uygulama yok: " + e.title)
-                                          }
-                                      }
-                                  } else if (e.url.startsWith("http")) {
-                            openTab(e.url)
-                            d.dismiss()
-                        } else {
-                            toast("Dosya bulunamadı")
+                if (select) {
+                    row.setOnClickListener {
+                        val box = boxes.firstOrNull { it.second == e.path }?.first
+                        if (selected.contains(e.path)) selected.remove(e.path) else selected.add(e.path)
+                        box?.isChecked = selected.contains(e.path)
+                        refreshSel()
+                    }
+                } else {
+                    row.setOnClickListener {
+                        try {
+                            val f = java.io.File(e.path)
+                            if (f.exists()) {
+                                val kind = mediaKindOf(e.title, e.mime)
+                                if (kind != null) {
+                                    openMediaPlayer(f, e.title, kind == "audio")
+                                } else if (isLocalViewable(e.title, e.mime)) {
+                                    openLocalDocument(f, e)
+                                } else {
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(this, "com.pusula.browser.files", f)
+                                    val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
+                                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    try {
+                                        startActivity(Intent.createChooser(open, "Aç"))
+                                    } catch (_: Exception) {
+                                        toast("Bu dosyayı açacak uygulama yok: " + e.title)
+                                    }
+                                }
+                            } else if (e.url.startsWith("http")) {
+                                openTab(e.url)
+                                d.dismiss()
+                            } else {
+                                toast("Dosya bulunamadı")
+                            }
+                        } catch (_: Exception) {
+                            toast("Dosya açılamadı")
                         }
-                    } catch (_: Exception) {
-                        toast("Dosya açılamadı")
                     }
-                }
-                row.setOnLongClickListener {
-                    themedDeleteDownload(e.title, e.path) {
-                        d.dismiss()
-                        showDownloads()
+                    row.setOnLongClickListener {
+                        themedDeleteDownload(e.title, e.path) {
+                            d.dismiss()
+                            showDownloads()
+                        }
+                        true
                     }
-                    true
                 }
                 val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 lp.bottomMargin = dp(8)
@@ -4241,10 +4285,43 @@ fun onMusicCatalog(raw: String?) {
             rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
 
-        val close = textBtn("Kapat") { d.dismiss() }
-        close.setTextColor(cSub)
-        close.gravity = Gravity.CENTER
-        rootV.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        if (select && items.isNotEmpty()) {
+            val bar = LinearLayout(this)
+            bar.orientation = LinearLayout.HORIZONTAL
+            bar.gravity = Gravity.CENTER_VERTICAL
+            val cancel = textBtn("Vazgeç") {
+                d.dismiss()
+                showDownloads()
+            }
+            cancel.setTextColor(cSub)
+            cancel.gravity = Gravity.CENTER
+            bar.addView(cancel, LinearLayout.LayoutParams(0, dp(48), 1f))
+            val del = textBtn("Sil") {
+                if (selected.isEmpty()) {
+                    toast("Önce silinecekleri seç")
+                } else {
+                    val paths = ArrayList(selected)
+                    themedDeleteDownloads(
+                        if (paths.size == 1) "Seçilen dosya silinsin mi?" else "Seçilen ${paths.size} dosya silinsin mi?",
+                        paths
+                    ) {
+                        d.dismiss()
+                        showDownloads()
+                    }
+                }
+            }
+            del.setTextColor(cAccent)
+            del.gravity = Gravity.CENTER
+            delBtn = del
+            bar.addView(del, LinearLayout.LayoutParams(0, dp(48), 1f))
+            rootV.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+            refreshSel()
+        } else {
+            val close = textBtn("Kapat") { d.dismiss() }
+            close.setTextColor(cSub)
+            close.gravity = Gravity.CENTER
+            rootV.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        }
 
         sheetWindow(d, rootV, true)
         d.show()
@@ -4568,8 +4645,42 @@ fun onMusicCatalog(raw: String?) {
     }
 
 
-    /** İndirme: sadece listeden veya telefon dosyasıyla sil. */
+    /** İndirme: sadece listeden veya telefon dosyasıyla sil (tek dosya). */
     private fun themedDeleteDownload(title: String, path: String, after: () -> Unit) {
+        themedDeleteDownloads("«" + title + "» silinsin mi?", listOf(path), after)
+    }
+
+    /** Telefondaki indirme dosyasını siler (MediaStore yedeğiyle). */
+    private fun deleteDownloadFile(path: String): Boolean {
+        var ok = false
+        try {
+            val f = java.io.File(path)
+            if (f.exists()) ok = f.delete()
+            if (!ok && Build.VERSION.SDK_INT >= 29) {
+                try {
+                    contentResolver.query(
+                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        arrayOf(android.provider.MediaStore.MediaColumns._ID),
+                        android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=?",
+                        arrayOf(f.name),
+                        null
+                    )?.use { c ->
+                        if (c.moveToFirst()) {
+                            val id = c.getLong(0)
+                            val u = android.content.ContentUris.withAppendedId(
+                                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
+                            )
+                            ok = contentResolver.delete(u, null, null) > 0
+                        }
+                    }
+                } catch (_: Exception) { }
+            }
+        } catch (_: Exception) { }
+        return ok
+    }
+
+    /** Bir veya birden çok indirme için: Sadece listeden kaldır / Telefondan da sil / Vazgeç. */
+    private fun themedDeleteDownloads(message: String, paths: List<String>, after: () -> Unit) {
         val d = Dialog(this)
         try { d.window?.setBackgroundDrawableResource(android.R.color.transparent) } catch (_: Exception) { }
         val col = LinearLayout(this)
@@ -4580,7 +4691,7 @@ fun onMusicCatalog(raw: String?) {
         bg.cornerRadius = dp(24).toFloat()
         col.background = bg
         val msg = TextView(this)
-        msg.text = "«" + title + "» silinsin mi?"
+        msg.text = message
         msg.textSize = 16f
         msg.setTypeface(null, Typeface.BOLD)
         msg.setTextColor(cText)
@@ -4610,43 +4721,25 @@ fun onMusicCatalog(raw: String?) {
             })
         }
         ovalBtn("Sadece listeden kaldır", cField, cText, true) {
-            prefs.removeDownload(path)
-            toast("Kayıt silindi")
+            for (pth in paths) prefs.removeDownload(pth)
+            toast(if (paths.size > 1) "${paths.size} kayıt silindi" else "Kayıt silindi")
         }
         ovalBtn("Telefondan da sil", cAccent, Color.WHITE, true) {
-            var ok = false
-            try {
-                val f = java.io.File(path)
-                if (f.exists()) ok = f.delete()
-                if (!ok && Build.VERSION.SDK_INT >= 29) {
-                    try {
-                        contentResolver.query(
-                            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            arrayOf(android.provider.MediaStore.MediaColumns._ID),
-                            android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=?",
-                            arrayOf(f.name),
-                            null
-                        )?.use { c ->
-                            if (c.moveToFirst()) {
-                                val id = c.getLong(0)
-                                val u = android.content.ContentUris.withAppendedId(
-                                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
-                                )
-                                ok = contentResolver.delete(u, null, null) > 0
-                            }
-                        }
-                    } catch (_: Exception) { }
-                }
-            } catch (_: Exception) { }
-            prefs.removeDownload(path)
-            toast(if (ok) "Dosya telefonda silindi" else "Kayıt silindi (dosyaya erişilemedi)")
+            var okCount = 0
+            for (pth in paths) {
+                if (deleteDownloadFile(pth)) okCount++
+                prefs.removeDownload(pth)
+            }
+            toast(
+                if (okCount == paths.size) {
+                    if (paths.size > 1) "$okCount dosya telefonda silindi" else "Dosya telefonda silindi"
+                } else "Kayıt silindi ($okCount/${paths.size} dosya silinebildi)"
+            )
         }
         ovalBtn("Vazgeç", cField, cSub, false) { }
         d.setContentView(col)
         d.show()
     }
-
-
 
 fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val d = Dialog(this)
