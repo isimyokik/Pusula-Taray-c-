@@ -100,6 +100,7 @@ class MainActivity : AppCompatActivity() {
         var hookScript: ScriptHandler? = null
         var capScript: ScriptHandler? = null
         var openScript: ScriptHandler? = null
+        var progressScript: ScriptHandler? = null
         var errorUrl: String? = null
         var errorLoading: Boolean = false
         var networkRetryUsed: Boolean = false
@@ -1323,6 +1324,8 @@ fun onMusicCatalog(raw: String?) {
             if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
             if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
             else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
+            // YouTube kaldığın yerden devam (reklam ayarından bağımsız)
+            if (t.progressScript == null) t.progressScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_PROGRESS_JS, setOf("*"))
             if (prefs.bgPlay && t.keepScript == null) t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS, setOf("*"))
             else if (!prefs.bgPlay && t.keepScript != null) { t.keepScript?.remove(); t.keepScript = null }
         } catch (_: Exception) { }
@@ -5883,9 +5886,9 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         // reklam 16 kat hızlandırılır ve "Atla" düğmesine basılır. Reklam bitince ekran varsayılan haline döner.
         const val STABLE_AD_BLOCKER_JS =
             "(function(){" +
-            "if(location.hostname.indexOf('youtube.com')<0)return;" +
-            "var fast=false,gap=0,cover=null,obs=null,obsPl=null,tick=0;" +
-            "var sels=['.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info','.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text','.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container','.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list','.ytp-ad-feedback-dialog-container','.ytp-ad-skip-button-container','.caption-window','.ytp-caption-window-container','.ytp-caption-segment','.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial','ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer','.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'];" +
+            "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
+            "var fast=false,gap=0,cover=null,obs=null,obsPl=null,tick=0,adSince=0;" +
+            "var sels=['.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info','.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text','.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container','.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list','.ytp-ad-feedback-dialog-container','.caption-window','.ytp-caption-window-container','.ytp-caption-segment','.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial','ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer','.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'];" +
             "function hideAdUi(on){" +
             "for(var i=0;i<sels.length;i++){" +
             "document.querySelectorAll(sels[i]).forEach(function(el){" +
@@ -5895,6 +5898,15 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(x){}" +
             "});" +
             "}" +
+            "}" +
+            "function trySkip(pl){" +
+            "try{" +
+            "var qs=['.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-skip-ad-button','.ytp-ad-skip-button-container button','.ytp-ad-skip-button-slot button','button.ytp-ad-skip-button-modern','[class*=\"ad-skip\"] button','[class*=\"skip-button\"]','button[aria-label*=\"Skip\"]','button[aria-label*=\"Atla\"]','button[aria-label*=\"skip\"]'];" +
+            "for(var i=0;i<qs.length;i++){" +
+            "var list=pl.querySelectorAll(qs[i]);" +
+            "for(var j=0;j<list.length;j++){try{list[j].click();}catch(z){}}" +
+            "}" +
+            "}catch(e){}" +
             "}" +
             "function ensureCover(pl){" +
             "if(cover&&cover.parentNode===pl)return cover;" +
@@ -5914,17 +5926,22 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "return cover;" +
             "}" +
             "function endAd(vd){" +
-            "fast=false;" +
+            "fast=false;adSince=0;" +
             "hideAdUi(false);" +
             "if(!vd)return;" +
             "vd.style.visibility='';" +
             "vd.playbackRate=1;" +
-            // Reklam bitince asla muted bırakma — ses her zaman geri açılır
             "vd.muted=false;" +
             "var tv=parseFloat(vd.dataset.pv||'1')||1;" +
             "vd.volume=0;" +
             "var k=0;" +
             "var iv=setInterval(function(){k++;vd.muted=false;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;vd.muted=false;}},30);" +
+            "}" +
+            "function forceUnstick(pl,vd,cv){" +
+            "try{pl.classList.remove('ad-showing');pl.classList.remove('ad-interrupting');}catch(x){}" +
+            "if(cv)cv.style.display='none';" +
+            "endAd(vd);" +
+            "if(vd){try{var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
             "}" +
             "function check(){" +
             "try{" +
@@ -5934,20 +5951,21 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');" +
             "var cv=ensureCover(pl);" +
             "if(ad){" +
+            "if(!adSince)adSince=Date.now();" +
             "gap=0;" +
             "cv.style.display='block';" +
             "tick++;" +
             "if(tick%5===1)hideAdUi(true);" +
             "if(vd){" +
             "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
-            // muted kullanma — sadece volume=0 (reklam sesi); içerik muted kalmasın
             "try{vd.volume=0;}catch(x){}" +
             "vd.style.visibility='hidden';" +
             "if(vd.playbackRate<8)vd.playbackRate=16;" +
             "}" +
-            "var b=pl.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,.ytp-ad-skip-button-container button');" +
-            "if(b)try{b.click();}catch(x){}" +
+            "trySkip(pl);" +
+            "if(adSince&&(Date.now()-adSince)>12000){forceUnstick(pl,vd,cv);}" +
             "}else if(fast||cv.style.display!=='none'){" +
+            "adSince=0;" +
             "if(vd&&vd.playbackRate>1)vd.playbackRate=1;" +
             "gap++;" +
             "if(gap>=6){" +
@@ -5955,7 +5973,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "cv.style.display='none';" +
             "endAd(vd);" +
             "}" +
-            "}" +
+            "}else{adSince=0;}" +
             "}catch(e){}" +
             "}" +
             "function watch(){" +
@@ -5970,7 +5988,41 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "setInterval(function(){watch();check();},60);" +
             "})();"
 
-        // YouTube üst çubuğundaki "Uygulamada aç" düğmesini gizler; başka hiçbir şeye dokunmaz.
+
+        /** YouTube: kaldığın saniyeyi saklar, aynı videoya dönünce devam eder. */
+        const val YT_PROGRESS_JS =
+            "(function(){" +
+            "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
+            "var restored={};" +
+            "function vid(){try{" +
+            "var q=new URLSearchParams(location.search).get('v');if(q&&q.length===11)return q;" +
+            "var p=location.pathname||'';" +
+            "var m=p.match(/\/(?:shorts|embed|live)\/([\\w-]{11})/);if(m)return m[1];" +
+            "}catch(e){}return '';}" +
+            "function media(){return document.querySelector('video.html5-main-video')||document.querySelector('.html5-video-player video')||document.querySelector('video');}" +
+            "function save(){try{" +
+            "var id=vid(),v=media();if(!id||!v||!isFinite(v.currentTime))return;" +
+            "if(v.currentTime<5)return;" +
+            "if(isFinite(v.duration)&&v.duration>0&&v.currentTime>v.duration-12){try{localStorage.removeItem('rota_yt_'+id);}catch(z){}return;}" +
+            "localStorage.setItem('rota_yt_'+id,String(Math.floor(v.currentTime)));" +
+            "}catch(e){}}" +
+            "function restore(){try{" +
+            "var id=vid();if(!id||restored[id])return;" +
+            "var v=media();if(!v)return;" +
+            "var t=parseInt(localStorage.getItem('rota_yt_'+id)||'0',10);if(!(t>5))return;" +
+            "if(isFinite(v.duration)&&v.duration>0&&t>=v.duration-10)return;" +
+            "if(v.currentTime>=4){restored[id]=1;return;}" +
+            "function go(){try{if(restored[id])return;if(v.currentTime<4&&t>5){v.currentTime=t;restored[id]=1;}}catch(z){}}" +
+            "v.addEventListener('loadedmetadata',go);v.addEventListener('canplay',go);" +
+            "setTimeout(go,600);setTimeout(go,1500);setTimeout(go,3000);" +
+            "}catch(e){}}" +
+            "setInterval(function(){save();restore();},2000);" +
+            "document.addEventListener('yt-navigate-finish',function(){restored={};setTimeout(restore,400);},true);" +
+            "window.addEventListener('popstate',function(){restored={};setTimeout(restore,400);});" +
+            "setTimeout(restore,800);" +
+            "})();"
+
+
         const val OPEN_APP_HIDE_JS =
             "(function(){" +
             "if(location.hostname.indexOf('youtube.com')<0)return;" +
