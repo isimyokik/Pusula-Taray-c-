@@ -2124,7 +2124,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.addHistory(if (title.isNullOrBlank()) u else title, u)
             }
             // Uygulama açık temadayken YouTube arayüzünü de açığa zorla
-            if (!dark && (u.contains("youtube.com") || u.contains("youtu.be"))) {
+            if (!dark && (u.contains("youtube.com") || u.contains("youtu.be")) && !u.contains("music.youtube.com")) {
                 try { view?.evaluateJavascript(FORCE_LIGHT_YT_JS, null) } catch (_: Exception) { }
             }
             // YouTube ortadaki logo / büyük oynat katmanı + sayfa içi mini player
@@ -5746,7 +5746,7 @@ class MainActivity : AppCompatActivity() {
         // Uygulama açık temadayken YouTube / YT Music arayüzünü de açık tona zorlar
         const val FORCE_LIGHT_YT_JS =
             "(function(){" +
-            "if(location.hostname.indexOf('youtube.com')<0)return;" +
+            "if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;" +
             "function apply(){" +
             "try{" +
             "document.documentElement.setAttribute('dark','false');" +
