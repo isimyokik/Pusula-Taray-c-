@@ -725,13 +725,12 @@ fun onMusicCatalog(raw: String?) {
         }
     }
 
-    /** Ana ekrana basınca YouTube videosu çalıyorsa kendiliğinden küçük pencereye geçer. */
-    override 
     private fun pushUiOverlay() { uiOverlayCount++ }
     private fun popUiOverlay() { if (uiOverlayCount > 0) uiOverlayCount-- }
     private fun hasUiOverlay(): Boolean = uiOverlayCount > 0
 
-fun onUserLeaveHint() {
+    /** Ana ekrana basınca YouTube videosu çalıyorsa kendiliğinden küçük pencereye geçer. */
+    override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         // İndirilenler / ayarlar / sekmeler açıkken PiP yapma
         if (hasUiOverlay()) return
