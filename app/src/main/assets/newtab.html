@@ -232,13 +232,6 @@
       }
     } catch (e) {}
   }
-  function iconUrlFor(u){
-    try {
-      var host = new URL(u).hostname;
-      if (!host) return "";
-      return "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=" + encodeURIComponent("https://" + host) + "&size=128";
-    } catch (e) { return ""; }
-  }
   function refreshPinsFromApp(){
     var p = loadPinsFromApp();
     if (p == null) return;
@@ -259,64 +252,87 @@
   var g = document.getElementById("pins");
   var suppress = false;
 
-  // Logo URL pin.i olarak kaydedilir; sonraki açılışlarda tekrar indirilmez
-  function applyIcon(box, src, big){
-    if (!box || !src) return;
-    box.textContent = "";
-    box.style.background = "#fff";
+  // Logo: önce kayıtlı pin.i; yoksa dene, sadece başarılı olursa kaydet
+  function applyIcon(box, src){
+    if (!box || !src) return false;
     var img = document.createElement("img");
     img.referrerPolicy = "no-referrer";
     img.alt = "";
-    img.style.cssText = big
-      ? "width:100%;height:100%;object-fit:cover;border-radius:19px"
-      : "width:34px;height:34px;object-fit:contain";
+    img.style.cssText = "width:34px;height:34px;object-fit:contain";
+    img.onerror = function(){
+      try { if (img.parentNode) img.parentNode.removeChild(img); } catch (e) {}
+    };
+    img.onload = function(){
+      if (img.naturalWidth < 8) {
+        try { if (img.parentNode) img.parentNode.removeChild(img); } catch (e) {}
+        return;
+      }
+      box.textContent = "";
+      box.style.background = "#fff";
+      if (img.naturalWidth >= 64) {
+        img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:19px";
+      }
+      if (!box.querySelector("img")) box.appendChild(img);
+    };
     img.src = src;
-    box.appendChild(img);
+    return true;
+  }
+  function iconCandidates(u){
+    var host = ""; try { host = new URL(u).hostname; } catch (e) { return []; }
+    if (!host) return [];
+    return [
+      "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(host) + "&sz=128",
+      "https://" + host + "/favicon.ico",
+      "https://" + host + "/apple-touch-icon.png"
+    ];
+  }
+  function iconUrlFor(u){
+    var c = iconCandidates(u);
+    return c.length ? c[0] : "";
   }
   function fetchAndSaveIcon(a, pinIndex, u){
     var box = a.querySelector("i");
-    if (!box || box.querySelector("img")) return;
-    if (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i) {
-      applyIcon(box, pins[pinIndex].i, true);
-      return;
+    if (!box) return;
+    if (box.querySelector("img")) return;
+    var saved = (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i) ? String(pins[pinIndex].i) : "";
+    var list = [];
+    if (saved) list.push(saved);
+    iconCandidates(u).forEach(function(x){ if (list.indexOf(x) < 0) list.push(x); });
+    var k = 0;
+    function tryOne(){
+      if (k >= list.length) return;
+      var src = list[k++];
+      var img = new Image();
+      img.referrerPolicy = "no-referrer";
+      img.onload = function(){
+        if (img.naturalWidth < 8) { tryOne(); return; }
+        box.textContent = "";
+        box.style.background = "#fff";
+        img.style.cssText = img.naturalWidth >= 64
+          ? "width:100%;height:100%;object-fit:cover;border-radius:19px"
+          : "width:34px;height:34px;object-fit:contain";
+        box.appendChild(img);
+        try {
+          if (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i !== src) {
+            pins[pinIndex].i = src;
+            save();
+          }
+        } catch (e) {}
+      };
+      img.onerror = tryOne;
+      img.src = src;
     }
-    var host = ""; try { host = new URL(u).hostname; } catch (e) { return; }
-    if (!host) return;
-    var c = ["https://" + host + "/apple-touch-icon.png",
-             "https://" + host + "/favicon.ico",
-             "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=" + encodeURIComponent("https://" + host) + "&size=128"];
-    var k = 0, img = new Image();
-    img.referrerPolicy = "no-referrer";
-    function next(){ k++; if (k < c.length) img.src = c[k]; }
-    img.onload = function(){
-      if (img.naturalWidth < 16) { next(); return; }
-      var src = img.src;
-      var big = img.naturalWidth >= 96;
-      applyIcon(box, src, big);
-      try {
-        if (pinIndex >= 0 && pins[pinIndex]) {
-          if (pins[pinIndex].i === src) return;
-          pins[pinIndex].i = src;
-          save();
-        }
-      } catch (e) {}
-    };
-    img.onerror = next;
-    img.src = c[0];
+    tryOne();
   }
 
   function render(){
     g.innerHTML = "";
     pins.forEach(function(p, n){
-      var iconUrl = (p.i && String(p.i).trim()) || "";
       var hasE = !!(p.e && String(p.e).trim());
       var letter = (p.t||"?").charAt(0).toUpperCase();
       var a = tile(p.t, p.u, hasE ? p.e : letter, G[(p.g == null ? n : p.g) % G.length]);
-      if (iconUrl) {
-        applyIcon(a.querySelector("i"), iconUrl, /apple-touch|\/p\d+|512|256|180/.test(iconUrl));
-      } else if (!hasE) {
-        fetchAndSaveIcon(a, n, p.u);
-      }
+      // Kayıtlı logo veya (simge yoksa) bir kez çek-kaydet
+      if (!hasE) fetchAndSaveIcon(a, n, p.u);
       a.dataset.n = n;
       attachDrag(a);
       g.appendChild(a);
