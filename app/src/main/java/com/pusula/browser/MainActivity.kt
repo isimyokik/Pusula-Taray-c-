@@ -4628,7 +4628,42 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         d.show()
     }
 
-    private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
+    
+    private fun hostOfUrl(url: String): String {
+        return try {
+            (Uri.parse(url).host ?: "").removePrefix("www.")
+        } catch (_: Exception) { "" }
+    }
+
+    /** Geçmiş / yer imi satırları için site logosu (newtab ile aynı kaynak). */
+    private fun loadFavicon(into: ImageView, pageUrl: String) {
+        val host = hostOfUrl(pageUrl)
+        if (host.isEmpty()) return
+        val iconUrl = "https://www.google.com/s2/favicons?domain=" + Uri.encode(host) + "&sz=128"
+        Thread {
+            try {
+                val conn = java.net.URL(iconUrl).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                conn.connect()
+                val bmp = android.graphics.BitmapFactory.decodeStream(conn.inputStream)
+                conn.disconnect()
+                if (bmp != null && bmp.width >= 8) {
+                    handler.post {
+                        try {
+                            into.setImageBitmap(bmp)
+                            into.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                            into.setPadding(dp(8), dp(8), dp(8), dp(8))
+                        } catch (_: Exception) { }
+                    }
+                }
+            } catch (_: Exception) { }
+        }.start()
+    }
+
+private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs.Entry) -> Unit, neutral: Pair<String, () -> Unit>?) {
         val items = ArrayList(list)
         val d = Dialog(this)
         val rootV = LinearLayout(this)
@@ -4668,13 +4703,27 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 row.background = ripple(shape(cSurface, 18))
                 row.setOnClickListener { d.dismiss(); loadInCurrent(en.url) }
                 val host = shownUrl(en.url).substringBefore("/")
-                val av = TextView(this)
-                av.text = (host.firstOrNull() ?: '?').uppercaseChar().toString()
-                av.textSize = 17f; av.setTypeface(null, Typeface.BOLD); av.setTextColor(Color.WHITE); av.gravity = Gravity.CENTER
+                val av = ImageView(this)
+                av.scaleType = ImageView.ScaleType.CENTER
                 val g = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(cAccent, cAccent2))
                 g.cornerRadius = dp(14).toFloat()
                 av.background = g
+                // Harf yedek (logo gelene kadar)
+                val letter = (host.firstOrNull() ?: '?').uppercaseChar().toString()
+                try {
+                    val bmp = Bitmap.createBitmap(dp(42), dp(42), Bitmap.Config.ARGB_8888)
+                    val c = Canvas(bmp)
+                    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                    p.color = Color.WHITE
+                    p.textSize = dp(17).toFloat()
+                    p.typeface = Typeface.DEFAULT_BOLD
+                    p.textAlign = android.graphics.Paint.Align.CENTER
+                    val fm = p.fontMetrics
+                    c.drawText(letter, bmp.width / 2f, bmp.height / 2f - (fm.ascent + fm.descent) / 2f, p)
+                    av.setImageBitmap(bmp)
+                } catch (_: Exception) { }
                 row.addView(av, LinearLayout.LayoutParams(dp(42), dp(42)))
+                loadFavicon(av, en.url)
                 val col = LinearLayout(this)
                 col.orientation = LinearLayout.VERTICAL
                 col.setPadding(dp(12), 0, dp(6), 0)
