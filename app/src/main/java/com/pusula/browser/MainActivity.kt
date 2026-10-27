@@ -1176,6 +1176,20 @@ fun onMusicCatalog(raw: String?) {
                             }
                         }
                         switchTo(if (want in tabs.indices) want else 0)
+                        for (tb in tabs) {
+                            try { loadPreview(tb) } catch (_: Exception) { }
+                        }
+                        // WebView boyutlanınca önizlemeyi yenile
+                        handler.postDelayed({
+                            for (tb in tabs) {
+                                try { capturePreview(tb) } catch (_: Exception) { }
+                            }
+                        }, 800)
+                        handler.postDelayed({
+                            for (tb in tabs) {
+                                try { capturePreview(tb) } catch (_: Exception) { }
+                            }
+                        }, 2000)
                     }
                 }
             }
@@ -2688,20 +2702,31 @@ fun onMusicCatalog(raw: String?) {
     /** Yeni sekme “Hızlı erişim” kutularına site ekler (kalıcı). */
     private fun addToQuickPins(title: String, url: String) {
         try {
+            // Varsa olduğu gibi kullan; yoksa boş başla. Varsayılan 7'yi zorla ekleme.
             val arr = try {
                 if (prefs.pins.isBlank()) JSONArray() else JSONArray(prefs.pins)
             } catch (_: Exception) { JSONArray() }
+            val cleanUrl = url.trim()
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                if (o.optString("u") == url) {
+                if (o.optString("u") == cleanUrl) {
                     toast("Zaten hızlı erişimde")
                     return
                 }
             }
+            var t = title.trim()
+            if (t.isEmpty() || t.equals("Yeni Sekme", true) || t.equals("about:blank", true)) {
+                t = try {
+                    val host = Uri.parse(cleanUrl).host ?: cleanUrl
+                    host.removePrefix("www.").removePrefix("m.")
+                } catch (_: Exception) { cleanUrl }
+            }
+            if (t.length > 40) t = t.take(40)
+            // e boş → newtab site logosunu (favicon) çeker
             arr.put(JSONObject()
-                .put("t", title.take(40))
-                .put("u", url)
-                .put("e", "🔗")
+                .put("t", t)
+                .put("u", cleanUrl)
+                .put("e", "")
                 .put("g", (0..6).random()))
             val json = arr.toString()
             prefs.pins = json
@@ -2713,6 +2738,10 @@ fun onMusicCatalog(raw: String?) {
             toast("Eklenemedi")
         }
     }
+
+
+
+
 
     /** Hızlı erişim (yeni sekme) sayfasını ana ekrana ekler — ana Rota, appMode değil. */
 
@@ -2855,7 +2884,13 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         })
         if (t.url.startsWith("http")) {
             col.addView(row("📌", "Hızlı erişime ekle") {
-                addToQuickPins(if (t.title.isBlank()) shownUrl(t.url) else t.title, t.url)
+                val pageTitle = t.web.title?.trim().orEmpty()
+                val name = when {
+                    pageTitle.isNotEmpty() && !pageTitle.equals("Yeni Sekme", true) -> pageTitle
+                    t.title.isNotBlank() && !t.title.equals("Yeni Sekme", true) -> t.title
+                    else -> shownUrl(t.url)
+                }
+                addToQuickPins(name, t.url)
             })
         }
         if (canHome) {
@@ -4735,16 +4770,46 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), "Paylaş"))
     }
 
+    private fun previewKey(tab: BTab): String {
+        val u = (tab.pendingUrl ?: tab.url).ifBlank { "tab_${tabs.indexOf(tab)}" }
+        return Integer.toHexString(u.hashCode())
+    }
+
+    private fun previewFile(key: String): java.io.File =
+        java.io.File(filesDir, "tabprev_$key.jpg")
+
+    private fun loadPreview(tab: BTab) {
+        if (tab.preview != null) return
+        try {
+            val f = previewFile(previewKey(tab))
+            if (f.exists() && f.length() > 10) {
+                tab.preview = android.graphics.BitmapFactory.decodeFile(f.absolutePath)
+            }
+        } catch (_: Exception) { }
+    }
+
     private fun capturePreview(tab: BTab) {
         try {
             val w = tab.web.width; val h = tab.web.height
-            if (w <= 0 || h <= 0) return
+            if (w <= 0 || h <= 0) {
+                loadPreview(tab)
+                return
+            }
             val sc = 360f / w
             val bh = (h * sc).toInt().coerceIn(1, 700)
             val bmp = Bitmap.createBitmap(360, bh, Bitmap.Config.RGB_565)
             val canvas = Canvas(bmp); canvas.scale(sc, sc)
-            tab.web.draw(canvas); tab.preview = bmp
-        } catch (_: Exception) {}
+            tab.web.draw(canvas)
+            tab.preview = bmp
+            try {
+                val f = previewFile(previewKey(tab))
+                java.io.FileOutputStream(f).use { out ->
+                    bmp.compress(Bitmap.CompressFormat.JPEG, 72, out)
+                }
+            } catch (_: Exception) { }
+        } catch (_: Exception) {
+            loadPreview(tab)
+        }
     }
 
     private fun pillBtn(label: String, colors: IntArray, onClick: () -> Unit): TextView {
@@ -4760,6 +4825,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
 
     private fun showTabs() {
         for (tb in tabs) {
+            try { loadPreview(tb) } catch (_: Exception) { }
             if (tb.preview == null) {
                 try { capturePreview(tb) } catch (_: Exception) { }
             }
