@@ -1379,6 +1379,16 @@ fun onMusicCatalog(raw: String?) {
         }
         shown = t.web
         try { t.web.onResume() } catch (_: Exception) { }
+        // GONE -> VISIBLE geçişinde WebView bazen çizimi/giriş işlemeyi bırakıyor: zamanlayıcıları uyandır, yeniden çizdir
+        try { t.web.resumeTimers() } catch (_: Exception) { }
+        t.web.requestLayout(); t.web.invalidate()
+        handler.postDelayed({ try { t.web.invalidate() } catch (_: Exception) { } }, 200L)
+        // Takılı kalmış yükleme göstergesini temizle (sayfa aslında bitmişse)
+        if (t.progress in 1..99) {
+            handler.postDelayed({
+                if (tabs.getOrNull(cur) === t && t.progress in 1..99 && t.web.progress >= 100) { t.progress = 100; setLoadProgress(100) }
+            }, 600L)
+        }
 
         try { t.web.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) {}
 
@@ -1996,9 +2006,21 @@ fun onMusicCatalog(raw: String?) {
 
     private fun goForward() { val web = currentWeb() ?: return; if (web.canGoForward()) web.goForward() }
     private fun goHome() { loadInCurrent(Engines.get(prefs.engine).home) }
+    private fun tab0(t: BTab) = t
+
     private fun reloadCurrent() {
         val t = tabs.getOrNull(cur) ?: return
-        if (t.progress in 1..99) { t.web.stopLoading(); return }
+        if (t.progress in 1..99) {
+            // Yükleme takılıysa (sekme değiştirirken bitiş olayı kaçabilir) sadece durdurmak yetmez: durdur ve yeniden yükle
+            t.web.stopLoading()
+            t.progress = 100
+            setLoadProgress(100)
+            handler.postDelayed({
+                val u = t.web.url
+                if (tabs.contains(tab0(t))) { if (!u.isNullOrBlank()) t.web.reload() else if (t.url.startsWith("http")) t.web.loadUrl(t.url) }
+            }, 150L)
+            return
+        }
         val eu = t.errorUrl
         if (eu != null) { t.errorUrl = null; t.web.loadUrl(eu) } else t.web.reload()
     }
