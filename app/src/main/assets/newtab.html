@@ -201,6 +201,7 @@
   document.getElementById("pf").addEventListener("submit", function(e){ e.preventDefault(); go(document.getElementById("pq").value); });
 
   var G = ["linear-gradient(135deg,#ff4b4b,#c4001d)","linear-gradient(135deg,#4c8dff,#2457d6)","linear-gradient(135deg,#ff7a45,#ff2d6f)","linear-gradient(135deg,#34c3ff,#2477ff)","linear-gradient(135deg,#34d37a,#0f9d58)","linear-gradient(135deg,#8a5cff,#4a35d9)","linear-gradient(135deg,#ffc84a,#ff8a1f)","linear-gradient(135deg,#00b894,#00796b)","linear-gradient(135deg,#fd79a8,#d63384)"];
+  var lastPinsJson = "";
   var DEFAULT_PINS = [
     {t:"YouTube",u:"https://m.youtube.com/",e:"▶",g:0},
     {t:"Google",u:"https://www.google.com/",e:"🔎",g:1},
@@ -222,6 +223,7 @@
   // null = hiç kayıt yok → varsayılan. [] = bilinçli boş → boş kalsın.
   var pins = loadPinsFromApp();
   if (pins == null) pins = DEFAULT_PINS.slice();
+  else lastPinsJson = JSON.stringify(pins);
   function save(){
     try {
       if (window.Pusula && window.Pusula.savePins) {
@@ -232,12 +234,14 @@
   function refreshPinsFromApp(){
     var p = loadPinsFromApp();
     if (p == null) return;
+    var j = JSON.stringify(p);
+    if (j === lastPinsJson) return;
+    lastPinsJson = j;
     pins = p;
     try { render(); } catch (e) {}
   }
-  setTimeout(refreshPinsFromApp, 50);
-  setTimeout(refreshPinsFromApp, 250);
-  setTimeout(refreshPinsFromApp, 600);
+  setTimeout(refreshPinsFromApp, 80);
+  setTimeout(refreshPinsFromApp, 400);
   function tile(label, url, icon, bg){
     var a = document.createElement("a"); a.className = "t"; a.href = url;
     var i = document.createElement("i"); i.style.background = bg; i.textContent = icon;
@@ -247,23 +251,43 @@
   var g = document.getElementById("pins");
   var suppress = false;
 
-  // Simge girilmemişse sitenin kendi logosunu çeker; bulunamazsa harf kalır
-  function favicon(a, u){
+  // Logo URL pin.i olarak kaydedilir; sonraki açılışlarda tekrar indirilmez
+  function applyIcon(box, src, big){
+    if (!box || !src) return;
+    box.textContent = "";
+    box.style.background = "#fff";
+    var img = document.createElement("img");
+    img.referrerPolicy = "no-referrer";
+    img.alt = "";
+    img.style.cssText = big
+      ? "width:100%;height:100%;object-fit:cover;border-radius:19px"
+      : "width:34px;height:34px;object-fit:contain";
+    img.src = src;
+    box.appendChild(img);
+  }
+  function fetchAndSaveIcon(a, pinIndex, u){
+    var box = a.querySelector("i");
+    if (!box || box.querySelector("img")) return;
     var host = ""; try { host = new URL(u).hostname; } catch (e) { return; }
     if (!host) return;
     var c = ["https://" + host + "/apple-touch-icon.png",
              "https://" + host + "/favicon.ico",
              "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=" + encodeURIComponent("https://" + host) + "&size=128"];
-    var box = a.querySelector("i"), k = 0, img = new Image();
+    var k = 0, img = new Image();
     img.referrerPolicy = "no-referrer";
     function next(){ k++; if (k < c.length) img.src = c[k]; }
     img.onload = function(){
       if (img.naturalWidth < 16) { next(); return; }
+      var src = img.src;
       var big = img.naturalWidth >= 96;
-      box.textContent = "";
-      box.style.background = "#fff";
-      img.style.cssText = big ? "width:100%;height:100%;object-fit:cover;border-radius:19px" : "width:34px;height:34px;object-fit:contain";
-      box.appendChild(img);
+      applyIcon(box, src, big);
+      try {
+        if (pinIndex >= 0 && pins[pinIndex]) {
+          if (pins[pinIndex].i === src) return;
+          pins[pinIndex].i = src;
+          save();
+        }
+      } catch (e) {}
     };
     img.onerror = next;
     img.src = c[0];
@@ -272,9 +296,15 @@
   function render(){
     g.innerHTML = "";
     pins.forEach(function(p, n){
+      var iconUrl = (p.i && String(p.i).trim()) || "";
       var hasE = !!(p.e && String(p.e).trim());
-      var a = tile(p.t, p.u, hasE ? p.e : (p.t||"?").charAt(0).toUpperCase(), G[(p.g == null ? n : p.g) % G.length]);
-      if (!hasE) favicon(a, p.u);
+      var letter = (p.t||"?").charAt(0).toUpperCase();
+      var a = tile(p.t, p.u, hasE ? p.e : letter, G[(p.g == null ? n : p.g) % G.length]);
+      if (iconUrl) {
+        applyIcon(a.querySelector("i"), iconUrl, /apple-touch|\/p\d+|512|256|180/.test(iconUrl));
+      } else if (!hasE) {
+        fetchAndSaveIcon(a, n, p.u);
+      }
       a.dataset.n = n;
       attachDrag(a);
       g.appendChild(a);
