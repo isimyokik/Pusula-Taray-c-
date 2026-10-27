@@ -2724,10 +2724,18 @@ fun onMusicCatalog(raw: String?) {
                 } catch (_: Exception) { cleanUrl }
             }
             if (t.length > 40) t = t.take(40)
+            val icon = try {
+                val host = Uri.parse(cleanUrl).host ?: ""
+                if (host.isNotEmpty())
+                    "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=" +
+                        Uri.encode("https://$host") + "&size=128"
+                else ""
+            } catch (_: Exception) { "" }
             arr.put(JSONObject()
                 .put("t", t)
                 .put("u", cleanUrl)
                 .put("e", "")
+                .put("i", icon)
                 .put("g", (0..6).random()))
             val json = arr.toString()
             prefs.pins = json
