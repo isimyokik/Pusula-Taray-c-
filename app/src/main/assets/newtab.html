@@ -233,20 +233,19 @@
   var suppress = false;
 
   // Logo bir kez yüklenir, pin.i olarak kaydedilir; sonraki açılışlarda tekrar çekilmez
-  function setBoxIcon(box, img){
+  function setBoxIcon(box, img, fill){
     if (!box || !img) return;
-    var big = img.naturalWidth >= 64;
     box.textContent = "";
-    box.style.background = "#fff";
-    img.style.cssText = big
-      ? "width:100%;height:100%;object-fit:cover;border-radius:19px"
-      : "width:34px;height:34px;object-fit:contain";
+    // Mevcut kısayollar gibi renkli zemin kalsın; logo üzerine otursun
+    if (fill) box.style.background = fill;
+    img.style.cssText = "width:70%;height:70%;object-fit:contain;border-radius:8px";
     box.appendChild(img);
   }
   function favicon(a, pinIndex, u){
     var box = a.querySelector("i");
     if (!box) return;
     if (box.querySelector("img")) return;
+    var fill = box.style.background || "";
     var saved = (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i) ? String(pins[pinIndex].i) : "";
     var host = "";
     try { host = new URL(u).hostname; } catch (e) {}
@@ -264,11 +263,39 @@
       img.referrerPolicy = "no-referrer";
       img.onload = function(){
         if (img.naturalWidth < 8) { tryNext(); return; }
-        setBoxIcon(box, img);
+        setBoxIcon(box, img, fill);
         if (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i !== src) {
           pins[pinIndex].i = src;
           save();
         }
+      };
+      img.onerror = tryNext;
+      img.src = src;
+    }
+    tryNext();
+  }
+  // Son ziyaret / yer imi satır ikonları — aynı logo kaynağı
+  function rowIcon(el, u){
+    if (!el) return;
+    if (el.querySelector("img")) return;
+    var host = "";
+    try { host = new URL(u).hostname; } catch (e) {}
+    if (!host) return;
+    var list = [
+      "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(host) + "&sz=64",
+      "https://" + host + "/favicon.ico"
+    ];
+    var k = 0;
+    function tryNext(){
+      if (k >= list.length) return;
+      var src = list[k++];
+      var img = new Image();
+      img.referrerPolicy = "no-referrer";
+      img.onload = function(){
+        if (img.naturalWidth < 8) { tryNext(); return; }
+        el.textContent = "";
+        img.style.cssText = "width:20px;height:20px;object-fit:contain";
+        el.appendChild(img);
       };
       img.onerror = tryNext;
       img.src = src;
@@ -389,7 +416,12 @@
   if (bms.length) {
     document.getElementById("bmWrap").hidden = false;
     var bg = document.getElementById("bms");
-    bms.forEach(function(b,n){ var host = hostOf(b.u); bg.appendChild(tile((b.t && b.t.length < 14) ? b.t : host, b.u, host.charAt(0).toUpperCase(), grads[n % grads.length])); });
+    bms.forEach(function(b,n){
+      var host = hostOf(b.u);
+      var a = tile((b.t && b.t.length < 14) ? b.t : host, b.u, host.charAt(0).toUpperCase(), grads[n % grads.length]);
+      bg.appendChild(a);
+      favicon(a, -1, b.u);
+    });
   }
   var hs = cfg.history || [];
   if (hs.length) {
@@ -402,6 +434,7 @@
       var b = document.createElement("b"); b.textContent = x.t || hostOf(x.u);
       var s = document.createElement("small"); s.textContent = hostOf(x.u);
       w.appendChild(b); w.appendChild(s); a.appendChild(d); a.appendChild(w); hl.appendChild(a);
+      rowIcon(d, x.u);
     });
   }
 })();
