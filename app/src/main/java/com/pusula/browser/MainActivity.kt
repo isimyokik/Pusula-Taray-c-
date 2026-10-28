@@ -161,9 +161,9 @@ class MainActivity : AppCompatActivity() {
     private var audioFocusRequest: AudioFocusRequest? = null
     // --- Ses odağı yavaş kısma / yavaş açma ---
     /** WhatsApp sesi vb. gelince medya bu sürede yavaşça kısılıp durur. */
-    private val focusFadeOutMs = 1500L
+    private val focusFadeOutMs = 400L
     /** Ses bitince medya bu sürede yavaşça açılıp kaldığı yerden devam eder. */
-    private val focusFadeInMs = 1000L
+    private val focusFadeInMs = 400L
     private val focusFadeStepMs = 60L
     /** Başka uygulama odağı KALICI aldıysa (GAIN hiç gelmeyebilir) sessizlik bitince kendiliğinden devam et. */
     private val focusResumeFallback = true
@@ -255,7 +255,7 @@ class MainActivity : AppCompatActivity() {
             val cb = object : AudioManager.AudioPlaybackCallback() {
                 override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
                     handler.removeCallbacks(extCheck)
-                    handler.postDelayed(extCheck, 120L)
+                    handler.postDelayed(extCheck, 60L)
                 }
             }
             audioManager.registerAudioPlaybackCallback(cb, handler)
@@ -290,11 +290,11 @@ class MainActivity : AppCompatActivity() {
         if (pausedByAudioFocus) {
             if (focusFadeRunnable != null || focusPermanentLoss) { extQuietSince = 0L; return }
             if (n == 0) {
-                if (extQuietSince == 0L) { extQuietSince = now; handler.postDelayed(extCheck, 300L) }
-                else if (now - extQuietSince >= 250L && now - focusPauseSince > 1600L) {
+                if (extQuietSince == 0L) { extQuietSince = now; handler.postDelayed(extCheck, 170L) }
+                else if (now - extQuietSince >= 150L && now - focusPauseSince > 650L) {
                     extQuietSince = 0L
                     resumeFromFocus(false)
-                } else handler.postDelayed(extCheck, 250L)
+                } else handler.postDelayed(extCheck, 150L)
             } else extQuietSince = 0L
             return
         }
@@ -305,8 +305,8 @@ class MainActivity : AppCompatActivity() {
         }
         if (n >= 1 && (extBaseline < 0 || n < extBaseline)) extBaseline = n
         if (extBaseline >= 1 && n > extBaseline) {
-            if (extSeenSince == 0L) extSeenSince = now
-            else if (now - extSeenSince >= 700L) { extSeenSince = 0L; beginExternalPause() }
+            if (extSeenSince == 0L) { extSeenSince = now; handler.postDelayed(extCheck, 230L) }
+            else if (now - extSeenSince >= 200L) { extSeenSince = 0L; beginExternalPause() }
         } else extSeenSince = 0L
     }
 
@@ -1853,6 +1853,28 @@ fun onMusicCatalog(raw: String?) {
         if (tabs.isEmpty()) { cur = -1; openTab(null); return }
         if (wasCurrent) switchTo(minOf(index, tabs.size - 1))
         else if (index < cur) cur--
+        updateTabCount()
+    }
+
+    /** Tüm sekmeleri kapatır; geriye yalnızca tek, temiz bir yeni sekme kalır (tarayıcı sekmesiz kalamaz). */
+    private fun closeAllTabs() {
+        try { if (miniTab != null) dismissMini() } catch (_: Exception) { }
+        val hadIncognito = tabs.any { it.incognito }
+        for (t in tabs.toList()) {
+            try { content.removeView(t.web) } catch (_: Exception) { }
+            try { t.web.stopLoading() } catch (_: Exception) { }
+            try { t.web.clearHistory() } catch (_: Exception) { }
+            try { t.web.destroy() } catch (_: Exception) { }
+        }
+        tabs.clear()
+        shown = null
+        cur = -1
+        if (hadIncognito) {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            WebStorage.getInstance().deleteAllData()
+        }
+        openTab(null)
         updateTabCount()
     }
 
@@ -5301,9 +5323,17 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
         scroll.addView(grid)
         rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
+        val closeAll = textBtn("Tüm sekmeleri kapat") {
+            themedConfirm("Tüm sekmeler kapatılsın mı?", onYes = { d.dismiss(); closeAllTabs() }, onNo = {})
+        }
+        closeAll.textSize = 14.5f
+        closeAll.setTypeface(null, Typeface.BOLD)
+        closeAll.setTextColor(0xFFFF5C6C.toInt())
+        rootV.addView(closeAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(4) })
+
         val actions = LinearLayout(this)
         actions.orientation = LinearLayout.HORIZONTAL
-        actions.setPadding(0, dp(10), 0, 0)
+        actions.setPadding(0, dp(6), 0, 0)
         val b1 = pillBtn("＋  Yeni sekme", intArrayOf(cAccent, cAccent2)) { d.dismiss(); openTab(null) }
         val b2 = pillBtn("🕶  Gizli sekme", intArrayOf(0xFF6D2BD9.toInt(), 0xFFC026D3.toInt())) { d.dismiss(); openTab(null, true, true) }
         val l1 = LinearLayout.LayoutParams(0, dp(48), 1f); l1.rightMargin = dp(6)
