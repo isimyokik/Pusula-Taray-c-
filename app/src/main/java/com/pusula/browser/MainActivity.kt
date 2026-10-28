@@ -157,7 +157,6 @@ class MainActivity : AppCompatActivity() {
     private var lastPlaying = false
     private var hasAudioFocus = false
     private var pausedByAudioFocus = false
-    private var webPausedByFocus = false
     private var ignoreFocusUntil = 0L
     private var audioFocusRequest: AudioFocusRequest? = null
     private var mediaDismissedUntil = 0L
@@ -187,68 +186,60 @@ class MainActivity : AppCompatActivity() {
 
 
 
+
     private val audioManager: AudioManager by lazy {
         getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
+    /**
+     * Başka uygulama (WhatsApp sesi, telefon, Spotify…) medya çalınca bizim medyayı durdur;
+     * onlar bitince (AUDIOFOCUS_GAIN) kaldığı yerden devam ettir.
+     * YouTube ilk video / reklam akışına karışmaz: sadece gerçek focus kaybında devreye girer.
+     */
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
         if (android.os.SystemClock.elapsedRealtime() < ignoreFocusUntil) return@OnAudioFocusChangeListener
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                if (!pausedByAudioFocus && (lastPlaying || hasMedia)) {
-                    pausedByAudioFocus = true
-                    fadeOutForAudioFocus()
-                    startForeignAudioWatch()
+                if (pausedByAudioFocus) return@OnAudioFocusChangeListener
+                if (!lastPlaying && !hasMedia) return@OnAudioFocusChangeListener
+                pausedByAudioFocus = true
+                injectAllMedia(AUDIO_FOCUS_PAUSE_JS)
+                lastPlaying = false
+                if (hasMedia) {
+                    try {
+                        PlaybackService.update(
+                            this, false, lastTitle, lastArtist,
+                            isInPictureInPictureMode, -1L, -2L, lastArtUrl
+                        )
+                    } catch (_: Exception) { }
                 }
+                if (isInPictureInPictureMode) updatePipActions()
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                if (pausedByAudioFocus) {
-                    pausedByAudioFocus = false
-                    stopForeignAudioWatch()
-                    fadeInAfterAudioFocus()
-                }
-            }
-        }
-    }
-
-    private var foreignWatchPosted = false
-    private val foreignAudioWatch = object : Runnable {
-        override fun run() {
-            foreignWatchPosted = false
-            if (!pausedByAudioFocus) return
-            // Sadece "başka ses bitti mi?" bak — burada pause yok (yoksa müzik hiç geri açılmaz)
-            val otherActive = try {
-                @Suppress("DEPRECATION")
-                audioManager.isMusicActive
-            } catch (_: Exception) {
-                false
-            }
-            if (!otherActive) {
+                if (!pausedByAudioFocus) return@OnAudioFocusChangeListener
                 pausedByAudioFocus = false
-                fadeInAfterAudioFocus()
-                return
+                injectAllMedia(AUDIO_FOCUS_RESUME_JS)
+                lastPlaying = true
+                if (hasMedia) {
+                    try {
+                        PlaybackService.update(
+                            this, true, lastTitle, lastArtist,
+                            isInPictureInPictureMode, -1L, -2L, lastArtUrl
+                        )
+                    } catch (_: Exception) { }
+                }
+                if (isInPictureInPictureMode) updatePipActions()
             }
-            startForeignAudioWatch()
         }
-    }
-
-    private fun startForeignAudioWatch() {
-        if (foreignWatchPosted) return
-        foreignWatchPosted = true
-        handler.postDelayed(foreignAudioWatch, 500L)
-    }
-
-    private fun stopForeignAudioWatch() {
-        foreignWatchPosted = false
-        handler.removeCallbacks(foreignAudioWatch)
     }
 
     private fun requestMediaAudioFocus() {
         if (hasAudioFocus) return
         try {
-            ignoreFocusUntil = android.os.SystemClock.elapsedRealtime() + 700L
+            // İstek sonrası gelen sahte LOSS'u yut (ilk video sessiz/durma sorunu)
+            ignoreFocusUntil = android.os.SystemClock.elapsedRealtime() + 1500L
             val ok = if (Build.VERSION.SDK_INT >= 26) {
                 val attrs = AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -275,7 +266,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun abandonMediaAudioFocus() {
-        stopForeignAudioWatch()
         if (!hasAudioFocus && audioFocusRequest == null) return
         try {
             if (Build.VERSION.SDK_INT >= 26) {
@@ -297,52 +287,6 @@ class MainActivity : AppCompatActivity() {
             if (!seen.add(id)) continue
             try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
         }
-    }
-
-    private fun fadeOutForAudioFocus() {
-        injectAllMedia(AUDIO_FADE_OUT_JS)
-        injectAllMedia(AUDIO_FORCE_MUTE_JS)
-        // WebView motorunda da durdur (JS pause yetmezse WhatsApp sırasında ses kesilsin)
-        try {
-            for (t in (tabs.toList() + listOfNotNull(miniTab, mediaSrc))) {
-                try { t.web.onPause() } catch (_: Exception) { }
-            }
-            webPausedByFocus = true
-        } catch (_: Exception) { }
-        lastPlaying = false
-        if (hasMedia) {
-            try {
-                PlaybackService.update(this, false, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
-            } catch (_: Exception) { }
-        }
-        if (isInPictureInPictureMode) updatePipActions()
-    }
-
-    private fun fadeInAfterAudioFocus() {
-        stopForeignAudioWatch()
-        pausedByAudioFocus = false
-        // WebView'ı geri aç, sonra play
-        if (webPausedByFocus) {
-            try {
-                for (t in (tabs.toList() + listOfNotNull(miniTab, mediaSrc))) {
-                    try { t.web.onResume() } catch (_: Exception) { }
-                }
-            } catch (_: Exception) { }
-            webPausedByFocus = false
-        }
-        requestMediaAudioFocus()
-        handler.postDelayed({
-            injectAllMedia(AUDIO_FADE_IN_JS)
-            injectAllMedia(AUDIO_ENSURE_VOL_JS)
-        }, 120L)
-        handler.postDelayed({ injectAllMedia(AUDIO_FADE_IN_JS) }, 400L)
-        lastPlaying = true
-        if (hasMedia) {
-            try {
-                PlaybackService.update(this, true, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
-            } catch (_: Exception) { }
-        }
-        if (isInPictureInPictureMode) updatePipActions()
     }
 
     /** Başlık ve sanatçıdan "YouTube Music" yazısını temizler. */
@@ -452,8 +396,6 @@ class MainActivity : AppCompatActivity() {
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
         if (playing && !pausedByAudioFocus) {
             requestMediaAudioFocus()
-            // İlk açılışta volume 0'da kalmasın
-            injectAllMedia(AUDIO_ENSURE_VOL_JS)
         }
         // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
         if ((changed || playing) && (playing || PlaybackService.running)) {
@@ -758,7 +700,8 @@ fun onMusicCatalog(raw: String?) {
     private val backgroundMediaPump = object : Runnable {
         override fun run() {
             if (!appInBackground || !prefs.bgPlay) return
-            if (pausedByAudioFocus || webPausedByFocus) {
+            // Focus kaybındayken arka plan "zorla oynat" yapmasın
+            if (pausedByAudioFocus) {
                 handler.postDelayed(this, 1200L)
                 return
             }
@@ -914,20 +857,17 @@ fun onMusicCatalog(raw: String?) {
         // Ana ekran / PiP ✕: WebView'ı durdurma, arka planda çalsın
         if (prefs.bgPlay) {
             appInBackground = true
-            // Ses odağı kaybı varsa WebView'ı zorla resume etme (WhatsApp susturması bozulmasın)
-            if (!webPausedByFocus) {
-                try { shown?.onResume() } catch (_: Exception) { }
-            }
+            try { shown?.onResume() } catch (_: Exception) { }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
-            if (hasMedia && lastPlaying && !webPausedByFocus && !pausedByAudioFocus) {
+            if (hasMedia && lastPlaying && !pausedByAudioFocus) {
                 try {
                     currentWeb()?.evaluateJavascript(
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
                 PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
-            } else if (!webPausedByFocus && !pausedByAudioFocus) {
+            } else if (!pausedByAudioFocus) {
                 // Kullanıcı durdurmuşsa arka planda tekrar başlatma
                 try {
                     currentWeb()?.evaluateJavascript(
@@ -958,12 +898,10 @@ fun onMusicCatalog(raw: String?) {
         // PiP penceresi ✕ ile kapanınca da buraya gelinir (PiP bayrağı hâlâ true olabilir): arka planda çalma yolu çalışsın
         if (prefs.bgPlay) {
             appInBackground = true
-            if (!webPausedByFocus) {
-                try { shown?.onResume() } catch (_: Exception) { }
-            }
+            try { shown?.onResume() } catch (_: Exception) { }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
-            if (hasMedia && lastPlaying && !webPausedByFocus && !pausedByAudioFocus) {
+            if (hasMedia && lastPlaying && !pausedByAudioFocus) {
                 try {
                     currentWeb()?.evaluateJavascript(
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
@@ -4447,8 +4385,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         // Yerel oynatıcı kendi ses odağını alsın; WebView medyasını yavaşça bırak
         try {
             if (lastPlaying || hasMedia) {
-                pausedByAudioFocus = true
-                fadeOutForAudioFocus()
+                injectAllMedia(AUDIO_FOCUS_PAUSE_JS)
             }
             abandonMediaAudioFocus()
         } catch (_: Exception) { }
