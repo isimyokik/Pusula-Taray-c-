@@ -5981,9 +5981,29 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(dy<48||Math.abs(dx)>dy*1.15)return;\n" +
             "try{tryNative();}catch(z){}\n" +
             "try{tryClick();}catch(z){}\n" +
+            "setTimeout(forceCleanPlayerChrome,400);\n" +
+            "setTimeout(forceCleanPlayerChrome,900);\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
-            "try{var __pk=document.getElementById('__rota_peek');if(__pk)__pk.remove();document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');}catch(z){}\n" +
+            "function forceCleanPlayerChrome(){\n" +
+            "try{\n" +
+            "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
+            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
+            "if(p){\n" +
+            "['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});\n" +
+            "}\n" +
+            "document.querySelectorAll('#content,#main-panel,ytmusic-browse-response,ytmusic-tabs,ytmusic-app-layout > *').forEach(function(el){\n" +
+            "try{\n" +
+            "if(el.style&&el.style.getPropertyValue('visibility')==='hidden')el.style.removeProperty('visibility');\n" +
+            "if(el.style&&el.style.getPropertyValue('opacity')==='0')el.style.removeProperty('opacity');\n" +
+            "if(el.style&&el.style.getPropertyValue('display')==='none'&&el.id==='content')el.style.removeProperty('display');\n" +
+            "}catch(z){}\n" +
+            "});\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "forceCleanPlayerChrome();\n" +
+            "setInterval(function(){try{if(!pageOpen())forceCleanPlayerChrome();}catch(z){}},700);\n" +
             "}catch(e){}})();\n"
 
         const val KEEP_PLAYING_JS =
