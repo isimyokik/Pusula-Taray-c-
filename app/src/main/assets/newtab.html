@@ -218,10 +218,16 @@
   }
   var pins = pinsFromCfg();
   if (pins == null) pins = DEFAULT_PINS.slice();
+  var saveTimer = null;
+  var iconBusy = {};
   function save(){
-    try {
-      if (window.Pusula && window.Pusula.savePins) window.Pusula.savePins(JSON.stringify(pins));
-    } catch (e) {}
+    // Toplu yaz — her logo için ayrı disk yazma uygulama kasmasın
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function(){
+      try {
+        if (window.Pusula && window.Pusula.savePins) window.Pusula.savePins(JSON.stringify(pins));
+      } catch (e) {}
+    }, 400);
   }
   function tile(label, url, icon, bg){
     var a = document.createElement("a"); a.className = "t"; a.href = url;
@@ -232,62 +238,78 @@
   var g = document.getElementById("pins");
   var suppress = false;
 
-  // Logo bir kez yüklenir, pin.i olarak kaydedilir; sonraki açılışlarda tekrar çekilmez
   function setBoxIcon(box, img, fill){
     if (!box || !img) return;
     box.textContent = "";
-    // Mevcut kısayollar gibi renkli zemin kalsın; logo üzerine otursun
     if (fill) box.style.background = fill;
     img.style.cssText = "width:70%;height:70%;object-fit:contain;border-radius:8px";
     box.appendChild(img);
   }
+  function showIcon(box, src, fill){
+    if (!box || !src || box.querySelector("img")) return;
+    var img = new Image();
+    img.referrerPolicy = "no-referrer";
+    img.onload = function(){
+      if (img.naturalWidth < 8) return;
+      setBoxIcon(box, img, fill);
+    };
+    img.src = src;
+  }
+  // Kayıtlı logo varsa sadece göster; yoksa bir kez indirip kaydet. Tekrar render'da ağ yok.
   function favicon(a, pinIndex, u){
     var box = a.querySelector("i");
-    if (!box) return;
-    if (box.querySelector("img")) return;
+    if (!box || box.querySelector("img")) return;
     var fill = box.style.background || "";
+    var key = (pinIndex >= 0 ? "p" + pinIndex : "u:" + u) + "|" + u;
+    if (iconBusy[key]) return;
     var saved = (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i) ? String(pins[pinIndex].i) : "";
+    if (saved) {
+      showIcon(box, saved, fill);
+      return;
+    }
+    iconBusy[key] = 1;
     var host = "";
     try { host = new URL(u).hostname; } catch (e) {}
-    var list = [];
-    if (saved) list.push(saved);
-    if (host) {
-      list.push("https://www.google.com/s2/favicons?domain=" + encodeURIComponent(host) + "&sz=128");
-      list.push("https://" + host + "/favicon.ico");
-    }
+    if (!host) { delete iconBusy[key]; return; }
+    var list = [
+      "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(host) + "&sz=128",
+      "https://" + host + "/favicon.ico"
+    ];
     var k = 0;
     function tryNext(){
-      if (k >= list.length) return;
+      if (k >= list.length) { delete iconBusy[key]; return; }
       var src = list[k++];
       var img = new Image();
       img.referrerPolicy = "no-referrer";
       img.onload = function(){
         if (img.naturalWidth < 8) { tryNext(); return; }
         setBoxIcon(box, img, fill);
-        if (pinIndex >= 0 && pins[pinIndex] && pins[pinIndex].i !== src) {
+        if (pinIndex >= 0 && pins[pinIndex]) {
           pins[pinIndex].i = src;
           save();
         }
+        delete iconBusy[key];
       };
       img.onerror = tryNext;
       img.src = src;
     }
     tryNext();
   }
-  // Son ziyaret / yer imi satır ikonları — aynı logo kaynağı
   function rowIcon(el, u){
-    if (!el) return;
-    if (el.querySelector("img")) return;
+    if (!el || el.querySelector("img")) return;
     var host = "";
     try { host = new URL(u).hostname; } catch (e) {}
     if (!host) return;
+    var key = "r:" + host;
+    if (iconBusy[key]) return;
+    iconBusy[key] = 1;
     var list = [
       "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(host) + "&sz=64",
       "https://" + host + "/favicon.ico"
     ];
     var k = 0;
     function tryNext(){
-      if (k >= list.length) return;
+      if (k >= list.length) { delete iconBusy[key]; return; }
       var src = list[k++];
       var img = new Image();
       img.referrerPolicy = "no-referrer";
@@ -296,6 +318,7 @@
         el.textContent = "";
         img.style.cssText = "width:20px;height:20px;object-fit:contain";
         el.appendChild(img);
+        delete iconBusy[key];
       };
       img.onerror = tryNext;
       img.src = src;
