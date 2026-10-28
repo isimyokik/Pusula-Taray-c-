@@ -2189,6 +2189,9 @@ fun onMusicCatalog(raw: String?) {
                 try { view?.evaluateJavascript(YT_MINI_PLAYER_JS, null) } catch (_: Exception) { }
                 if (u.contains("music.youtube.com")) {
                     try { view?.evaluateJavascript(YT_MUSIC_UX_JS, null) } catch (_: Exception) { }
+                    handler.postDelayed({
+                        try { view?.evaluateJavascript(YT_MUSIC_UX_JS, null) } catch (_: Exception) { }
+                    }, 800)
                 }
                 if (miniTab != null && tab !== miniTab) { try { view?.evaluateJavascript(YT_NO_PREVIEW_JS, null) } catch (_: Exception) { } }
             }
@@ -5627,127 +5630,105 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "window.__rotaYtmAbort=new AbortController();\n" +
             "var sig=window.__rotaYtmAbort.signal;\n" +
             "function isFullPlayer(){\n" +
-            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
+            "var p=document.querySelector('ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
-            "try{\n" +
-            "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
-            "if(layout){\n" +
-            "var st=layout.getAttribute('player-ui-state_')||'';\n" +
-            "if(st==='PLAYER_BAR_ONLY')return false;\n" +
-            "if(layout.playerPageOpen_===false)return false;\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "var cs=getComputedStyle(p);\n" +
-            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
-            "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
-            "return r.width>0&&r.height>H*0.5&&r.top<H*0.25;\n" +
-            "}\n" +
-            "function isOnSlider(e){\n" +
-            "try{\n" +
-            "var path=e.composedPath?e.composedPath():[];\n" +
-            "if(!path.length&&e.target)path=[e.target];\n" +
-            "for(var i=0;i<path.length;i++){\n" +
-            "var n=path[i];if(!n||!n.tagName)continue;\n" +
-            "var tag=n.tagName.toLowerCase();\n" +
-            "if(tag.indexOf('slider')>=0||tag.indexOf('progress')>=0)return true;\n" +
-            "var id=n.id||'';\n" +
-            "if(id==='progress-bar'||id==='sliderBar'||id==='progress-bar-line')return true;\n" +
-            "var cls=(typeof n.className==='string'?n.className:'')||'';\n" +
-            "if(/progress-bar|paper-slider|time-info/.test(cls))return true;\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "return false;\n" +
-            "}\n" +
-            "function findMinBtn(){\n" +
-            "var sels=[\n" +
-            "'.player-minimize-button','.toggle-player-page-button',\n" +
-            "'tp-yt-paper-icon-button.toggle-player',\n" +
-            "'ytmusic-player-page .exit-fullscreen-button',\n" +
-            "'ytmusic-player-page [aria-label*=\"Küçült\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Down\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Close player\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Collapse\"]'\n" +
-            "];\n" +
-            "for(var i=0;i<sels.length;i++){\n" +
-            "var nodes=document.querySelectorAll(sels[i]);\n" +
-            "for(var j=0;j<nodes.length;j++){\n" +
-            "var el=nodes[j],r=el.getBoundingClientRect();\n" +
-            "if(r.width>0&&r.height>0&&r.top<140)return el;\n" +
-            "}\n" +
-            "}\n" +
-            "try{\n" +
-            "var t=document.elementFromPoint(36,48);\n" +
-            "if(t){var b=t.closest('button,[role=button],tp-yt-paper-icon-button');if(b)return b;}\n" +
-            "}catch(z){}\n" +
-            "return null;\n" +
-            "}\n" +
-            "function minimize(){\n" +
-            "if(!isFullPlayer())return false;\n" +
-            "var el=findMinBtn();\n" +
-            "if(el){\n" +
-            "try{el.click();return true;}catch(z){}\n" +
-            "}\n" +
-            // Layout API yedek
             "try{\n" +
             "var layout=document.querySelector('ytmusic-app-layout');\n" +
             "if(layout){\n" +
-            "if(typeof layout.collapsePlayerPage_==='function'){layout.collapsePlayerPage_();return true;}\n" +
-            "if(typeof layout.hidePlayerPage_==='function'){layout.hidePlayerPage_();return true;}\n" +
-            "if('playerPageOpen_' in layout){layout.playerPageOpen_=false;return true;}\n" +
+            "var st=(layout.getAttribute('player-ui-state_')||'');\n" +
+            "if(st==='PLAYER_BAR_ONLY')return false;\n" +
             "}\n" +
             "}catch(z){}\n" +
+            "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
+            "return r.height>H*0.45&&r.top<H*0.3;\n" +
+            "}\n" +
+            "function isOnSlider(e){\n" +
             "try{\n" +
-            "if(window.RotaTap&&el){\n" +
-            "var r=el.getBoundingClientRect();\n" +
-            "window.RotaTap.tap((r.left+r.width/2)/Math.max(1,window.innerWidth),(r.top+r.height/2)/Math.max(1,window.innerHeight));\n" +
-            "setTimeout(function(){try{if(window.RotaTap&&RotaTap.reset)RotaTap.reset();}catch(q){}},400);\n" +
-            "return true;\n" +
+            "var path=e.composedPath?e.composedPath():[e.target];\n" +
+            "for(var i=0;i<path.length;i++){\n" +
+            "var n=path[i];if(!n||!n.tagName)continue;\n" +
+            "var t=n.tagName.toLowerCase();\n" +
+            "if(t.indexOf('slider')>=0||t.indexOf('progress')>=0)return true;\n" +
+            "if((n.id||'')==='progress-bar'||(n.id||'')==='sliderBar')return true;\n" +
             "}\n" +
             "}catch(z){}\n" +
             "return false;\n" +
             "}\n" +
-            "function unlock(){\n" +
+            // TEK İŞ: sol üst küçült tuşuna bas
+            "function pressMinimize(){\n" +
+            "if(!isFullPlayer())return;\n" +
+            "var clicked=false;\n" +
+            "var sels=[\n" +
+            "'.player-minimize-button','.toggle-player-page-button',\n" +
+            "'tp-yt-paper-icon-button.toggle-player',\n" +
+            "'ytmusic-player-page tp-yt-paper-icon-button',\n" +
+            "'ytmusic-player-page button'\n" +
+            "];\n" +
+            "for(var i=0;i<sels.length&&!clicked;i++){\n" +
+            "var nodes=document.querySelectorAll(sels[i]);\n" +
+            "for(var j=0;j<nodes.length;j++){\n" +
+            "var el=nodes[j],r=el.getBoundingClientRect();\n" +
+            // sol üst bölge
+            "if(r.width>0&&r.height>0&&r.top>=0&&r.top<120&&r.left<120){\n" +
+            "try{el.click();clicked=true;break;}catch(z){}\n" +
+            "}\n" +
+            "}\n" +
+            "}\n" +
+            // elementFromPoint ile sol üst
+            "if(!clicked){\n" +
             "try{\n" +
-            "['html','body','ytmusic-app','ytmusic-app-layout','#layout','#content'].forEach(function(q){\n" +
-            "document.querySelectorAll(q).forEach(function(el){\n" +
-            "var st=el.style;if(!st)return;\n" +
-            "if(st.overflow==='hidden'||st.overflowY==='hidden'){st.removeProperty('overflow');st.removeProperty('overflow-y');}\n" +
-            "if(st.touchAction==='none')st.removeProperty('touch-action');\n" +
-            "});\n" +
-            "});\n" +
-            "if(window.RotaTap&&RotaTap.reset)RotaTap.reset();\n" +
+            "var pts=[[40,48],[48,56],[32,40],[56,64],[24,36]];\n" +
+            "for(var k=0;k<pts.length&&!clicked;k++){\n" +
+            "var t=document.elementFromPoint(pts[k][0],pts[k][1]);\n" +
+            "if(!t)continue;\n" +
+            "var b=t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;\n" +
+            "try{b.click();clicked=true;}catch(z){}\n" +
+            "}\n" +
             "}catch(z){}\n" +
             "}\n" +
-            "var sx=0,sy=0,tr=false;\n" +
+            // Native dokunuş (RotaTap) — en güvenilir
+            "try{\n" +
+            "if(window.RotaTap){\n" +
+            "window.RotaTap.tap(40/Math.max(1,window.innerWidth),48/Math.max(1,window.innerHeight));\n" +
+            "setTimeout(function(){try{if(window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},350);\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            // Layout yedek
+            "try{\n" +
+            "var layout=document.querySelector('ytmusic-app-layout');\n" +
+            "if(layout){\n" +
+            "try{layout.setAttribute('player-ui-state_','PLAYER_BAR_ONLY');}catch(z){}\n" +
+            "try{layout.playerPageOpen_=false;}catch(z){}\n" +
+            "if(typeof layout.collapsePlayerPage_==='function')try{layout.collapsePlayerPage_();}catch(z){}\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "var sx=0,sy=0,active=false;\n" +
             "document.addEventListener('touchstart',function(e){\n" +
-            "tr=false;\n" +
+            "active=false;\n" +
             "if(!e.touches||e.touches.length!==1)return;\n" +
             "if(!isFullPlayer())return;\n" +
             "if(isOnSlider(e))return;\n" +
             "sx=e.touches[0].clientX;\n" +
             "sy=e.touches[0].clientY;\n" +
-            "tr=true;\n" +
+            "active=true;\n" +
             "},{passive:true,capture:true,signal:sig});\n" +
             "document.addEventListener('touchmove',function(e){\n" +
-            "if(!tr||!e.touches||!e.touches[0])return;\n" +
+            "if(!active||!e.touches||!e.touches[0])return;\n" +
             "var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;\n" +
-            "if(Math.abs(dx)>Math.abs(dy)*1.2)tr=false;\n" +
+            // yatay ağırlıklıysa iptal
+            "if(Math.abs(dx)>Math.abs(dy)*1.15)active=false;\n" +
             "},{passive:true,capture:true,signal:sig});\n" +
             "document.addEventListener('touchend',function(e){\n" +
-            "if(!tr)return;tr=false;\n" +
+            "if(!active)return;active=false;\n" +
             "if(!isFullPlayer())return;\n" +
-            "if(isOnSlider(e))return;\n" +
             "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<64)return;\n" +
-            "if(Math.abs(dx)>dy*0.9)return;\n" +
-            "minimize();\n" +
-            "setTimeout(unlock,200);\n" +
-            "setTimeout(unlock,600);\n" +
+            "if(dy<48)return;\n" +
+            "if(Math.abs(dx)>dy*0.95)return;\n" +
+            "pressMinimize();\n" +
             "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true,signal:sig});\n" +
-            "setInterval(function(){if(!isFullPlayer())unlock();},800);\n" +
+            "document.addEventListener('touchcancel',function(){active=false;},{passive:true,capture:true,signal:sig});\n" +
             "}catch(e){}})();\n"
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
