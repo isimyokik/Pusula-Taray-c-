@@ -5603,18 +5603,15 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
             "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
-            // Önceki bozulmuş stilleri temizle
             "function scrub(){\n" +
             "try{\n" +
             "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
-            "['__rota_peek','__rota_peek2','__rota_noanim','__rota_debug','__adcover'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
             "var p=document.querySelector('ytmusic-player-page');\n" +
-            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index','background','background-color'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
+            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
             "}catch(z){}\n" +
             "}\n" +
             "scrub();\n" +
-            "setInterval(scrub,2000);\n" +
-            // Tam ekran oynatıcı açık mı?
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
@@ -5626,20 +5623,48 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(layout.playerPageOpen_===false)return false;\n" +
             "}\n" +
             "}catch(z){}\n" +
+            "var cs=getComputedStyle(p);\n" +
+            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
             "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
-            "return r.width>0&&r.height>H*0.6&&r.top<H*0.2;\n" +
+            "return r.width>0&&r.height>H*0.55&&r.top<H*0.22;\n" +
+            "}\n" +
+            "function findMinBtn(){\n" +
+            "var sels=[\n" +
+            "'.player-minimize-button',\n" +
+            "'.toggle-player-page-button',\n" +
+            "'tp-yt-paper-icon-button.toggle-player',\n" +
+            "'ytmusic-player-page .exit-fullscreen-button',\n" +
+            "'ytmusic-player-page [aria-label*=\"Küçült\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Down\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Close\"]',\n" +
+            "'ytmusic-player-page button'\n" +
+            "];\n" +
+            "for(var i=0;i<sels.length;i++){\n" +
+            "var nodes=document.querySelectorAll(sels[i]);\n" +
+            "for(var j=0;j<nodes.length;j++){\n" +
+            "var el=nodes[j],r=el.getBoundingClientRect();\n" +
+            "if(r.width>0&&r.height>0&&r.top<120&&r.left<120)return el;\n" +
+            "}\n" +
+            "}\n" +
+            "try{\n" +
+            "var t=document.elementFromPoint(28,40);\n" +
+            "if(t)return t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;\n" +
+            "}catch(z){}\n" +
+            "return null;\n" +
             "}\n" +
             "function minimize(){\n" +
             "if(!isFullPlayer())return;\n" +
-            "var sels=['.player-minimize-button','.toggle-player-page-button','[aria-label*=\"Küçült\"]','[aria-label*=\"Minimize\"]','[aria-label*=\"Down\"]','ytmusic-player-page .button-shape-button-container button'];\n" +
-            "for(var i=0;i<sels.length;i++){\n" +
-            "var el=document.querySelector(sels[i]);\n" +
-            "if(el){try{el.click();return;}catch(z){}}\n" +
-            "}\n" +
-            // Sol üst chevron bölgesine tıkla
+            "var el=findMinBtn();\n" +
+            "if(!el)return;\n" +
+            "try{el.click();}catch(z){}\n" +
             "try{\n" +
-            "var t=document.elementFromPoint(28,36);\n" +
-            "if(t){var b=t.closest('button,[role=button],tp-yt-paper-icon-button')||t;b.click&&b.click();}\n" +
+            "if(window.RotaTap){\n" +
+            "var r=el.getBoundingClientRect();\n" +
+            "var x=(r.left+r.width/2)/window.innerWidth;\n" +
+            "var y=(r.top+r.height/2)/window.innerHeight;\n" +
+            "window.RotaTap.tap(x,y);\n" +
+            "}\n" +
             "}catch(z){}\n" +
             "}\n" +
             "var sx=0,sy=0,tr=false;\n" +
@@ -5647,14 +5672,16 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "tr=false;\n" +
             "if(!e.touches||e.touches.length!==1)return;\n" +
             "if(!isFullPlayer())return;\n" +
-            "sx=e.touches[0].clientX;sy=e.touches[0].clientY;tr=true;\n" +
+            "sx=e.touches[0].clientX;\n" +
+            "sy=e.touches[0].clientY;\n" +
+            "tr=true;\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchend',function(e){\n" +
             "if(!tr)return;tr=false;\n" +
             "if(!isFullPlayer())return;\n" +
             "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<56||Math.abs(dx)>dy)return;\n" +
+            "if(dy<50||Math.abs(dx)>dy*1.1)return;\n" +
             "minimize();\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
