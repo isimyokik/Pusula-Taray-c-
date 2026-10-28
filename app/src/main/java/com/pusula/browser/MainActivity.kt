@@ -163,7 +163,7 @@ class MainActivity : AppCompatActivity() {
     /** WhatsApp sesi vb. gelince medya bu sürede yavaşça kısılıp durur. */
     private val focusFadeOutMs = 1500L
     /** Ses bitince medya bu sürede yavaşça açılıp kaldığı yerden devam eder. */
-    private val focusFadeInMs = 2000L
+    private val focusFadeInMs = 1000L
     private val focusFadeStepMs = 60L
     /** Başka uygulama odağı KALICI aldıysa (GAIN hiç gelmeyebilir) sessizlik bitince kendiliğinden devam et. */
     private val focusResumeFallback = true
@@ -220,7 +220,6 @@ class MainActivity : AppCompatActivity() {
     private var extBaseline = -1
     private var extSeenSince = 0L
     private var extQuietSince = 0L
-    private var dbgLast = ""
     private var mediaChangedAt = 0L
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
@@ -256,7 +255,7 @@ class MainActivity : AppCompatActivity() {
             val cb = object : AudioManager.AudioPlaybackCallback() {
                 override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
                     handler.removeCallbacks(extCheck)
-                    handler.postDelayed(extCheck, 350L)
+                    handler.postDelayed(extCheck, 120L)
                 }
             }
             audioManager.registerAudioPlaybackCallback(cb, handler)
@@ -272,7 +271,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun beginExternalPause() {
         if (pausedByAudioFocus) return
-        toast("Dış ses algılandı: kısılıyor")
         pausedByAudioFocus = true
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
         focusPermanentLoss = false
@@ -292,19 +290,15 @@ class MainActivity : AppCompatActivity() {
         if (pausedByAudioFocus) {
             if (focusFadeRunnable != null || focusPermanentLoss) { extQuietSince = 0L; return }
             if (n == 0) {
-                if (extQuietSince == 0L) extQuietSince = now
-                else if (now - extQuietSince >= 900L && now - focusPauseSince > 2500L) {
+                if (extQuietSince == 0L) { extQuietSince = now; handler.postDelayed(extCheck, 300L) }
+                else if (now - extQuietSince >= 250L && now - focusPauseSince > 1600L) {
                     extQuietSince = 0L
-                    toast("Dış ses bitti: açılıyor")
                     resumeFromFocus(false)
-                }
+                } else handler.postDelayed(extCheck, 250L)
             } else extQuietSince = 0L
             return
         }
         val ourPlaying = hasMedia && lastPlaying
-        // GEÇİCİ TEŞHİS: dış ses sayısı değişince kısa bildirim göster (sorun çözülünce kaldırılacak)
-        val dbgU = activeUsages().toString()
-        if (dbgU != dbgLast) { dbgLast = dbgU; if (ourPlaying || pausedByAudioFocus) toast("ses:$n taban:$extBaseline çalıyor:$ourPlaying usage:$dbgU") }
         if (!ourPlaying || focusFadeRunnable != null || now - mediaChangedAt < 5000L) {
             extBaseline = -1; extSeenSince = 0L
             return
