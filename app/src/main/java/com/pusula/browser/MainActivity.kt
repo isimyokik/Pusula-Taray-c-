@@ -157,6 +157,7 @@ class MainActivity : AppCompatActivity() {
     private var lastPlaying = false
     private var hasAudioFocus = false
     private var pausedByAudioFocus = false
+    private var ignoreFocusUntil = 0L
     private var audioFocusRequest: AudioFocusRequest? = null
     private var mediaDismissedUntil = 0L
     private var lastTitle = ""
@@ -188,25 +189,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        // requestAudioFocus sonrası gelen sahte LOSS'u yut
+        if (android.os.SystemClock.elapsedRealtime() < ignoreFocusUntil) return@OnAudioFocusChangeListener
         when (change) {
-            // Başka medya veya telefon görüşmesi: yavaşça kapat
+            // Başka uygulama medyası, WhatsApp sesi, telefon: yavaşça kapat
             AudioManager.AUDIOFOCUS_LOSS,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 if (!pausedByAudioFocus && (lastPlaying || hasMedia)) {
                     pausedByAudioFocus = true
                     fadeOutForAudioFocus()
                 }
             }
-            // Kısa bildirim vb.: sadece kıs, tamamen durdurma
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                if (!pausedByAudioFocus) injectAllMedia(AUDIO_DUCK_JS)
-            }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 if (pausedByAudioFocus) {
                     pausedByAudioFocus = false
                     fadeInAfterAudioFocus()
-                } else {
-                    injectAllMedia(AUDIO_UNDUCK_JS)
                 }
             }
         }
@@ -215,6 +213,7 @@ class MainActivity : AppCompatActivity() {
     private fun requestMediaAudioFocus() {
         if (hasAudioFocus) return
         try {
+            ignoreFocusUntil = android.os.SystemClock.elapsedRealtime() + 700L
             val ok = if (Build.VERSION.SDK_INT >= 26) {
                 val attrs = AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -388,8 +387,11 @@ class MainActivity : AppCompatActivity() {
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
-        if (playing && !pausedByAudioFocus) requestMediaAudioFocus()
-        if (!playing && !pausedByAudioFocus) { /* kullanıcı durdurdu */ }
+        if (playing && !pausedByAudioFocus) {
+            requestMediaAudioFocus()
+            // İlk açılışta volume 0'da kalmasın
+            injectAllMedia(AUDIO_ENSURE_VOL_JS)
+        }
         // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
         if ((changed || playing) && (playing || PlaybackService.running)) {
             sentPos = pos; sentAt = now; sentPlaying = playing
@@ -6420,6 +6422,14 @@ if(isYt){
 
 
 
+
+        const val AUDIO_ENSURE_VOL_JS =
+            "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "if(m.muted)m.muted=false;" +
+            "var v=(typeof m.volume==='number'?m.volume:1);" +
+            "if(!(v>0.05)){var r=parseFloat(m.dataset._afv||m.dataset._afDuck||'1');if(!(r>0))r=1;m.volume=r;}" +
+            "try{delete m.dataset._afDuck;}catch(z){}" +
+            "}catch(x){}});}catch(e){}})();"
 
         const val AUDIO_DUCK_JS =
             "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){try{" +
