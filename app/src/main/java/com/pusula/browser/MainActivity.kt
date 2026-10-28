@@ -177,6 +177,8 @@ class MainActivity : AppCompatActivity() {
     private var focusLevel = 1.0
     private var focusFadeRunnable: Runnable? = null
     private var focusPauseSince = 0L
+    /** Bu zamana kadar: bildirim silinmez, yeniden "dış ses" sanılıp kesilmez */
+    private var focusHoldUntil = 0L
     private var focusPermanentLoss = false
     private var focusQuietCount = 0
     private var mediaDismissedUntil = 0L
@@ -304,6 +306,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun beginExternalPause() {
         if (pausedByAudioFocus) return
+        // Yeni yeni devam ettirdik; kendi sesimizi "dış ses" sanma
+        if (android.os.SystemClock.elapsedRealtime() < focusHoldUntil) return
         val curT = tupleCounts()
         pauseExtKeys = curT.keys.filter { (curT[it] ?: 0) > (extBaseTuples[it] ?: 0) }.toSet()
         // Başlayan ses bizimkinden farklı türdeyse (WhatsApp sesli mesajı gibi) bittiğini türünden hemen anlarız.
@@ -311,6 +315,7 @@ class MainActivity : AppCompatActivity() {
         pauseFast = pauseExtKeys.isNotEmpty() && pauseExtKeys.none { extBaseTuples.containsKey(it) }
         pausedByAudioFocus = true
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
+        focusHoldUntil = Long.MAX_VALUE / 4
         focusPermanentLoss = false
         extQuietSince = 0L
         injectAllMedia(AUDIO_FOCUS_PREP_JS.replace("__FRESH__", if (focusLevel >= 0.999) "1" else "0"))
@@ -378,6 +383,7 @@ class MainActivity : AppCompatActivity() {
                 if (!lastPlaying && !hasMedia) return@OnAudioFocusChangeListener
                 pausedByAudioFocus = true
                 focusPauseSince = android.os.SystemClock.elapsedRealtime()
+                focusHoldUntil = Long.MAX_VALUE / 4
                 focusPermanentLoss = change == AudioManager.AUDIOFOCUS_LOSS
                 // Kalıcı kayıpta sistem odağı bizden aldı; devam ederken yeniden isteyeceğiz
                 if (focusPermanentLoss) hasAudioFocus = false
@@ -449,10 +455,15 @@ class MainActivity : AppCompatActivity() {
     /** Odak geri geldi (veya sessizlik algılandı): yavaşça aç ve kaldığı yerden devam et. */
     private fun resumeFromFocus(reacquire: Boolean) {
         if (!pausedByAudioFocus) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        // Önce bayraklar: poll/callback yarışı kendi sesimizi kesmesin
         pausedByAudioFocus = false
+        lastPlaying = true
+        hasMedia = true
+        mediaChangedAt = now
+        focusHoldUntil = now + 25_000L
         stopFocusResumeWatch()
-        mediaChangedAt = android.os.SystemClock.elapsedRealtime()
-        extBaseline = -1
+        extBaseline = 1
         extSeenSince = 0L
         extQuietSince = 0L
         pauseExtKeys = emptySet()
@@ -460,31 +471,23 @@ class MainActivity : AppCompatActivity() {
             hasAudioFocus = false
             requestMediaAudioFocus()
         }
-        // 1) JS ile video.play + volume
-        injectAllMedia(AUDIO_FOCUS_RESUME_START_JS.replace("__F__", fmtLevel(focusLevel.coerceAtLeast(0.05))))
-        // 2) YT Music: oynat tuşuna bas (play() bazen yetmiyor)
+        updateFocusNotification(true)
+        // Sessizce volume düşük başlat, YTM'de muted yok
+        injectAllMedia(AUDIO_FOCUS_RESUME_START_JS.replace("__F__", "0.12"))
         injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
-        runFocusFade(1.0, focusFadeInMs, true) {
+        runFocusFade(1.0, focusFadeInMs.coerceAtLeast(500L), true) {
             injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
-            injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
             mediaChangedAt = android.os.SystemClock.elapsedRealtime()
+            focusHoldUntil = android.os.SystemClock.elapsedRealtime() + 15_000L
             try { extBaseline = countMediaConfigs().coerceAtLeast(1) } catch (_: Exception) { }
         }
-        // 3) Bir kez daha dene (YTM geç açılıyor)
+        // Tek yedek deneme (çoklu click cızırtı yapıyordu)
         handler.postDelayed({
-            if (!pausedByAudioFocus) {
+            if (!pausedByAudioFocus && lastPlaying) {
+                injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
                 injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
-                injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
             }
-        }, 600L)
-        handler.postDelayed({
-            if (!pausedByAudioFocus) {
-                injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
-            }
-        }, 1200L)
-        lastPlaying = true
-        hasMedia = true
-        updateFocusNotification(true)
+        }, 700L)
     }
 
     /** Kullanıcı bildirimden/oynatıcıdan kendisi müdahale etti: odak duraklatmasını ve geçişi iptal et. */
@@ -685,8 +688,7 @@ class MainActivity : AppCompatActivity() {
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
             if (pausedByAudioFocus) return
-            // Focus sonrası YTM kısa süre boş state dönebilir — bildirimi öldürme
-            if (android.os.SystemClock.elapsedRealtime() - focusPauseSince < 12_000L && focusPauseSince > 0L) return
+            if (android.os.SystemClock.elapsedRealtime() < focusHoldUntil) return
             if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); abandonMediaAudioFocus() }
             return
         }
@@ -699,6 +701,9 @@ class MainActivity : AppCompatActivity() {
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
         if (playing && !pausedByAudioFocus) {
+            if (android.os.SystemClock.elapsedRealtime() < focusHoldUntil + 1) {
+                focusHoldUntil = maxOf(focusHoldUntil, android.os.SystemClock.elapsedRealtime() + 8_000L)
+            }
             if (webAudioFocusEnabled) {
                 handler.postDelayed({
                     if (lastPlaying && !pausedByAudioFocus) requestMediaAudioFocus()
