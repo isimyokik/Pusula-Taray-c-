@@ -184,29 +184,111 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+
     private val audioManager: AudioManager by lazy {
         getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        // requestAudioFocus sonrası gelen sahte LOSS'u yut
         if (android.os.SystemClock.elapsedRealtime() < ignoreFocusUntil) return@OnAudioFocusChangeListener
         when (change) {
-            // Başka uygulama medyası, WhatsApp sesi, telefon: yavaşça kapat
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 if (!pausedByAudioFocus && (lastPlaying || hasMedia)) {
                     pausedByAudioFocus = true
                     fadeOutForAudioFocus()
+                    startForeignAudioWatch()
                 }
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 if (pausedByAudioFocus) {
                     pausedByAudioFocus = false
+                    stopForeignAudioWatch()
                     fadeInAfterAudioFocus()
                 }
             }
+        }
+    }
+
+    private var foreignWatchPosted = false
+    private val foreignAudioWatch = object : Runnable {
+        override fun run() {
+            foreignWatchPosted = false
+            if (!pausedByAudioFocus) return
+            // Başka oynatıcı kalmadıysa geri aç
+            if (!isForeignAudioPlaying()) {
+                pausedByAudioFocus = false
+                fadeInAfterAudioFocus()
+                return
+            }
+            startForeignAudioWatch()
+        }
+    }
+
+    private fun startForeignAudioWatch() {
+        if (foreignWatchPosted) return
+        foreignWatchPosted = true
+        handler.postDelayed(foreignAudioWatch, 450L)
+    }
+
+    private fun stopForeignAudioWatch() {
+        foreignWatchPosted = false
+        handler.removeCallbacks(foreignAudioWatch)
+    }
+
+    private fun isForeignAudioPlaying(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                val configs = audioManager.activePlaybackConfigurations
+                // Biz durdurduk; hâlâ aktif kayıt varsa büyük ihtimalle başka uygulama
+                configs.isNotEmpty()
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.isMusicActive
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private val playbackCallback = if (Build.VERSION.SDK_INT >= 26) {
+        object : AudioManager.AudioPlaybackCallback() {
+            override fun onPlaybackConfigChanged(configs: List<AudioPlaybackConfiguration>) {
+                handler.post {
+                    try {
+                        if (!pausedByAudioFocus && (lastPlaying || hasMedia) && configs.size > 1) {
+                            // Biz + başka biri: odağı kaybetmiş olabiliriz
+                            // Focus listener çoğu zaman yeter; yedek:
+                            if (android.os.SystemClock.elapsedRealtime() >= ignoreFocusUntil) {
+                                pausedByAudioFocus = true
+                                fadeOutForAudioFocus()
+                                startForeignAudioWatch()
+                            }
+                        } else if (pausedByAudioFocus && configs.isEmpty()) {
+                            pausedByAudioFocus = false
+                            stopForeignAudioWatch()
+                            fadeInAfterAudioFocus()
+                        }
+                    } catch (_: Exception) { }
+                }
+            }
+        }
+    } else null
+
+    private fun registerPlaybackCallback() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                playbackCallback?.let { audioManager.registerAudioPlaybackCallback(it, handler) }
+            } catch (_: Exception) { }
+        }
+    }
+
+    private fun unregisterPlaybackCallback() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                playbackCallback?.let { audioManager.unregisterAudioPlaybackCallback(it) }
+            } catch (_: Exception) { }
         }
     }
 
@@ -223,6 +305,7 @@ class MainActivity : AppCompatActivity() {
                     .setAudioAttributes(attrs)
                     .setOnAudioFocusChangeListener(audioFocusListener)
                     .setAcceptsDelayedFocusGain(true)
+                    .setWillPauseWhenDucked(true)
                     .build()
                 audioFocusRequest = req
                 audioManager.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
@@ -239,6 +322,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun abandonMediaAudioFocus() {
+        stopForeignAudioWatch()
         if (!hasAudioFocus && audioFocusRequest == null) return
         try {
             if (Build.VERSION.SDK_INT >= 26) {
@@ -254,15 +338,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun injectAllMedia(js: String) {
-        for (t in (tabs.toList() + listOfNotNull(miniTab, mediaSrc))) {
+        val seen = HashSet<Int>()
+        for (t in (tabs.toList() + listOfNotNull(miniTab, mediaSrc, tabs.getOrNull(cur)))) {
+            val id = System.identityHashCode(t.web)
+            if (!seen.add(id)) continue
             try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
         }
     }
 
     private fun fadeOutForAudioFocus() {
-        // Önce hemen kıs + durdur, sonra yumuşak fade (kaçan oynatıcı kalmasın)
         injectAllMedia(AUDIO_FADE_OUT_JS)
-        handler.postDelayed({ injectAllMedia(AUDIO_FADE_OUT_JS) }, 350L)
+        handler.postDelayed({ injectAllMedia(AUDIO_FADE_OUT_JS) }, 300L)
+        handler.postDelayed({ injectAllMedia(AUDIO_FADE_OUT_JS) }, 700L)
         lastPlaying = false
         if (hasMedia) {
             try {
@@ -273,9 +360,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fadeInAfterAudioFocus() {
-        // Focus geri gelince mutlaka devam et (arka plan / ön plan fark etmez)
+        requestMediaAudioFocus()
         injectAllMedia(AUDIO_FADE_IN_JS)
-        handler.postDelayed({ injectAllMedia(AUDIO_FADE_IN_JS) }, 400L)
+        handler.postDelayed({ injectAllMedia(AUDIO_FADE_IN_JS) }, 350L)
+        handler.postDelayed({ injectAllMedia(AUDIO_ENSURE_VOL_JS) }, 800L)
         lastPlaying = true
         if (hasMedia) {
             try {
@@ -6455,17 +6543,17 @@ if(isYt){
             "if(m.ended)return;" +
             "var from=(typeof m.volume==='number'&&m.volume>0?m.volume:1);" +
             "m.dataset._afv=String(from);" +
-            "m.dataset.pusulaWasPlaying=(!m.paused&&!m.ended)?'1':'1';" +
-            "var steps=12,i=0;" +
+            "m.dataset.pusulaWasPlaying='1';" +
+            "var steps=10,i=0;" +
             "var iv=setInterval(function(){try{" +
-            "i++;var v=Math.max(0,from*(1-i/steps));m.volume=v;" +
-            "if(i>=steps){clearInterval(iv);m.volume=0;" +
+            "i++;m.volume=Math.max(0,from*(1-i/steps));" +
+            "if(i>=steps){clearInterval(iv);m.volume=0;m.muted=true;" +
             "try{window.__userPause=true;}catch(z){}" +
             "try{m.pause();}catch(z){}" +
             "try{window.__userPause=false;}catch(z){}" +
             "}" +
-            "}catch(x){try{clearInterval(iv);}catch(y){}}},35);" +
-            "setTimeout(function(){try{window.__userPause=true;m.pause();window.__userPause=false;m.volume=0;}catch(z){}},80);" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},30);" +
+            "setTimeout(function(){try{window.__userPause=true;m.pause();m.volume=0;m.muted=true;window.__userPause=false;}catch(z){}},50);" +
             "}catch(x){}});" +
             "}catch(e){}})();"
         const val AUDIO_FADE_IN_JS =
@@ -6475,14 +6563,14 @@ if(isYt){
             "m.muted=false;m.volume=0;" +
             "try{window.__userPause=false;}catch(z){}" +
             "m.dataset.pusulaWasPlaying='1';" +
-            "var p=m.play();if(p&&p.catch)p.catch(function(){});" +
-            "var steps=12,i=0;" +
+            "var tryPlay=function(){try{var p=m.play();if(p&&p.catch)p.catch(function(){});}catch(z){}};" +
+            "tryPlay();" +
+            "var steps=10,i=0;" +
             "var iv=setInterval(function(){try{" +
-            "i++;m.volume=Math.min(to,to*(i/steps));" +
-            "if(i>=steps){clearInterval(iv);m.volume=to;" +
-            "if(m.paused){var p2=m.play();if(p2&&p2.catch)p2.catch(function(){});}" +
-            "}" +
-            "}catch(x){try{clearInterval(iv);}catch(y){}}},35);" +
+            "i++;m.muted=false;m.volume=Math.min(to,to*(i/steps));" +
+            "if(m.paused)tryPlay();" +
+            "if(i>=steps){clearInterval(iv);m.volume=to;m.muted=false;if(m.paused)tryPlay();}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},30);" +
             "}catch(x){}});" +
             "}catch(e){}})();"
     const val MEDIA_STATE_JS =
