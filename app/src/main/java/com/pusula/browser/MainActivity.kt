@@ -159,6 +159,20 @@ class MainActivity : AppCompatActivity() {
     private var pausedByAudioFocus = false
     private var ignoreFocusUntil = 0L
     private var audioFocusRequest: AudioFocusRequest? = null
+    // --- Ses odağı yavaş kısma / yavaş açma ---
+    /** WhatsApp sesi vb. gelince medya bu sürede yavaşça kısılıp durur. */
+    private val focusFadeOutMs = 1500L
+    /** Ses bitince medya bu sürede yavaşça açılıp kaldığı yerden devam eder. */
+    private val focusFadeInMs = 2000L
+    private val focusFadeStepMs = 60L
+    /** Başka uygulama odağı KALICI aldıysa (GAIN hiç gelmeyebilir) sessizlik bitince kendiliğinden devam et. */
+    private val focusResumeFallback = true
+    private val focusFallbackWindowMs = 3 * 60 * 1000L
+    private var focusLevel = 1.0
+    private var focusFadeRunnable: Runnable? = null
+    private var focusPauseSince = 0L
+    private var focusPermanentLoss = false
+    private var focusQuietCount = 0
     private var mediaDismissedUntil = 0L
     private var lastTitle = ""
     private var lastArtist = ""
@@ -205,34 +219,128 @@ class MainActivity : AppCompatActivity() {
                 if (pausedByAudioFocus) return@OnAudioFocusChangeListener
                 if (!lastPlaying && !hasMedia) return@OnAudioFocusChangeListener
                 pausedByAudioFocus = true
-                injectAllMedia(AUDIO_FOCUS_PAUSE_JS)
+                focusPauseSince = android.os.SystemClock.elapsedRealtime()
+                focusPermanentLoss = change == AudioManager.AUDIOFOCUS_LOSS
+                // Kalıcı kayıpta sistem odağı bizden aldı; devam ederken yeniden isteyeceğiz
+                if (focusPermanentLoss) hasAudioFocus = false
+                // Ani kesmek yerine yavaşça kıs, sonra duraklat
+                injectAllMedia(AUDIO_FOCUS_PREP_JS.replace("__FRESH__", if (focusLevel >= 0.999) "1" else "0"))
+                runFocusFade(0.0, focusFadeOutMs, false) {
+                    injectAllMedia(AUDIO_FOCUS_PAUSE_JS)
+                    focusLevel = 0.0
+                }
                 lastPlaying = false
-                if (hasMedia) {
-                    try {
-                        PlaybackService.update(
-                            this, false, lastTitle, lastArtist,
-                            isInPictureInPictureMode, -1L, -2L, lastArtUrl
-                        )
-                    } catch (_: Exception) { }
-                }
-                if (isInPictureInPictureMode) updatePipActions()
+                updateFocusNotification(false)
+                startFocusResumeWatch()
             }
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                if (!pausedByAudioFocus) return@OnAudioFocusChangeListener
-                pausedByAudioFocus = false
-                injectAllMedia(AUDIO_FOCUS_RESUME_JS)
-                lastPlaying = true
-                if (hasMedia) {
-                    try {
-                        PlaybackService.update(
-                            this, true, lastTitle, lastArtist,
-                            isInPictureInPictureMode, -1L, -2L, lastArtUrl
-                        )
-                    } catch (_: Exception) { }
+            AudioManager.AUDIOFOCUS_GAIN -> resumeFromFocus(false)
+        }
+    }
+
+    private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.3f", x.coerceIn(0.0, 1.0))
+
+    private fun updateFocusNotification(playing: Boolean) {
+        if (hasMedia) {
+            try {
+                PlaybackService.update(
+                    this, playing, lastTitle, lastArtist,
+                    isInPictureInPictureMode, -1L, -2L, lastArtUrl
+                )
+            } catch (_: Exception) { }
+        }
+        if (isInPictureInPictureMode) updatePipActions()
+    }
+
+    private fun cancelFocusFade() {
+        focusFadeRunnable?.let { handler.removeCallbacks(it) }
+        focusFadeRunnable = null
+    }
+
+    /**
+     * Sesi focusLevel'dan [target]'a süre boyunca yumuşak eğriyle götürür.
+     * Adımlar native Handler'dan gelir: WebView arka plandayken JS zamanlayıcıları yavaşladığı için
+     * geçiş JS içinde değil burada sürülür.
+     */
+    private fun runFocusFade(target: Double, durationMs: Long, keepPlaying: Boolean, onDone: () -> Unit) {
+        cancelFocusFade()
+        val startLevel = focusLevel
+        val t0 = android.os.SystemClock.uptimeMillis()
+        val r = object : Runnable {
+            override fun run() {
+                val t = ((android.os.SystemClock.uptimeMillis() - t0).toDouble() / durationMs.toDouble()).coerceIn(0.0, 1.0)
+                val e = 0.5 - 0.5 * Math.cos(Math.PI * t)
+                focusLevel = (startLevel + (target - startLevel) * e).coerceIn(0.0, 1.0)
+                injectAllMedia(
+                    AUDIO_FOCUS_VOL_JS
+                        .replace("__F__", fmtLevel(focusLevel))
+                        .replace("__PLAY__", if (keepPlaying) "1" else "0")
+                )
+                if (t >= 1.0) {
+                    focusFadeRunnable = null
+                    focusLevel = target
+                    onDone()
+                } else {
+                    handler.postDelayed(this, focusFadeStepMs)
                 }
-                if (isInPictureInPictureMode) updatePipActions()
             }
         }
+        focusFadeRunnable = r
+        handler.post(r)
+    }
+
+    /** Odak geri geldi (veya sessizlik algılandı): yavaşça aç ve kaldığı yerden devam et. */
+    private fun resumeFromFocus(reacquire: Boolean) {
+        if (!pausedByAudioFocus) return
+        pausedByAudioFocus = false
+        stopFocusResumeWatch()
+        if (reacquire) {
+            hasAudioFocus = false
+            requestMediaAudioFocus()
+        }
+        injectAllMedia(AUDIO_FOCUS_RESUME_START_JS.replace("__F__", fmtLevel(focusLevel)))
+        runFocusFade(1.0, focusFadeInMs, true) {
+            injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
+        }
+        lastPlaying = true
+        updateFocusNotification(true)
+    }
+
+    /** Kullanıcı bildirimden/oynatıcıdan kendisi müdahale etti: odak duraklatmasını ve geçişi iptal et. */
+    private fun abortFocusPause() {
+        val was = pausedByAudioFocus || focusFadeRunnable != null || focusLevel < 0.999
+        cancelFocusFade()
+        stopFocusResumeWatch()
+        pausedByAudioFocus = false
+        focusLevel = 1.0
+        if (was) injectAllMedia(AUDIO_FOCUS_CLEAR_JS)
+    }
+
+    private val focusResumeWatch = object : Runnable {
+        override fun run() {
+            if (!pausedByAudioFocus) return
+            val since = android.os.SystemClock.elapsedRealtime() - focusPauseSince
+            if (since > focusFallbackWindowMs) return
+            val quiet = try {
+                !audioManager.isMusicActive && audioManager.mode == AudioManager.MODE_NORMAL
+            } catch (_: Exception) { false }
+            focusQuietCount = if (quiet && since > 2500L) focusQuietCount + 1 else 0
+            if (focusPermanentLoss && focusQuietCount >= 3) {
+                resumeFromFocus(true)
+                return
+            }
+            handler.postDelayed(this, 600L)
+        }
+    }
+
+    private fun startFocusResumeWatch() {
+        handler.removeCallbacks(focusResumeWatch)
+        focusQuietCount = 0
+        if (focusResumeFallback) handler.postDelayed(focusResumeWatch, 600L)
+    }
+
+    private fun stopFocusResumeWatch() {
+        handler.removeCallbacks(focusResumeWatch)
+        focusQuietCount = 0
     }
 
     private fun requestMediaAudioFocus() {
@@ -278,6 +386,9 @@ class MainActivity : AppCompatActivity() {
         audioFocusRequest = null
         hasAudioFocus = false
         pausedByAudioFocus = false
+        cancelFocusFade()
+        stopFocusResumeWatch()
+        focusLevel = 1.0
     }
 
     private fun injectAllMedia(js: String) {
@@ -382,6 +493,7 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (_: Exception) { return }
         title = cleanMeta(title); artist = cleanMeta(artist)
+        if (pausedByAudioFocus && focusFadeRunnable != null) playing = false
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
             if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); abandonMediaAudioFocus() }
@@ -683,6 +795,9 @@ fun onMusicCatalog(raw: String?) {
                 val u = intent.getStringExtra("url")?.trim().orEmpty()
                 if (u.startsWith("http")) openTab(u, appMode = true)
                 return
+            }
+            if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
+                abortFocusPause()
             }
             val js = when (act) {
                 // PLAY = zorla oynat (toggle değil — focus/bildirim play deyince stop oluyordu)
@@ -6482,6 +6597,54 @@ if(isYt){
             "}catch(x){try{clearInterval(iv);}catch(y){}}},30);" +
             "}catch(x){}});" +
             "}catch(e){}})();"
+        // Odak kaybı başlarken: duraklatma bayrakları + geri döneceğimiz ses seviyesini sakla
+        const val AUDIO_FOCUS_PREP_JS =
+            "(function(){try{" +
+            "window.__userPause=true;" +
+            "window.__rotaFocusPaused=true;" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "if(m.ended)return;" +
+            "var cur=parseFloat(m.dataset._afv);" +
+            "if(__FRESH__===1||!(cur>0)){var f=(typeof m.volume==='number'&&m.volume>0.05&&!m.muted)?m.volume:1;m.dataset._afv=String(f);}" +
+            "m.dataset.pusulaWasPlaying='1';" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+
+        // Geçiş adımı: ses = saklanan seviye x __F__ (0..1). __PLAY__=1 ise durmuş medyayı tekrar başlatmayı dener
+        const val AUDIO_FOCUS_VOL_JS =
+            "(function(){try{" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
+            "if(__PLAY__===1&&!m.ended){m.muted=false;if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}}" +
+            "m.volume=Math.max(0,Math.min(1,to*__F__));" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+
+        // Odak geri geldi: bayrakları kaldır, mevcut seviyeden başlayıp oynat
+        const val AUDIO_FOCUS_RESUME_START_JS =
+            "(function(){try{" +
+            "window.__userPause=false;" +
+            "window.__rotaFocusPaused=false;" +
+            "if(document.querySelector('.ad-showing,.ytp-ad-player-overlay,.ytp-ad-module'))return;" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
+            "m.dataset.pusulaWasPlaying='1';" +
+            "m.muted=false;" +
+            "m.volume=Math.max(0,Math.min(1,to*__F__));" +
+            "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+
+        // Kullanıcı müdahalesi: geçişi bırak, sesi tam seviyeye döndür
+        const val AUDIO_FOCUS_CLEAR_JS =
+            "(function(){try{" +
+            "window.__rotaFocusPaused=false;" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
+            "m.muted=false;m.volume=to;" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+
         const val AUDIO_FORCE_MUTE_JS =
             "(function(){try{" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
