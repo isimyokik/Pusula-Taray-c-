@@ -217,16 +217,13 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             foreignWatchPosted = false
             if (!pausedByAudioFocus) return
-            // Başka müzik/ses yoksa geri aç
+            // Sadece "başka ses bitti mi?" bak — burada pause yok (yoksa müzik hiç geri açılmaz)
             val otherActive = try {
                 @Suppress("DEPRECATION")
                 audioManager.isMusicActive
             } catch (_: Exception) {
                 false
             }
-            // isMusicActive bazen bizim paused medyayı da sayar; focus GAIN gelmeden
-            // birkaç tur bekleyip ses yoksa açmak için: kısılmışken tekrar fadeOut uygulayıp
-            // GAIN veya timeout ile açılır. Burada sadece GAIN yoksa ve müzik aktif değilse aç.
             if (!otherActive) {
                 pausedByAudioFocus = false
                 fadeInAfterAudioFocus()
@@ -302,9 +299,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fadeOutForAudioFocus() {
+        // Bir kez sert sustur + fade; sonra tekrar tekrar pause yok
         injectAllMedia(AUDIO_FADE_OUT_JS)
-        handler.postDelayed({ injectAllMedia(AUDIO_FADE_OUT_JS) }, 300L)
-        handler.postDelayed({ injectAllMedia(AUDIO_FADE_OUT_JS) }, 700L)
+        handler.postDelayed({
+            if (pausedByAudioFocus) injectAllMedia(AUDIO_FORCE_MUTE_JS)
+        }, 250L)
         lastPlaying = false
         if (hasMedia) {
             try {
@@ -315,6 +314,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fadeInAfterAudioFocus() {
+        stopForeignAudioWatch()
+        pausedByAudioFocus = false
         requestMediaAudioFocus()
         injectAllMedia(AUDIO_FADE_IN_JS)
         handler.postDelayed({ injectAllMedia(AUDIO_FADE_IN_JS) }, 350L)
@@ -6004,6 +6005,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "gap=0;" +
             "cv.style.display='none';" +
             "endAd(vd);" +
+            "if(vd){try{window.__userPause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
             "}" +
             "}else{adSince=0;}" +
             "}catch(e){}" +
@@ -6468,6 +6470,18 @@ if(isYt){
 
 
 
+
+        const val AUDIO_FORCE_MUTE_JS =
+            "(function(){try{" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "if(!m.dataset._afv){var from=(typeof m.volume==='number'&&m.volume>0?m.volume:1);m.dataset._afv=String(from);}" +
+            "m.dataset.pusulaWasPlaying='1';" +
+            "m.volume=0;m.muted=true;" +
+            "try{window.__userPause=true;}catch(z){}" +
+            "try{m.pause();}catch(z){}" +
+            "try{window.__userPause=false;}catch(z){}" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
 
         const val AUDIO_ENSURE_VOL_JS =
             "(function(){try{" +
