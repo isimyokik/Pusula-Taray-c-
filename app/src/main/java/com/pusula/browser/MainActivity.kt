@@ -3945,7 +3945,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             "var out=[];" +
             "function ok(u){" +
             "if(!u||u.indexOf('http')!==0)return false;" +
-            "if(/savefrom\\.net|ssyoutube|facebook|instagram|tiktok|reddit|pinterest|dailymotion|vimeo|vk\\.com|threads|play\\.google/i.test(u)&&!/googlevideo|videoplayback|sf-tools/i.test(u))return false;" +
+            "if(/savefrom\\.net|ssyoutube|facebook|instagram|reddit|pinterest|dailymotion|vimeo|vk\\.com|threads|play\\.google/i.test(u)&&!/googlevideo|videoplayback|sf-tools/i.test(u))return false;" +
             "return /googlevideo\\.com|videoplayback|sf-tools\\.com|mime=video|mime=audio|itag=/i.test(u);" +
             "}" +
             "function add(u,l){if(!ok(u))return;for(var i=0;i<out.length;i++)if(out[i].u===u)return;" +
@@ -4788,23 +4788,10 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
         hideKeyboard(); root.requestFocus()
     }
 
-    /** TikTok'a masaüstü tarayıcı gibi görünür (sayfa mobil kalır); başka sitelerde mobil kimlik geri gelir. */
     private fun applyHostUa(t: BTab, url: String?) {
-        if (t.desktop || url == null || t.mobileUa.isEmpty()) return
-        val host = try { Uri.parse(url).host ?: "" } catch (_: Exception) { "" }
-        val want = host == "tiktok.com" || host.endsWith(".tiktok.com")
-        if (want == t.spoofUa) return
-        t.spoofUa = want
-        try {
-            val s = t.web.settings
-            if (want) {
-                val chrome = Regex("Chrome/[\\d.]+").find(t.mobileUa)?.value ?: "Chrome/120.0.0.0"
-                s.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
-            } else {
-                s.userAgentString = t.mobileUa
-            }
-        } catch (_: Exception) { }
+        // no-op
     }
+
 
     private fun toggleDesktop() {
         val t = tabs.getOrNull(cur) ?: return
@@ -5734,13 +5721,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(!l)return '';\n" +
             "return l.getAttributeNames().map(function(k){return k+'='+l.getAttribute(k);}).join('|');\n" +
             "}\n" +
-            "function openNow(){\n" +
-            "var p=pageEl();if(!p)return false;\n" +
-            "var cs=getComputedStyle(p);\n" +
-            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
-            "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
-            "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n" +
-            "}\n" +
+            "function openNow(){return pageOpen();}\n" +
             "function showDebug(){\n" +
             "try{\n" +
             "var seen=[];\n" +
@@ -5762,8 +5743,27 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "function pageEl(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}\n" +
             "function pageOpen(){\n" +
             "var p=pageEl();if(!p)return false;\n" +
+            "try{\n" +
+            "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
+            "if(layout){\n" +
+            "var st=(layout.getAttribute('player-ui-state_')||layout.getAttribute('player-ui-state')||'');\n" +
+            "if(st==='PLAYER_BAR_ONLY'||/MINI|BAR_ONLY/i.test(st))return false;\n" +
+            "if(layout.playerPageOpen_===false)return false;\n" +
+            "var openAttr=layout.hasAttribute('player-page-open_')||layout.hasAttribute('player-page-open');\n" +
+            "if(layout.playerPageOpen_!==true&&!openAttr){\n" +
+            "/* kapalı olabilir — geometri ile teyit */\n" +
+            "}\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "var cs=getComputedStyle(p);\n" +
+            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
+            "if(parseFloat(cs.opacity)<0.15)return false;\n" +
             "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
-            "return r.width>0&&r.height>H*0.5&&r.top<H*0.25&&r.bottom>H*0.6;\n" +
+            "if(r.width<=0)return false;\n" +
+            "if(r.top>H*0.18)return false;\n" +
+            "if(r.height<H*0.55)return false;\n" +
+            "if(r.bottom<H*0.7)return false;\n" +
+            "return true;\n" +
             "}\n" +
             "var busyT=0,tracking=false,locked=false,busy=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
             "function rubber(d){\n" +
@@ -5967,16 +5967,18 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "document.addEventListener('touchstart',function(e){\n" +
             "tr=false;\n" +
             "if(!e.touches||e.touches.length!==1)return;\n" +
+            "if(typeof armed!=='undefined'&&!armed)return;\n" +
             "if(!pageOpen())return;\n" +
             "var t=e.touches[0];\n" +
             "sx=t.clientX;sy=t.clientY;tr=true;\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchend',function(e){\n" +
             "if(!tr)return;tr=false;\n" +
+            "if(typeof armed!=='undefined'&&!armed)return;\n" +
             "if(!pageOpen())return;\n" +
             "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<36||Math.abs(dx)>dy*1.2)return;\n" +
+            "if(dy<48||Math.abs(dx)>dy*1.15)return;\n" +
             "try{tryNative();}catch(z){}\n" +
             "try{tryClick();}catch(z){}\n" +
             "},{passive:true,capture:true});\n" +
