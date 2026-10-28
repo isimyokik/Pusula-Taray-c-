@@ -220,6 +220,7 @@ class MainActivity : AppCompatActivity() {
     private var extBaseline = -1
     private var extSeenSince = 0L
     private var extQuietSince = 0L
+    private var dbgLastN = -1
     private var mediaChangedAt = 0L
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
@@ -261,6 +262,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun beginExternalPause() {
         if (pausedByAudioFocus) return
+        toast("Dış ses algılandı: kısılıyor")
         pausedByAudioFocus = true
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
         focusPermanentLoss = false
@@ -283,12 +285,15 @@ class MainActivity : AppCompatActivity() {
                 if (extQuietSince == 0L) extQuietSince = now
                 else if (now - extQuietSince >= 900L && now - focusPauseSince > 2500L) {
                     extQuietSince = 0L
+                    toast("Dış ses bitti: açılıyor")
                     resumeFromFocus(false)
                 }
             } else extQuietSince = 0L
             return
         }
         val ourPlaying = hasMedia && lastPlaying
+        // GEÇİCİ TEŞHİS: dış ses sayısı değişince kısa bildirim göster (sorun çözülünce kaldırılacak)
+        if (n != dbgLastN) { dbgLastN = n; if (ourPlaying || pausedByAudioFocus) toast("ses:$n taban:$extBaseline çalıyor:$ourPlaying") }
         if (!ourPlaying || focusFadeRunnable != null || now - mediaChangedAt < 5000L) {
             extBaseline = -1; extSeenSince = 0L
             return
