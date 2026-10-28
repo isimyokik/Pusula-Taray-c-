@@ -218,6 +218,9 @@ class MainActivity : AppCompatActivity() {
     // listede fazladan bir medya sesi belirirse başkası çalıyordur → yavaşça kıs ve DURAKLAT.
     // Biz durakladıktan sonra listede hiç medya sesi kalmazsa ses bitmiştir → yavaşça aç ve devam et.
     private var extBaseline = -1
+    private var extBaseTuples: Map<String, Int> = emptyMap()
+    private var pauseExtKeys: Set<String> = emptySet()
+    private var pauseFast = false
     private var extSeenSince = 0L
     private var extQuietSince = 0L
     private var mediaChangedAt = 0L
@@ -232,6 +235,36 @@ class MainActivity : AppCompatActivity() {
         return try {
             audioManager.activePlaybackConfigurations.map { it.audioAttributes.usage }
         } catch (_: Exception) { emptyList() }
+    }
+
+    /** Sayılan seslerin "usage/contentType" parmak izi → adet. Bizim WebView sesi ile başkasının sesini ayırt etmek için. */
+    private fun tupleCounts(): Map<String, Int> {
+        val m = HashMap<String, Int>()
+        if (Build.VERSION.SDK_INT < 26) return m
+        try {
+            for (c in audioManager.activePlaybackConfigurations) {
+                val a = c.audioAttributes
+                if (!usageCounts(a.usage)) continue
+                val k = a.usage.toString() + "/" + a.contentType
+                m[k] = (m[k] ?: 0) + 1
+            }
+        } catch (_: Exception) { }
+        return m
+    }
+
+    private fun usageCounts(u: Int): Boolean = when (u) {
+        AudioAttributes.USAGE_ALARM,
+        AudioAttributes.USAGE_NOTIFICATION,
+        AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
+        AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
+        AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT,
+        AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
+        AudioAttributes.USAGE_NOTIFICATION_EVENT,
+        AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY,
+        AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE,
+        AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
+        AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING -> false
+        else -> true
     }
 
     private fun countMediaConfigs(): Int = activeUsages().count { u ->
@@ -273,6 +306,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun beginExternalPause() {
         if (pausedByAudioFocus) return
+        val curT = tupleCounts()
+        pauseExtKeys = curT.keys.filter { (curT[it] ?: 0) > (extBaseTuples[it] ?: 0) }.toSet()
+        // Başlayan ses bizimkinden farklı türdeyse (WhatsApp sesli mesajı gibi) bittiğini türünden hemen anlarız.
+        // Aynı türdeyse (başka müzik uygulaması) bizim WebView'ın ses akışı da ~5 sn açık kalabildiği için tam sessizliği bekleriz.
+        pauseFast = pauseExtKeys.isNotEmpty() && pauseExtKeys.none { extBaseTuples.containsKey(it) }
         pausedByAudioFocus = true
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
         focusPermanentLoss = false
@@ -291,7 +329,11 @@ class MainActivity : AppCompatActivity() {
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
             if (focusFadeRunnable != null || focusPermanentLoss) { extQuietSince = 0L; return }
-            if (n == 0) {
+            val quiet = if (pauseFast) {
+                val ct = tupleCounts()
+                pauseExtKeys.sumOf { ct[it] ?: 0 } == 0
+            } else n == 0
+            if (quiet) {
                 if (extQuietSince == 0L) { extQuietSince = now; handler.postDelayed(extCheck, 170L) }
                 else if (now - extQuietSince >= 150L && now - focusPauseSince > 650L) {
                     extQuietSince = 0L
@@ -305,7 +347,7 @@ class MainActivity : AppCompatActivity() {
             extBaseline = -1; extSeenSince = 0L
             return
         }
-        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) extBaseline = n
+        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) { extBaseline = n; extBaseTuples = tupleCounts() }
         if (extBaseline >= 1 && n > extBaseline) {
             if (extSeenSince == 0L) { extSeenSince = now; handler.postDelayed(extCheck, 230L) }
             else if (now - extSeenSince >= 200L) { extSeenSince = 0L; beginExternalPause() }
@@ -609,6 +651,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
+            if (pausedByAudioFocus) return
             if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); abandonMediaAudioFocus() }
             return
         }
@@ -869,6 +912,7 @@ fun onMusicCatalog(raw: String?) {
                 mediaDismissedUntil = android.os.SystemClock.elapsedRealtime() + 4000L
                 hasMedia = false
                 lastPlaying = false
+                abortFocusPause()
                 val stopJs = "(function(){try{window.__userPause=true;document.querySelectorAll('video,audio').forEach(function(m){m.dataset.pusulaWasPlaying='';if(!m.paused&&!m.ended)m.pause();});}catch(e){}})();"
                 for (t in (tabs.toList() + listOfNotNull(miniTab))) {
                     try { t.web.evaluateJavascript(stopJs, null) } catch (_: Exception) { }
@@ -5329,9 +5373,16 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
         val title = TextView(this)
         title.textSize = 24f; title.setTypeface(null, Typeface.BOLD); title.setTextColor(cText)
         head.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        title.textSize = 21f
+        val closeAll = pillBtn("Tümünü kapat", intArrayOf(0xFFE5484D.toInt(), 0xFFFF6B81.toInt())) {
+            themedConfirm("Tüm sekmeler kapatılsın mı?", onYes = { d.dismiss(); closeAllTabs() }, onNo = {})
+        }
+        closeAll.textSize = 12.5f
+        head.addView(closeAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply { rightMargin = dp(6) })
+        closeAll.setPadding(dp(12), 0, dp(12), 0)
         val done = textBtn("Bitti") { d.dismiss() }
         done.setTextColor(cAccent); done.setTypeface(null, Typeface.BOLD)
-        head.addView(done, LinearLayout.LayoutParams(dp(72), dp(40)))
+        head.addView(done, LinearLayout.LayoutParams(dp(64), dp(40)))
         rootV.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val grid = LinearLayout(this)
@@ -5349,11 +5400,6 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
         val l2 = LinearLayout.LayoutParams(0, dp(48), 1f); l2.leftMargin = dp(6)
         actions.addView(b1, l1); actions.addView(b2, l2)
         rootV.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        val closeAll = pillBtn("✕  Tüm sekmeleri kapat", intArrayOf(0xFFE5484D.toInt(), 0xFFFF6B81.toInt())) {
-            themedConfirm("Tüm sekmeler kapatılsın mı?", onYes = { d.dismiss(); closeAllTabs() }, onNo = {})
-        }
-        rootV.addView(closeAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
-
         fillTabs(grid, title, d)
         sheetWindow(d, rootV, true)
         d.show()
@@ -6894,7 +6940,7 @@ if(isYt){
     const val MEDIA_STATE_JS =
             "(function(){try{" +
             "var l=Array.from(document.querySelectorAll('video,audio'));" +
-            "var v=l.find(function(m){return !m.paused&&!m.ended;})||l[0];" +
+            "var v=l.find(function(m){return !m.paused&&!m.ended;})||l.find(function(m){return !!(m.currentSrc||m.src);})||l[0];" +
             "if(!v||!(v.currentSrc||v.src))return '';" +
             "var md=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;" +
             "function tx(q){try{var e=document.querySelector(q);var t=e&&(e.getAttribute('title')||e.textContent);return t?t.trim():'';}catch(x){return '';}}" +
