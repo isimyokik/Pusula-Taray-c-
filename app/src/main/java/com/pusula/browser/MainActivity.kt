@@ -5628,60 +5628,46 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
             "return r.width>0&&r.height>H*0.55&&r.top<H*0.22;\n" +
             "}\n" +
+            "function isControlTouch(el){\n" +
+            "if(!el||!el.closest)return false;\n" +
+            "return !!el.closest('tp-yt-paper-slider,yt-slider,[role=\"slider\"],.slider,.progress-bar,#progress-bar,.progress-container,.time-info,.player-controls,.middle-controls,.bottom-controls,input,button,tp-yt-paper-icon-button,.play-pause-button,#play-pause-button,.next-button,.previous-button');\n" +
+            "}\n" +
             "function findMinBtn(){\n" +
-            "var sels=[\n" +
-            "'.player-minimize-button',\n" +
-            "'.toggle-player-page-button',\n" +
-            "'tp-yt-paper-icon-button.toggle-player',\n" +
-            "'ytmusic-player-page .exit-fullscreen-button',\n" +
-            "'ytmusic-player-page [aria-label*=\"Küçült\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Down\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Close\"]',\n" +
-            "'ytmusic-player-page button'\n" +
-            "];\n" +
+            "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','ytmusic-player-page .exit-fullscreen-button','ytmusic-player-page [aria-label*=\"Küçült\"]','ytmusic-player-page [aria-label*=\"Minimize\"]','ytmusic-player-page [aria-label*=\"Down\"]'];\n" +
             "for(var i=0;i<sels.length;i++){\n" +
             "var nodes=document.querySelectorAll(sels[i]);\n" +
             "for(var j=0;j<nodes.length;j++){\n" +
             "var el=nodes[j],r=el.getBoundingClientRect();\n" +
-            "if(r.width>0&&r.height>0&&r.top<120&&r.left<120)return el;\n" +
+            "if(r.width>0&&r.height>0&&r.top<120&&r.left<140)return el;\n" +
             "}\n" +
             "}\n" +
-            "try{\n" +
-            "var t=document.elementFromPoint(28,40);\n" +
-            "if(t)return t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;\n" +
-            "}catch(z){}\n" +
+            "try{var t=document.elementFromPoint(28,40);if(t)return t.closest('button,[role=button],tp-yt-paper-icon-button')||t;}catch(z){}\n" +
             "return null;\n" +
             "}\n" +
             "function minimize(){\n" +
             "if(!isFullPlayer())return;\n" +
-            "var el=findMinBtn();\n" +
-            "if(!el)return;\n" +
+            "var el=findMinBtn();if(!el)return;\n" +
             "try{el.click();}catch(z){}\n" +
-            "try{\n" +
-            "if(window.RotaTap){\n" +
-            "var r=el.getBoundingClientRect();\n" +
-            "var x=(r.left+r.width/2)/window.innerWidth;\n" +
-            "var y=(r.top+r.height/2)/window.innerHeight;\n" +
-            "window.RotaTap.tap(x,y);\n" +
-            "}\n" +
-            "}catch(z){}\n" +
+            "try{if(window.RotaTap){var r=el.getBoundingClientRect();window.RotaTap.tap((r.left+r.width/2)/window.innerWidth,(r.top+r.height/2)/window.innerHeight);}}catch(z){}\n" +
             "}\n" +
             "var sx=0,sy=0,tr=false;\n" +
             "document.addEventListener('touchstart',function(e){\n" +
             "tr=false;\n" +
             "if(!e.touches||e.touches.length!==1)return;\n" +
             "if(!isFullPlayer())return;\n" +
-            "sx=e.touches[0].clientX;\n" +
-            "sy=e.touches[0].clientY;\n" +
-            "tr=true;\n" +
+            "var t=e.touches[0];\n" +
+            // Seek çubuğu / kontroller alt yarıda — jesti başlatma
+            "if(t.clientY>window.innerHeight*0.52)return;\n" +
+            "var el=null;try{el=document.elementFromPoint(t.clientX,t.clientY);}catch(z){}\n" +
+            "if(isControlTouch(el))return;\n" +
+            "sx=t.clientX;sy=t.clientY;tr=true;\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchend',function(e){\n" +
             "if(!tr)return;tr=false;\n" +
             "if(!isFullPlayer())return;\n" +
             "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<50||Math.abs(dx)>dy*1.1)return;\n" +
+            "if(dy<56||Math.abs(dx)>dy*0.85)return;\n" +
             "minimize();\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
