@@ -23,6 +23,9 @@ import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -152,6 +155,9 @@ class MainActivity : AppCompatActivity() {
 
     private var hasMedia = false
     private var lastPlaying = false
+    private var hasAudioFocus = false
+    private var pausedByAudioFocus = false
+    private var audioFocusRequest: AudioFocusRequest? = null
     private var mediaDismissedUntil = 0L
     private var lastTitle = ""
     private var lastArtist = ""
@@ -174,6 +180,107 @@ class MainActivity : AppCompatActivity() {
             // Auto kaydırma çubuğu için konum daha sık güncellenir
             handler.postDelayed(this, 1000L)
         }
+    }
+
+
+    private val audioManager: AudioManager by lazy {
+        getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+
+    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            // Başka medya veya telefon görüşmesi: yavaşça kapat
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                if (!pausedByAudioFocus && (lastPlaying || hasMedia)) {
+                    pausedByAudioFocus = true
+                    fadeOutForAudioFocus()
+                }
+            }
+            // Kısa bildirim vb.: sadece kıs, tamamen durdurma
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                if (!pausedByAudioFocus) injectAllMedia(AUDIO_DUCK_JS)
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                if (pausedByAudioFocus) {
+                    pausedByAudioFocus = false
+                    fadeInAfterAudioFocus()
+                } else {
+                    injectAllMedia(AUDIO_UNDUCK_JS)
+                }
+            }
+        }
+    }
+
+    private fun requestMediaAudioFocus() {
+        if (hasAudioFocus) return
+        try {
+            val ok = if (Build.VERSION.SDK_INT >= 26) {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .setOnAudioFocusChangeListener(audioFocusListener)
+                    .setAcceptsDelayedFocusGain(true)
+                    .build()
+                audioFocusRequest = req
+                audioManager.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.requestAudioFocus(
+                    audioFocusListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
+            hasAudioFocus = ok
+        } catch (_: Exception) { }
+    }
+
+    private fun abandonMediaAudioFocus() {
+        if (!hasAudioFocus && audioFocusRequest == null) return
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.abandonAudioFocus(audioFocusListener)
+            }
+        } catch (_: Exception) { }
+        audioFocusRequest = null
+        hasAudioFocus = false
+        pausedByAudioFocus = false
+    }
+
+    private fun injectAllMedia(js: String) {
+        for (t in (tabs.toList() + listOfNotNull(miniTab, mediaSrc))) {
+            try { t.web.evaluateJavascript(js, null) } catch (_: Exception) { }
+        }
+    }
+
+    private fun fadeOutForAudioFocus() {
+        injectAllMedia(AUDIO_FADE_OUT_JS)
+        lastPlaying = false
+        if (hasMedia) {
+            try {
+                PlaybackService.update(this, false, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
+            } catch (_: Exception) { }
+        }
+        if (isInPictureInPictureMode) updatePipActions()
+    }
+
+    private fun fadeInAfterAudioFocus() {
+        if (!prefs.bgPlay && appInBackground && !isInPictureInPictureMode) return
+        injectAllMedia(AUDIO_FADE_IN_JS)
+        lastPlaying = true
+        if (hasMedia) {
+            try {
+                PlaybackService.update(this, true, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
+            } catch (_: Exception) { }
+        }
+        if (isInPictureInPictureMode) updatePipActions()
     }
 
     /** Başlık ve sanatçıdan "YouTube Music" yazısını temizler. */
@@ -271,7 +378,7 @@ class MainActivity : AppCompatActivity() {
         title = cleanMeta(title); artist = cleanMeta(artist)
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
-            if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this) }
+            if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); abandonMediaAudioFocus() }
             return
         }
         val now = android.os.SystemClock.elapsedRealtime()
@@ -280,6 +387,9 @@ class MainActivity : AppCompatActivity() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
+        // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
+        if (playing && !pausedByAudioFocus) requestMediaAudioFocus()
+        if (!playing && !pausedByAudioFocus) { /* kullanıcı durdurdu */ }
         // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
         if ((changed || playing) && (playing || PlaybackService.running)) {
             sentPos = pos; sentAt = now; sentPlaying = playing
@@ -826,6 +936,7 @@ fun onMusicCatalog(raw: String?) {
     }
 
     override fun onDestroy() {
+        try { abandonMediaAudioFocus() } catch (_: Exception) { }
         try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
         handler.removeCallbacks(backgroundMediaPump)
         handler.removeCallbacks(mediaStatePoll)
@@ -4259,6 +4370,14 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
 
     /** İndirilen video / müziği yeni ExoPlayer oynatıcısında açar (aynı türdeki indirilenler liste olur). */
     private fun openMediaPlayer(file: java.io.File, title: String, audio: Boolean) {
+        // Yerel oynatıcı kendi ses odağını alsın; WebView medyasını yavaşça bırak
+        try {
+            if (lastPlaying || hasMedia) {
+                pausedByAudioFocus = true
+                fadeOutForAudioFocus()
+            }
+            abandonMediaAudioFocus()
+        } catch (_: Exception) { }
         for (t in tabs) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
         val want = if (audio) "audio" else "video"
         val same = prefs.downloads().filter {
@@ -6299,6 +6418,55 @@ if(isYt){
         "}catch(e){return JSON.stringify({playlists:[],songs:[],error:String(e),page:location.href});}})();"
 
 
+
+
+
+        const val AUDIO_DUCK_JS =
+            "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "if(m.dataset._afDuck)return;" +
+            "var v=(typeof m.volume==='number'?m.volume:1);" +
+            "m.dataset._afDuck=String(v);" +
+            "m.volume=Math.max(0,v*0.25);" +
+            "}catch(x){}});}catch(e){}})();"
+
+        const val AUDIO_UNDUCK_JS =
+            "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "if(!m.dataset._afDuck)return;" +
+            "var v=parseFloat(m.dataset._afDuck);if(!(v>0))v=1;" +
+            "m.volume=v;delete m.dataset._afDuck;" +
+            "}catch(x){}});}catch(e){}})();"
+
+        const val AUDIO_FADE_OUT_JS =
+            "(function(){try{" +
+            "var list=Array.from(document.querySelectorAll('video,audio'));" +
+            "list.forEach(function(m){try{" +
+            "if(m.ended)return;" +
+            "var from=(typeof m.volume==='number'?m.volume:1);if(!(from>0))from=1;" +
+            "m.dataset._afv=String(from);" +
+            "var steps=15,i=0;" +
+            "var iv=setInterval(function(){try{" +
+            "i++;m.volume=Math.max(0,from*(1-i/steps));" +
+            "if(i>=steps){clearInterval(iv);try{window.__userPause=true;m.pause();window.__userPause=false;}catch(z){}" +
+            "m.dataset.pusulaWasPlaying='1';}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},40);" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+
+        const val AUDIO_FADE_IN_JS =
+            "(function(){try{" +
+            "var list=Array.from(document.querySelectorAll('video,audio'));" +
+            "list.forEach(function(m){try{" +
+            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
+            "m.volume=0;m.muted=false;" +
+            "try{window.__userPause=false;}catch(z){}" +
+            "var p=m.play();if(p&&p.catch)p.catch(function(){});" +
+            "var steps=15,i=0;" +
+            "var iv=setInterval(function(){try{" +
+            "i++;m.volume=Math.min(to,to*(i/steps));" +
+            "if(i>=steps){clearInterval(iv);m.volume=to;}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},40);" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
 
     const val MEDIA_STATE_JS =
             "(function(){try{" +
