@@ -6470,7 +6470,11 @@ if(isYt){
 
 
         const val AUDIO_ENSURE_VOL_JS =
-            "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "(function(){try{" +
+            // Reklam varken sesi geri açma (STABLE_AD_BLOCKER ile çakışmasın)
+            "if(document.querySelector('.ad-showing,.ytp-ad-player-overlay,.ytp-ad-module,.video-ads .ad-showing,'+" +
+            "'.ytp-ad-text,.ytp-ad-preview-container'))return;" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "if(m.muted)m.muted=false;" +
             "var v=(typeof m.volume==='number'?m.volume:1);" +
             "if(!(v>0.05)){var r=parseFloat(m.dataset._afv||m.dataset._afDuck||'1');if(!(r>0))r=1;m.volume=r;}" +
@@ -6513,6 +6517,7 @@ if(isYt){
             "}catch(e){}})();"
         const val AUDIO_FADE_IN_JS =
             "(function(){try{" +
+            "if(document.querySelector('.ad-showing,.ytp-ad-player-overlay,.ytp-ad-module,.video-ads .ad-showing'))return;" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "m.muted=false;m.volume=0;" +
