@@ -260,7 +260,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fadeOutForAudioFocus() {
+        // Önce hemen kıs + durdur, sonra yumuşak fade (kaçan oynatıcı kalmasın)
         injectAllMedia(AUDIO_FADE_OUT_JS)
+        handler.postDelayed({ injectAllMedia(AUDIO_FADE_OUT_JS) }, 350L)
         lastPlaying = false
         if (hasMedia) {
             try {
@@ -271,8 +273,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fadeInAfterAudioFocus() {
-        if (!prefs.bgPlay && appInBackground && !isInPictureInPictureMode) return
+        // Focus geri gelince mutlaka devam et (arka plan / ön plan fark etmez)
         injectAllMedia(AUDIO_FADE_IN_JS)
+        handler.postDelayed({ injectAllMedia(AUDIO_FADE_IN_JS) }, 400L)
         lastPlaying = true
         if (hasMedia) {
             try {
@@ -6448,36 +6451,40 @@ if(isYt){
 
         const val AUDIO_FADE_OUT_JS =
             "(function(){try{" +
-            "var list=Array.from(document.querySelectorAll('video,audio'));" +
-            "list.forEach(function(m){try{" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "if(m.ended)return;" +
-            "var from=(typeof m.volume==='number'?m.volume:1);if(!(from>0))from=1;" +
+            "var from=(typeof m.volume==='number'&&m.volume>0?m.volume:1);" +
             "m.dataset._afv=String(from);" +
-            "var steps=15,i=0;" +
+            "m.dataset.pusulaWasPlaying=(!m.paused&&!m.ended)?'1':'1';" +
+            "var steps=12,i=0;" +
             "var iv=setInterval(function(){try{" +
-            "i++;m.volume=Math.max(0,from*(1-i/steps));" +
-            "if(i>=steps){clearInterval(iv);try{window.__userPause=true;m.pause();window.__userPause=false;}catch(z){}" +
-            "m.dataset.pusulaWasPlaying='1';}" +
-            "}catch(x){try{clearInterval(iv);}catch(y){}}},40);" +
+            "i++;var v=Math.max(0,from*(1-i/steps));m.volume=v;" +
+            "if(i>=steps){clearInterval(iv);m.volume=0;" +
+            "try{window.__userPause=true;}catch(z){}" +
+            "try{m.pause();}catch(z){}" +
+            "try{window.__userPause=false;}catch(z){}" +
+            "}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},35);" +
+            "setTimeout(function(){try{window.__userPause=true;m.pause();window.__userPause=false;m.volume=0;}catch(z){}},80);" +
             "}catch(x){}});" +
             "}catch(e){}})();"
-
         const val AUDIO_FADE_IN_JS =
             "(function(){try{" +
-            "var list=Array.from(document.querySelectorAll('video,audio'));" +
-            "list.forEach(function(m){try{" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
-            "m.volume=0;m.muted=false;" +
+            "m.muted=false;m.volume=0;" +
             "try{window.__userPause=false;}catch(z){}" +
+            "m.dataset.pusulaWasPlaying='1';" +
             "var p=m.play();if(p&&p.catch)p.catch(function(){});" +
-            "var steps=15,i=0;" +
+            "var steps=12,i=0;" +
             "var iv=setInterval(function(){try{" +
             "i++;m.volume=Math.min(to,to*(i/steps));" +
-            "if(i>=steps){clearInterval(iv);m.volume=to;}" +
-            "}catch(x){try{clearInterval(iv);}catch(y){}}},40);" +
+            "if(i>=steps){clearInterval(iv);m.volume=to;" +
+            "if(m.paused){var p2=m.play();if(p2&&p2.catch)p2.catch(function(){});}" +
+            "}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},35);" +
             "}catch(x){}});" +
             "}catch(e){}})();"
-
     const val MEDIA_STATE_JS =
             "(function(){try{" +
             "var l=Array.from(document.querySelectorAll('video,audio'));" +
