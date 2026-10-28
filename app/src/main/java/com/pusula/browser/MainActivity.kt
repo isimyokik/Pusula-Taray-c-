@@ -326,21 +326,29 @@ class MainActivity : AppCompatActivity() {
         val now = android.os.SystemClock.elapsedRealtime()
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
-            if (focusFadeRunnable != null || focusPermanentLoss) { extQuietSince = 0L; return }
-            val quiet = if (pauseFast) {
-                val ct = tupleCounts()
-                pauseExtKeys.sumOf { ct[it] ?: 0 } == 0
-            } else n == 0
+            if (focusFadeRunnable != null) {
+                handler.postDelayed(extCheck, 200L)
+                return
+            }
+            // isMusicActive: WhatsApp / başka ses bitince false olur. Config sayısı YTM'de yanıltıcı olabiliyor.
+            val musicActive = try { audioManager.isMusicActive } catch (_: Exception) { true }
+            val ct = tupleCounts()
+            val extStill = pauseExtKeys.isNotEmpty() && pauseExtKeys.sumOf { ct[it] ?: 0 } > 0
+            val quiet = !musicActive && !extStill
             if (quiet) {
-                // WhatsApp bittiğinde biraz bekle; aksi halde hoparlör paraziti + hemen kesilme oluyor
-                val needQuiet = if (pauseFast) 450L else 220L
-                val needSince = if (pauseFast) 900L else 650L
-                if (extQuietSince == 0L) { extQuietSince = now; handler.postDelayed(extCheck, 200L) }
-                else if (now - extQuietSince >= needQuiet && now - focusPauseSince > needSince) {
+                if (extQuietSince == 0L) {
+                    extQuietSince = now
+                    handler.postDelayed(extCheck, 350L)
+                } else if (now - extQuietSince >= 400L && now - focusPauseSince > 700L) {
                     extQuietSince = 0L
                     resumeFromFocus(false)
-                } else handler.postDelayed(extCheck, 180L)
-            } else extQuietSince = 0L
+                } else {
+                    handler.postDelayed(extCheck, 250L)
+                }
+            } else {
+                extQuietSince = 0L
+                handler.postDelayed(extCheck, 400L)
+            }
             return
         }
         val ourPlaying = hasMedia && lastPlaying
@@ -443,22 +451,39 @@ class MainActivity : AppCompatActivity() {
         if (!pausedByAudioFocus) return
         pausedByAudioFocus = false
         stopFocusResumeWatch()
-        // Geri açılınca hemen "dış ses" sanılmasın
         mediaChangedAt = android.os.SystemClock.elapsedRealtime()
         extBaseline = -1
         extSeenSince = 0L
         extQuietSince = 0L
+        pauseExtKeys = emptySet()
         if (reacquire) {
             hasAudioFocus = false
             requestMediaAudioFocus()
         }
-        injectAllMedia(AUDIO_FOCUS_RESUME_START_JS.replace("__F__", fmtLevel(focusLevel)))
+        // 1) JS ile video.play + volume
+        injectAllMedia(AUDIO_FOCUS_RESUME_START_JS.replace("__F__", fmtLevel(focusLevel.coerceAtLeast(0.05))))
+        // 2) YT Music: oynat tuşuna bas (play() bazen yetmiyor)
+        injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
         runFocusFade(1.0, focusFadeInMs, true) {
             injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
+            injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
             mediaChangedAt = android.os.SystemClock.elapsedRealtime()
-            try { extBaseline = countMediaConfigs() } catch (_: Exception) { }
+            try { extBaseline = countMediaConfigs().coerceAtLeast(1) } catch (_: Exception) { }
         }
+        // 3) Bir kez daha dene (YTM geç açılıyor)
+        handler.postDelayed({
+            if (!pausedByAudioFocus) {
+                injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
+                injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
+            }
+        }, 600L)
+        handler.postDelayed({
+            if (!pausedByAudioFocus) {
+                injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
+            }
+        }, 1200L)
         lastPlaying = true
+        hasMedia = true
         updateFocusNotification(true)
     }
 
@@ -660,6 +685,8 @@ class MainActivity : AppCompatActivity() {
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
             if (pausedByAudioFocus) return
+            // Focus sonrası YTM kısa süre boş state dönebilir — bildirimi öldürme
+            if (android.os.SystemClock.elapsedRealtime() - focusPauseSince < 12_000L && focusPauseSince > 0L) return
             if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); abandonMediaAudioFocus() }
             return
         }
@@ -6763,7 +6790,21 @@ if(isYt){
 
 
 
-        const val AUDIO_FOCUS_PAUSE_JS =
+        const val AUDIO_FOCUS_YTM_PLAY_JS =
+            "(function(){try{" +
+            "if(!/music\\.youtube\\.com/i.test(location.hostname))return;" +
+            "window.__userPause=false;window.__rotaFocusPaused=false;" +
+            "var v=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');" +
+            "if(v){try{v.muted=false;var to=parseFloat(v.dataset._afv||'1');if(!(to>0))to=1;if(v.volume<0.05)v.volume=Math.min(1,to);var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(z){}}" +
+            "var sels=['ytmusic-player-bar #play-pause-button','ytmusic-player-bar .play-pause-button','#play-pause-button','ytmusic-player-bar tp-yt-paper-icon-button[aria-label*=\"Play\"]','ytmusic-player-bar tp-yt-paper-icon-button[aria-label*=\"Oynat\"]','ytmusic-player-bar button[aria-label*=\"Play\"]','ytmusic-player-bar button[aria-label*=\"Oynat\"]'];" +
+            "for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(!b)continue;" +
+            "var al=(b.getAttribute('aria-label')||'')+(b.getAttribute('title')||'');" +
+            "if(/pause|duraklat/i.test(al))return;" +
+            "try{b.click();return;}catch(z){}" +
+            "}" +
+            "}catch(e){}})();"
+
+const val AUDIO_FOCUS_PAUSE_JS =
             "(function(){try{" +
             "window.__userPause=true;" +
             "window.__rotaFocusPaused=true;" +
