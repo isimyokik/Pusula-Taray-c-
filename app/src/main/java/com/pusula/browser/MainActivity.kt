@@ -1325,6 +1325,20 @@ fun onMusicCatalog(raw: String?) {
                     } catch (_: Exception) { }
                 }
             }
+            /** Takılı kalmış dokunma/kaydırma durumunu sıfırlar (sentetik İPTAL olayı). */
+            @android.webkit.JavascriptInterface
+            fun reset() {
+                handler.post {
+                    try {
+                        val t0 = android.os.SystemClock.uptimeMillis()
+                        val ev = android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_CANCEL, 0f, 0f, 0)
+                        web.dispatchTouchEvent(ev)
+                        ev.recycle()
+                        web.requestDisallowInterceptTouchEvent(false)
+                        (web.parent as? ViewGroup)?.requestDisallowInterceptTouchEvent(false)
+                    } catch (_: Exception) { }
+                }
+            }
         }, "RotaTap")
         web.webViewClient = makeClient(tab)
         web.webChromeClient = makeChrome(tab)
@@ -5670,6 +5684,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var x=(r.left+r.width/2)/window.innerWidth;\n" +
             "var y=(r.top+r.height/2)/window.innerHeight;\n" +
             "window.RotaTap.tap(x,y);\n" +
+            "setTimeout(function(){try{if(window.RotaTap&&RotaTap.reset)RotaTap.reset();unlock();}catch(q){}},450);\n" +
             "}\n" +
             "}catch(z){}\n" +
             "}\n" +
@@ -5686,8 +5701,18 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "});\n" +
             "document.querySelectorAll('tp-yt-paper-slider,tp-yt-paper-progress,#progress-bar,#sliderBar').forEach(function(el){try{el.removeAttribute('dragging');el.removeAttribute('pressed');el.removeAttribute('immediate-value-changing');}catch(z){}});\n" +
             "['pointerup','mouseup','touchend'].forEach(function(n){try{document.dispatchEvent(new Event(n,{bubbles:true}));}catch(z){}});\n" +
+            "var locked=false;\n" +
+            "[document.documentElement,document.body,document.querySelector('ytmusic-app-layout'),document.querySelector('ytmusic-app')].forEach(function(el){\n" +
+            "if(!el)return;var cs=getComputedStyle(el);\n" +
+            "if(cs.overflowY==='hidden'&&(el===document.documentElement||el===document.body)){el.style.setProperty('overflow-y','auto','important');locked=true;}\n" +
+            "if(cs.touchAction==='none'){el.style.setProperty('touch-action','auto','important');locked=true;}\n" +
+            "if(cs.position==='fixed'&&el===document.body){el.style.setProperty('position','static','important');locked=true;}\n" +
+            "});\n" +
+            "try{document.documentElement.classList.remove('no-scroll','scroll-lock','modal-open');document.body.classList.remove('no-scroll','scroll-lock','modal-open');}catch(z){}\n" +
+            "if(locked&&window.RotaTap&&RotaTap.reset)RotaTap.reset();\n" +
             "}catch(z){}\n" +
             "}\n" +
+            "window.__rotaUnlock=unlock;\n" +
             "setInterval(function(){if(!isFullPlayer())unlock();},500);\n" +
             "document.addEventListener('touchend',function(){setTimeout(function(){if(!isFullPlayer())unlock();},150);setTimeout(function(){if(!isFullPlayer())unlock();},700);},{passive:true,capture:true});\n" +
             "var sx=0,sy=0,tr=false;\n" +
