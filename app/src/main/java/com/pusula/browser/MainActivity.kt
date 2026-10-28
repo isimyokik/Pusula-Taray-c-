@@ -5611,6 +5611,23 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
             "}catch(z){}\n" +
             "}\n" +
+            "function unlockScroll(){\n" +
+            "try{\n" +
+            "var nodes=[document.documentElement,document.body];\n" +
+            "document.querySelectorAll('ytmusic-app-layout,#layout,#content,#main-panel,ytmusic-browse-page,ytmusic-tabs,ytmusic-section-list-renderer,#items').forEach(function(n){nodes.push(n);});\n" +
+            "nodes.forEach(function(n){\n" +
+            "if(!n||!n.style)return;\n" +
+            "try{\n" +
+            "var ox=n.style.overflow||'',oy=n.style.overflowY||'',ta=n.style.touchAction||n.style.getPropertyValue('touch-action')||'';\n" +
+            "if(ox==='hidden'||ox==='clip')n.style.removeProperty('overflow');\n" +
+            "if(oy==='hidden'||oy==='clip')n.style.removeProperty('overflow-y');\n" +
+            "if(ta==='none')n.style.removeProperty('touch-action');\n" +
+            "if(n.style.pointerEvents==='none'&&n.tagName!=='YTMUSIC-PLAYER-PAGE')n.style.removeProperty('pointer-events');\n" +
+            "}catch(z){}\n" +
+            "});\n" +
+            "try{window.dispatchEvent(new Event('resize'));}catch(z){}\n" +
+            "}catch(z){}\n" +
+            "}\n" +
             "scrub();\n" +
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
@@ -5630,7 +5647,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}\n" +
             "function isControlTouch(el){\n" +
             "if(!el||!el.closest)return false;\n" +
-            "return !!el.closest('tp-yt-paper-slider,yt-slider,[role=\"slider\"],.slider,.progress-bar,#progress-bar,.progress-container,.time-info,.player-controls,.middle-controls,.bottom-controls,input,button,tp-yt-paper-icon-button,.play-pause-button,#play-pause-button,.next-button,.previous-button');\n" +
+            "return !!el.closest('tp-yt-paper-slider,yt-slider,[role=\"slider\"],.slider,.progress-bar,#progress-bar,.progress-container,.time-info,.player-controls,.middle-controls,.bottom-controls,input,button,tp-yt-paper-icon-button,.play-pause-button,#play-pause-button');\n" +
             "}\n" +
             "function findMinBtn(){\n" +
             "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','ytmusic-player-page .exit-fullscreen-button','ytmusic-player-page [aria-label*=\"Küçült\"]','ytmusic-player-page [aria-label*=\"Minimize\"]','ytmusic-player-page [aria-label*=\"Down\"]'];\n" +
@@ -5646,9 +5663,11 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}\n" +
             "function minimize(){\n" +
             "if(!isFullPlayer())return;\n" +
-            "var el=findMinBtn();if(!el)return;\n" +
-            "try{el.click();}catch(z){}\n" +
-            "try{if(window.RotaTap){var r=el.getBoundingClientRect();window.RotaTap.tap((r.left+r.width/2)/window.innerWidth,(r.top+r.height/2)/window.innerHeight);}}catch(z){}\n" +
+            "var el=findMinBtn();\n" +
+            "if(el){try{el.click();}catch(z){}}\n" +
+            "setTimeout(unlockScroll,120);\n" +
+            "setTimeout(unlockScroll,400);\n" +
+            "setTimeout(function(){scrub();unlockScroll();},700);\n" +
             "}\n" +
             "var sx=0,sy=0,tr=false;\n" +
             "document.addEventListener('touchstart',function(e){\n" +
@@ -5656,12 +5675,11 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(!e.touches||e.touches.length!==1)return;\n" +
             "if(!isFullPlayer())return;\n" +
             "var t=e.touches[0];\n" +
-            // Seek çubuğu / kontroller alt yarıda — jesti başlatma
             "if(t.clientY>window.innerHeight*0.52)return;\n" +
             "var el=null;try{el=document.elementFromPoint(t.clientX,t.clientY);}catch(z){}\n" +
             "if(isControlTouch(el))return;\n" +
             "sx=t.clientX;sy=t.clientY;tr=true;\n" +
-            "},{passive:true,capture:true});\n" +
+            "},{passive:true,capture:false});\n" +
             "document.addEventListener('touchend',function(e){\n" +
             "if(!tr)return;tr=false;\n" +
             "if(!isFullPlayer())return;\n" +
@@ -5669,8 +5687,12 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
             "if(dy<56||Math.abs(dx)>dy*0.85)return;\n" +
             "minimize();\n" +
-            "},{passive:true,capture:true});\n" +
-            "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
+            "},{passive:true,capture:false});\n" +
+            "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:false});\n" +
+            // Mini bara inince kaydırma kilitli kaldıysa aç
+            "setInterval(function(){\n" +
+            "try{if(!isFullPlayer())unlockScroll();}catch(z){}\n" +
+            "},1500);\n" +
             "}catch(e){}})();\n"
 
 
