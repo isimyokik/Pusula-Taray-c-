@@ -395,7 +395,23 @@ class MainActivity : AppCompatActivity() {
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
         if (playing && !pausedByAudioFocus) {
-            requestMediaAudioFocus()
+            handler.postDelayed({
+                if (lastPlaying && !pausedByAudioFocus) requestMediaAudioFocus()
+            }, 1800L)
+            // Takılı mute/volume=0 (reklam veya eski focus) temizle
+            if (playChanged) {
+                injectAllMedia(
+                    "(function(){try{" +
+                    "if(window.__rotaFocusPaused)return;" +
+                    "if(document.querySelector('.ad-showing,.ytp-ad-player-overlay'))return;" +
+                    "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+                    "if(m.paused||m.ended)return;" +
+                    "m.muted=false;" +
+                    "var v=typeof m.volume==='number'?m.volume:1;" +
+                    "if(!(v>0.05)){var r=parseFloat(m.dataset._afv||'1');if(!(r>0))r=1;m.volume=r;}" +
+                    "}catch(x){}});}catch(e){}})();"
+                )
+            }
         }
         // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
         if ((changed || playing) && (playing || PlaybackService.running)) {
@@ -6249,7 +6265,7 @@ if(isYt){
 
         const val BACKGROUND_MEDIA_JS =
             "(function(){try{" +
-                "if(window.__userPause)return;" +
+                "if(window.__userPause||window.__rotaFocusPaused)return;" +
                 "document.querySelectorAll('video,audio').forEach(function(m){" +
                 "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                 "});" +
@@ -6436,27 +6452,29 @@ if(isYt){
 
         const val AUDIO_FOCUS_PAUSE_JS =
             "(function(){try{" +
+            // Arka plan / KEEP_PLAYING tekrar başlatmasın
+            "window.__userPause=true;" +
+            "window.__rotaFocusPaused=true;" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "if(m.ended)return;" +
             "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0?m.volume:1);m.dataset._afv=String(f);}" +
             "m.dataset.pusulaWasPlaying='1';" +
-            "var from=parseFloat(m.dataset._afv)||1,steps=10,i=0;" +
-            "var iv=setInterval(function(){try{i++;m.volume=Math.max(0,from*(1-i/steps));" +
-            "if(i>=steps){clearInterval(iv);m.volume=0;m.muted=true;" +
-            "try{window.__userPause=true;m.pause();window.__userPause=false;}catch(z){}}" +
-            "}catch(x){try{clearInterval(iv);}catch(y){}}},30);" +
+            "m.volume=0;m.muted=true;" +
+            "try{m.pause();}catch(z){}" +
             "}catch(x){}});" +
             "}catch(e){}})();"
 
         const val AUDIO_FOCUS_RESUME_JS =
             "(function(){try{" +
+            "window.__userPause=false;" +
+            "window.__rotaFocusPaused=false;" +
             "if(document.querySelector('.ad-showing,.ytp-ad-player-overlay,.ytp-ad-module'))return;" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
-            "m.muted=false;m.volume=0;" +
-            "try{window.__userPause=false;}catch(z){}" +
+            "m.muted=false;" +
             "m.dataset.pusulaWasPlaying='1';" +
             "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+            "m.volume=0;" +
             "var steps=10,i=0;" +
             "var iv=setInterval(function(){try{i++;m.muted=false;m.volume=Math.min(to,to*(i/steps));" +
             "if(m.paused){var p2=m.play();if(p2&&p2.catch)p2.catch(function(){});}" +
@@ -6464,7 +6482,6 @@ if(isYt){
             "}catch(x){try{clearInterval(iv);}catch(y){}}},30);" +
             "}catch(x){}});" +
             "}catch(e){}})();"
-
         const val AUDIO_FORCE_MUTE_JS =
             "(function(){try{" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
