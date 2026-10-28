@@ -5620,18 +5620,22 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
                   """
 
         // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-        const val YT_MUSIC_UX_JS =
+        val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
             "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
-            "function scrub(){\n" +
+            "if(window.__rotaYtmAbort){try{window.__rotaYtmAbort.abort();}catch(z){}}\n" +
+            "window.__rotaYtmAbort=new AbortController();\n" +
+            "var sig=window.__rotaYtmAbort.signal;\n" +
+            "function scrubStyles(){\n" +
             "try{\n" +
             "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
             "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
             "var p=document.querySelector('ytmusic-player-page');\n" +
-            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
+            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});\n" +
+            "}\n" +
             "}catch(z){}\n" +
             "}\n" +
-            "scrub();\n" +
+            "scrubStyles();\n" +
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
@@ -5648,18 +5652,30 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
             "return r.width>0&&r.height>H*0.55&&r.top<H*0.22;\n" +
             "}\n" +
+            "function isScrubEvent(e){\n" +
+            "try{\n" +
+            "var path=e.composedPath?e.composedPath():(e.path||[]);\n" +
+            "if(!path.length&&e.target)path=[e.target];\n" +
+            "for(var i=0;i<path.length;i++){\n" +
+            "var n=path[i];if(!n||!n.tagName)continue;\n" +
+            "var tag=n.tagName.toLowerCase();\n" +
+            "if(tag.indexOf('slider')>=0||tag.indexOf('progress')>=0)return true;\n" +
+            "var id=(n.id||'');\n" +
+            "if(/progress|slider|volume/i.test(id))return true;\n" +
+            "var cls=(n.className&&typeof n.className==='string')?n.className:(n.getAttribute&&n.getAttribute('class'))||'';\n" +
+            "if(/progress|slider|time-info|player-bar|volume|middle-controls|left-controls|right-controls|player-control/i.test(cls))return true;\n" +
+            "if(tag==='ytmusic-player-bar')return true;\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "try{var y=(e.touches&&e.touches[0]?e.touches[0].clientY:(e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientY:0));\n" +
+            "if(y>window.innerHeight*0.42)return true;}catch(z){}\n" +
+            "return false;\n" +
+            "}\n" +
             "function findMinBtn(){\n" +
-            "var sels=[\n" +
-            "'.player-minimize-button',\n" +
-            "'.toggle-player-page-button',\n" +
-            "'tp-yt-paper-icon-button.toggle-player',\n" +
+            "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player',\n" +
             "'ytmusic-player-page .exit-fullscreen-button',\n" +
-            "'ytmusic-player-page [aria-label*=\"Küçült\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Down\"]',\n" +
-            "'ytmusic-player-page [aria-label*=\"Close\"]',\n" +
-            "'ytmusic-player-page button'\n" +
-            "];\n" +
+            "'ytmusic-player-page [aria-label*=\"Küçült\"]','ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Down\"]','ytmusic-player-page [aria-label*=\"Close\"]'];\n" +
             "for(var i=0;i<sels.length;i++){\n" +
             "var nodes=document.querySelectorAll(sels[i]);\n" +
             "for(var j=0;j<nodes.length;j++){\n" +
@@ -5667,30 +5683,25 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(r.width>0&&r.height>0&&r.top<120&&r.left<120)return el;\n" +
             "}\n" +
             "}\n" +
-            "try{\n" +
-            "var t=document.elementFromPoint(28,40);\n" +
-            "if(t)return t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;\n" +
-            "}catch(z){}\n" +
+            "try{var t=document.elementFromPoint(28,40);if(t)return t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;}catch(z){}\n" +
             "return null;\n" +
             "}\n" +
             "function minimize(){\n" +
             "if(!isFullPlayer())return;\n" +
-            "var el=findMinBtn();\n" +
-            "if(!el)return;\n" +
+            "var el=findMinBtn();if(!el)return;\n" +
             "try{el.click();}catch(z){}\n" +
             "try{\n" +
             "if(window.RotaTap){\n" +
             "var r=el.getBoundingClientRect();\n" +
-            "var x=(r.left+r.width/2)/window.innerWidth;\n" +
-            "var y=(r.top+r.height/2)/window.innerHeight;\n" +
-            "window.RotaTap.tap(x,y);\n" +
+            "window.RotaTap.tap((r.left+r.width/2)/window.innerWidth,(r.top+r.height/2)/window.innerHeight);\n" +
             "setTimeout(function(){try{if(window.RotaTap&&RotaTap.reset)RotaTap.reset();unlock();}catch(q){}},450);\n" +
             "}\n" +
             "}catch(z){}\n" +
             "}\n" +
             "function unlock(){\n" +
             "try{\n" +
-            "['html','body','ytmusic-app','ytmusic-app-layout','#layout','#content','#main-panel','#contents','ytmusic-browse-response','ytmusic-tabbed-search-results-renderer','ytmusic-section-list-renderer'].forEach(function(q){\n" +
+            "['html','body','ytmusic-app','ytmusic-app-layout','#layout','#content','#main-panel','#contents',\n" +
+            "'ytmusic-browse-response','ytmusic-section-list-renderer'].forEach(function(q){\n" +
             "document.querySelectorAll(q).forEach(function(el){\n" +
             "var st=el.style;if(!st)return;\n" +
             "if(st.overflow==='hidden'||st.overflowY==='hidden'){st.removeProperty('overflow');st.removeProperty('overflow-y');}\n" +
@@ -5699,44 +5710,54 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(el.hasAttribute&&el.hasAttribute('dragging'))el.removeAttribute('dragging');\n" +
             "});\n" +
             "});\n" +
-            "document.querySelectorAll('tp-yt-paper-slider,tp-yt-paper-progress,#progress-bar,#sliderBar').forEach(function(el){try{el.removeAttribute('dragging');el.removeAttribute('pressed');el.removeAttribute('immediate-value-changing');}catch(z){}});\n" +
-            "['pointerup','mouseup','touchend'].forEach(function(n){try{document.dispatchEvent(new Event(n,{bubbles:true}));}catch(z){}});\n" +
-            "var locked=false;\n" +
-            "[document.documentElement,document.body,document.querySelector('ytmusic-app-layout'),document.querySelector('ytmusic-app')].forEach(function(el){\n" +
-            "if(!el)return;var cs=getComputedStyle(el);\n" +
-            "if(cs.overflowY==='hidden'&&(el===document.documentElement||el===document.body)){el.style.setProperty('overflow-y','auto','important');locked=true;}\n" +
-            "if(cs.touchAction==='none'){el.style.setProperty('touch-action','auto','important');locked=true;}\n" +
-            "if(cs.position==='fixed'&&el===document.body){el.style.setProperty('position','static','important');locked=true;}\n" +
+            "document.querySelectorAll('tp-yt-paper-slider,tp-yt-paper-progress,#progress-bar,#sliderBar').forEach(function(el){\n" +
+            "try{el.removeAttribute('dragging');el.removeAttribute('pressed');el.removeAttribute('focused');}catch(z){}\n" +
             "});\n" +
-            "try{document.documentElement.classList.remove('no-scroll','scroll-lock','modal-open');document.body.classList.remove('no-scroll','scroll-lock','modal-open');}catch(z){}\n" +
-            "if(locked&&window.RotaTap&&RotaTap.reset)RotaTap.reset();\n" +
+            "[document.documentElement,document.body].forEach(function(el){\n" +
+            "if(!el)return;var cs=getComputedStyle(el);\n" +
+            "if(cs.overflowY==='hidden')el.style.setProperty('overflow-y','auto','important');\n" +
+            "if(cs.touchAction==='none')el.style.setProperty('touch-action','auto','important');\n" +
+            "});\n" +
+            "try{document.documentElement.classList.remove('no-scroll','scroll-lock','modal-open');\n" +
+            "document.body.classList.remove('no-scroll','scroll-lock','modal-open');}catch(z){}\n" +
+            "if(window.RotaTap&&RotaTap.reset)RotaTap.reset();\n" +
             "}catch(z){}\n" +
             "}\n" +
             "window.__rotaUnlock=unlock;\n" +
-            "setInterval(function(){if(!isFullPlayer())unlock();},500);\n" +
-            "document.addEventListener('touchend',function(){setTimeout(function(){if(!isFullPlayer())unlock();},150);setTimeout(function(){if(!isFullPlayer())unlock();},700);},{passive:true,capture:true});\n" +
+            "var wasFull=false;\n" +
+            "setInterval(function(){\n" +
+            "var f=isFullPlayer();\n" +
+            "if(!f)unlock();\n" +
+            "if(f&&!wasFull){scrubStyles();setTimeout(unlock,60);setTimeout(unlock,350);}\n" +
+            "wasFull=f;\n" +
+            "},280);\n" +
             "var sx=0,sy=0,tr=false;\n" +
             "document.addEventListener('touchstart',function(e){\n" +
             "tr=false;\n" +
             "if(!e.touches||e.touches.length!==1)return;\n" +
+            "if(isScrubEvent(e))return;\n" +
             "if(!isFullPlayer())return;\n" +
-            "try{if(e.target&&e.target.closest&&e.target.closest('tp-yt-paper-slider,#progress-bar,#sliderBar,.slider,#slider-container,ytmusic-player-bar,.time-info'))return;}catch(z){}\n" +
-            "sx=e.touches[0].clientX;\n" +
-            "sy=e.touches[0].clientY;\n" +
-            "tr=true;\n" +
-            "},{passive:true,capture:true});\n" +
+            "var y=e.touches[0].clientY;\n" +
+            "if(y>window.innerHeight*0.40)return;\n" +
+            "sx=e.touches[0].clientX;sy=y;tr=true;\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('touchmove',function(e){\n" +
+            "if(!tr)return;\n" +
+            "if(!e.touches||!e.touches[0])return;\n" +
+            "var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;\n" +
+            "if(Math.abs(dx)>Math.abs(dy)*1.05)tr=false;\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
             "document.addEventListener('touchend',function(e){\n" +
+            "if(isScrubEvent(e)){tr=false;setTimeout(unlock,40);return;}\n" +
             "if(!tr)return;tr=false;\n" +
             "if(!isFullPlayer())return;\n" +
             "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<50||Math.abs(dx)>dy*1.1)return;\n" +
+            "if(dy<56||Math.abs(dx)>dy*1.05)return;\n" +
             "minimize();\n" +
-            "},{passive:true,capture:true});\n" +
-            "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true,signal:sig});\n" +
             "}catch(e){}})();\n"
-
-
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
                 "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
