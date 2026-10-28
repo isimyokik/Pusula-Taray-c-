@@ -220,24 +220,34 @@ class MainActivity : AppCompatActivity() {
     private var extBaseline = -1
     private var extSeenSince = 0L
     private var extQuietSince = 0L
-    private var dbgLastN = -1
+    private var dbgLast = ""
     private var mediaChangedAt = 0L
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
-    private fun countMediaConfigs(): Int {
-        if (Build.VERSION.SDK_INT < 26) return 0
+    /** Bildirim/alarm/zil/navigasyon sesleri sayılmaz; geri kalan her şey (usage 0 dahil) başka bir ses sayılır. */
+    private fun activeUsages(): List<Int> {
+        if (Build.VERSION.SDK_INT < 26) return emptyList()
         return try {
-            audioManager.activePlaybackConfigurations.count { c ->
-                when (c.audioAttributes.usage) {
-                    AudioAttributes.USAGE_MEDIA,
-                    AudioAttributes.USAGE_GAME,
-                    AudioAttributes.USAGE_ASSISTANT,
-                    AudioAttributes.USAGE_VOICE_COMMUNICATION -> true
-                    else -> false
-                }
-            }
-        } catch (_: Exception) { 0 }
+            audioManager.activePlaybackConfigurations.map { it.audioAttributes.usage }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun countMediaConfigs(): Int = activeUsages().count { u ->
+        when (u) {
+            AudioAttributes.USAGE_ALARM,
+            AudioAttributes.USAGE_NOTIFICATION,
+            AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
+            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
+            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT,
+            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
+            AudioAttributes.USAGE_NOTIFICATION_EVENT,
+            AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY,
+            AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE,
+            AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
+            AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING -> false
+            else -> true
+        }
     }
 
     private fun registerExternalAudioWatch() {
@@ -293,7 +303,8 @@ class MainActivity : AppCompatActivity() {
         }
         val ourPlaying = hasMedia && lastPlaying
         // GEÇİCİ TEŞHİS: dış ses sayısı değişince kısa bildirim göster (sorun çözülünce kaldırılacak)
-        if (n != dbgLastN) { dbgLastN = n; if (ourPlaying || pausedByAudioFocus) toast("ses:$n taban:$extBaseline çalıyor:$ourPlaying") }
+        val dbgU = activeUsages().toString()
+        if (dbgU != dbgLast) { dbgLast = dbgU; if (ourPlaying || pausedByAudioFocus) toast("ses:$n taban:$extBaseline çalıyor:$ourPlaying usage:$dbgU") }
         if (!ourPlaying || focusFadeRunnable != null || now - mediaChangedAt < 5000L) {
             extBaseline = -1; extSeenSince = 0L
             return
