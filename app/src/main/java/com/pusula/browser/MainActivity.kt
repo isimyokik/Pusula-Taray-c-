@@ -6433,6 +6433,38 @@ if(isYt){
 
 
 
+
+        const val AUDIO_FOCUS_PAUSE_JS =
+            "(function(){try{" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "if(m.ended)return;" +
+            "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0?m.volume:1);m.dataset._afv=String(f);}" +
+            "m.dataset.pusulaWasPlaying='1';" +
+            "var from=parseFloat(m.dataset._afv)||1,steps=10,i=0;" +
+            "var iv=setInterval(function(){try{i++;m.volume=Math.max(0,from*(1-i/steps));" +
+            "if(i>=steps){clearInterval(iv);m.volume=0;m.muted=true;" +
+            "try{window.__userPause=true;m.pause();window.__userPause=false;}catch(z){}}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},30);" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+
+        const val AUDIO_FOCUS_RESUME_JS =
+            "(function(){try{" +
+            "if(document.querySelector('.ad-showing,.ytp-ad-player-overlay,.ytp-ad-module'))return;" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
+            "m.muted=false;m.volume=0;" +
+            "try{window.__userPause=false;}catch(z){}" +
+            "m.dataset.pusulaWasPlaying='1';" +
+            "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+            "var steps=10,i=0;" +
+            "var iv=setInterval(function(){try{i++;m.muted=false;m.volume=Math.min(to,to*(i/steps));" +
+            "if(m.paused){var p2=m.play();if(p2&&p2.catch)p2.catch(function(){});}" +
+            "if(i>=steps){clearInterval(iv);m.volume=to;m.muted=false;}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},30);" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+
         const val AUDIO_FORCE_MUTE_JS =
             "(function(){try{" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
