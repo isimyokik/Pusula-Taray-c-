@@ -157,6 +157,7 @@ class MainActivity : AppCompatActivity() {
     private var lastPlaying = false
     private var hasAudioFocus = false
     private var pausedByAudioFocus = false
+    private var webPausedByFocus = false
     private var ignoreFocusUntil = 0L
     private var audioFocusRequest: AudioFocusRequest? = null
     private var mediaDismissedUntil = 0L
@@ -299,11 +300,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fadeOutForAudioFocus() {
-        // Bir kez sert sustur + fade; sonra tekrar tekrar pause yok
         injectAllMedia(AUDIO_FADE_OUT_JS)
-        handler.postDelayed({
-            if (pausedByAudioFocus) injectAllMedia(AUDIO_FORCE_MUTE_JS)
-        }, 250L)
+        injectAllMedia(AUDIO_FORCE_MUTE_JS)
+        // WebView motorunda da durdur (JS pause yetmezse WhatsApp sırasında ses kesilsin)
+        try {
+            for (t in (tabs.toList() + listOfNotNull(miniTab, mediaSrc))) {
+                try { t.web.onPause() } catch (_: Exception) { }
+            }
+            webPausedByFocus = true
+        } catch (_: Exception) { }
         lastPlaying = false
         if (hasMedia) {
             try {
@@ -316,10 +321,21 @@ class MainActivity : AppCompatActivity() {
     private fun fadeInAfterAudioFocus() {
         stopForeignAudioWatch()
         pausedByAudioFocus = false
+        // WebView'ı geri aç, sonra play
+        if (webPausedByFocus) {
+            try {
+                for (t in (tabs.toList() + listOfNotNull(miniTab, mediaSrc))) {
+                    try { t.web.onResume() } catch (_: Exception) { }
+                }
+            } catch (_: Exception) { }
+            webPausedByFocus = false
+        }
         requestMediaAudioFocus()
-        injectAllMedia(AUDIO_FADE_IN_JS)
-        handler.postDelayed({ injectAllMedia(AUDIO_FADE_IN_JS) }, 350L)
-        handler.postDelayed({ injectAllMedia(AUDIO_ENSURE_VOL_JS) }, 800L)
+        handler.postDelayed({
+            injectAllMedia(AUDIO_FADE_IN_JS)
+            injectAllMedia(AUDIO_ENSURE_VOL_JS)
+        }, 120L)
+        handler.postDelayed({ injectAllMedia(AUDIO_FADE_IN_JS) }, 400L)
         lastPlaying = true
         if (hasMedia) {
             try {
@@ -742,6 +758,10 @@ fun onMusicCatalog(raw: String?) {
     private val backgroundMediaPump = object : Runnable {
         override fun run() {
             if (!appInBackground || !prefs.bgPlay) return
+            if (pausedByAudioFocus || webPausedByFocus) {
+                handler.postDelayed(this, 1200L)
+                return
+            }
             val t = tabs.getOrNull(cur)
             try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
             handler.postDelayed(this, 1200L)
@@ -894,17 +914,20 @@ fun onMusicCatalog(raw: String?) {
         // Ana ekran / PiP ✕: WebView'ı durdurma, arka planda çalsın
         if (prefs.bgPlay) {
             appInBackground = true
-            try { shown?.onResume() } catch (_: Exception) { }
+            // Ses odağı kaybı varsa WebView'ı zorla resume etme (WhatsApp susturması bozulmasın)
+            if (!webPausedByFocus) {
+                try { shown?.onResume() } catch (_: Exception) { }
+            }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
-            if (hasMedia && lastPlaying) {
+            if (hasMedia && lastPlaying && !webPausedByFocus && !pausedByAudioFocus) {
                 try {
                     currentWeb()?.evaluateJavascript(
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
                 PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
-            } else {
+            } else if (!webPausedByFocus && !pausedByAudioFocus) {
                 // Kullanıcı durdurmuşsa arka planda tekrar başlatma
                 try {
                     currentWeb()?.evaluateJavascript(
@@ -935,10 +958,12 @@ fun onMusicCatalog(raw: String?) {
         // PiP penceresi ✕ ile kapanınca da buraya gelinir (PiP bayrağı hâlâ true olabilir): arka planda çalma yolu çalışsın
         if (prefs.bgPlay) {
             appInBackground = true
-            try { shown?.onResume() } catch (_: Exception) { }
+            if (!webPausedByFocus) {
+                try { shown?.onResume() } catch (_: Exception) { }
+            }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
-            if (hasMedia && lastPlaying) {
+            if (hasMedia && lastPlaying && !webPausedByFocus && !pausedByAudioFocus) {
                 try {
                     currentWeb()?.evaluateJavascript(
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
@@ -5974,7 +5999,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "try{pl.classList.remove('ad-showing');pl.classList.remove('ad-interrupting');}catch(x){}" +
             "if(cv)cv.style.display='none';" +
             "endAd(vd);" +
-            "if(vd){try{var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
+            "if(vd&&vd.paused){try{window.__userPause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
             "}" +
             "function check(){" +
             "try{" +
@@ -6005,7 +6030,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "gap=0;" +
             "cv.style.display='none';" +
             "endAd(vd);" +
-            "if(vd){try{window.__userPause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
+            "if(vd&&vd.paused){try{window.__userPause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
             "}" +
             "}else{adSince=0;}" +
             "}catch(e){}" +
