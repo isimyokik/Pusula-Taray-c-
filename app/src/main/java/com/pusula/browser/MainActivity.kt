@@ -185,6 +185,7 @@ class MainActivity : AppCompatActivity() {
 
 
 
+
     private val audioManager: AudioManager by lazy {
         getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
@@ -216,8 +217,17 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             foreignWatchPosted = false
             if (!pausedByAudioFocus) return
-            // Başka oynatıcı kalmadıysa geri aç
-            if (!isForeignAudioPlaying()) {
+            // Başka müzik/ses yoksa geri aç
+            val otherActive = try {
+                @Suppress("DEPRECATION")
+                audioManager.isMusicActive
+            } catch (_: Exception) {
+                false
+            }
+            // isMusicActive bazen bizim paused medyayı da sayar; focus GAIN gelmeden
+            // birkaç tur bekleyip ses yoksa açmak için: kısılmışken tekrar fadeOut uygulayıp
+            // GAIN veya timeout ile açılır. Burada sadece GAIN yoksa ve müzik aktif değilse aç.
+            if (!otherActive) {
                 pausedByAudioFocus = false
                 fadeInAfterAudioFocus()
                 return
@@ -229,67 +239,12 @@ class MainActivity : AppCompatActivity() {
     private fun startForeignAudioWatch() {
         if (foreignWatchPosted) return
         foreignWatchPosted = true
-        handler.postDelayed(foreignAudioWatch, 450L)
+        handler.postDelayed(foreignAudioWatch, 500L)
     }
 
     private fun stopForeignAudioWatch() {
         foreignWatchPosted = false
         handler.removeCallbacks(foreignAudioWatch)
-    }
-
-    private fun isForeignAudioPlaying(): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= 26) {
-                val configs = audioManager.activePlaybackConfigurations
-                // Biz durdurduk; hâlâ aktif kayıt varsa büyük ihtimalle başka uygulama
-                configs.isNotEmpty()
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager.isMusicActive
-            }
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private val playbackCallback = if (Build.VERSION.SDK_INT >= 26) {
-        object : AudioManager.AudioPlaybackCallback() {
-            override fun onPlaybackConfigChanged(configs: List<AudioPlaybackConfiguration>) {
-                handler.post {
-                    try {
-                        if (!pausedByAudioFocus && (lastPlaying || hasMedia) && configs.size > 1) {
-                            // Biz + başka biri: odağı kaybetmiş olabiliriz
-                            // Focus listener çoğu zaman yeter; yedek:
-                            if (android.os.SystemClock.elapsedRealtime() >= ignoreFocusUntil) {
-                                pausedByAudioFocus = true
-                                fadeOutForAudioFocus()
-                                startForeignAudioWatch()
-                            }
-                        } else if (pausedByAudioFocus && configs.isEmpty()) {
-                            pausedByAudioFocus = false
-                            stopForeignAudioWatch()
-                            fadeInAfterAudioFocus()
-                        }
-                    } catch (_: Exception) { }
-                }
-            }
-        }
-    } else null
-
-    private fun registerPlaybackCallback() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            try {
-                playbackCallback?.let { audioManager.registerAudioPlaybackCallback(it, handler) }
-            } catch (_: Exception) { }
-        }
-    }
-
-    private fun unregisterPlaybackCallback() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            try {
-                playbackCallback?.let { audioManager.unregisterAudioPlaybackCallback(it) }
-            } catch (_: Exception) { }
-        }
     }
 
     private fun requestMediaAudioFocus() {
