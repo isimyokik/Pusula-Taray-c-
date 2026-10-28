@@ -332,11 +332,14 @@ class MainActivity : AppCompatActivity() {
                 pauseExtKeys.sumOf { ct[it] ?: 0 } == 0
             } else n == 0
             if (quiet) {
-                if (extQuietSince == 0L) { extQuietSince = now; handler.postDelayed(extCheck, 170L) }
-                else if (now - extQuietSince >= 150L && now - focusPauseSince > 650L) {
+                // WhatsApp bittiğinde biraz bekle; aksi halde hoparlör paraziti + hemen kesilme oluyor
+                val needQuiet = if (pauseFast) 450L else 220L
+                val needSince = if (pauseFast) 900L else 650L
+                if (extQuietSince == 0L) { extQuietSince = now; handler.postDelayed(extCheck, 200L) }
+                else if (now - extQuietSince >= needQuiet && now - focusPauseSince > needSince) {
                     extQuietSince = 0L
                     resumeFromFocus(false)
-                } else handler.postDelayed(extCheck, 150L)
+                } else handler.postDelayed(extCheck, 180L)
             } else extQuietSince = 0L
             return
         }
@@ -440,6 +443,11 @@ class MainActivity : AppCompatActivity() {
         if (!pausedByAudioFocus) return
         pausedByAudioFocus = false
         stopFocusResumeWatch()
+        // Geri açılınca hemen "dış ses" sanılmasın
+        mediaChangedAt = android.os.SystemClock.elapsedRealtime()
+        extBaseline = -1
+        extSeenSince = 0L
+        extQuietSince = 0L
         if (reacquire) {
             hasAudioFocus = false
             requestMediaAudioFocus()
@@ -447,6 +455,8 @@ class MainActivity : AppCompatActivity() {
         injectAllMedia(AUDIO_FOCUS_RESUME_START_JS.replace("__F__", fmtLevel(focusLevel)))
         runFocusFade(1.0, focusFadeInMs, true) {
             injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
+            mediaChangedAt = android.os.SystemClock.elapsedRealtime()
+            try { extBaseline = countMediaConfigs() } catch (_: Exception) { }
         }
         lastPlaying = true
         updateFocusNotification(true)
@@ -6755,19 +6765,22 @@ if(isYt){
 
         const val AUDIO_FOCUS_PAUSE_JS =
             "(function(){try{" +
-            // Arka plan / KEEP_PLAYING tekrar başlatmasın
             "window.__userPause=true;" +
             "window.__rotaFocusPaused=true;" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
+            "var list=[];" +
+            "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
+            "else list=Array.from(document.querySelectorAll('video,audio'));" +
+            "list.forEach(function(m){try{" +
             "if(m.ended)return;" +
-            "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0?m.volume:1);m.dataset._afv=String(f);}" +
+            "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0.05&&!m.muted?m.volume:1);m.dataset._afv=String(f);}" +
             "m.dataset.pusulaWasPlaying='1';" +
-            "m.volume=0;m.muted=true;" +
+            "m.volume=0;if(!ytm)m.muted=true;" +
             "try{m.pause();}catch(z){}" +
             "}catch(x){}});" +
             "}catch(e){}})();"
 
-        const val AUDIO_FOCUS_RESUME_JS =
+const val AUDIO_FOCUS_RESUME_JS =
             "(function(){try{" +
             "window.__userPause=false;" +
             "window.__rotaFocusPaused=false;" +
@@ -6790,7 +6803,11 @@ if(isYt){
             "(function(){try{" +
             "window.__userPause=true;" +
             "window.__rotaFocusPaused=true;" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
+            "var list=[];" +
+            "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
+            "else list=Array.from(document.querySelectorAll('video,audio'));" +
+            "list.forEach(function(m){try{" +
             "if(m.ended)return;" +
             "var cur=parseFloat(m.dataset._afv);" +
             "if(__FRESH__===1||!(cur>0)){var f=(typeof m.volume==='number'&&m.volume>0.05&&!m.muted)?m.volume:1;m.dataset._afv=String(f);}" +
@@ -6798,33 +6815,40 @@ if(isYt){
             "}catch(x){}});" +
             "}catch(e){}})();"
 
-        // Geçiş adımı: ses = saklanan seviye x __F__ (0..1). __PLAY__=1 ise durmuş medyayı tekrar başlatmayı dener
-        const val AUDIO_FOCUS_VOL_JS =
+const val AUDIO_FOCUS_VOL_JS =
             "(function(){try{" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
+            "var list=[];" +
+            "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
+            "else list=Array.from(document.querySelectorAll('video,audio'));" +
+            "list.forEach(function(m){try{" +
+            "if(ytm&&m.dataset.pusulaWasPlaying!=='1')return;" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
-            "if(__PLAY__===1&&!m.ended){m.muted=false;if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}}" +
+            "if(__PLAY__===1&&!m.ended){if(m.muted)m.muted=false;if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}}" +
             "m.volume=Math.max(0,Math.min(1,to*__F__));" +
             "}catch(x){}});" +
             "}catch(e){}})();"
 
-        // Odak geri geldi: bayrakları kaldır, mevcut seviyeden başlayıp oynat
-        const val AUDIO_FOCUS_RESUME_START_JS =
+const val AUDIO_FOCUS_RESUME_START_JS =
             "(function(){try{" +
             "window.__userPause=false;" +
             "window.__rotaFocusPaused=false;" +
             "if(document.querySelector('.ad-showing,.ytp-ad-player-overlay,.ytp-ad-module'))return;" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
+            "var list=[];" +
+            "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
+            "else list=Array.from(document.querySelectorAll('video,audio'));" +
+            "list.forEach(function(m){try{" +
+            "if(m.dataset.pusulaWasPlaying!=='1'&&ytm)return;" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "m.dataset.pusulaWasPlaying='1';" +
-            "m.muted=false;" +
+            "if(m.muted)m.muted=false;" +
             "m.volume=Math.max(0,Math.min(1,to*__F__));" +
             "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
             "}catch(x){}});" +
             "}catch(e){}})();"
 
-        // Kullanıcı müdahalesi: geçişi bırak, sesi tam seviyeye döndür
-        const val AUDIO_FOCUS_CLEAR_JS =
+const val AUDIO_FOCUS_CLEAR_JS =
             "(function(){try{" +
             "window.__rotaFocusPaused=false;" +
             "window.__userPause=false;" +
@@ -6937,6 +6961,7 @@ if(isYt){
             "}catch(e){return '';}})();"
         const val KEEP_MEDIA_PLAYING_JS =
             "(function(){try{" +
+            "if(window.__userPause||window.__rotaFocusPaused)return;" +
             "document.querySelectorAll('video,audio').forEach(function(m){" +
             "try{" +
             "if(m.ended)return;" +
