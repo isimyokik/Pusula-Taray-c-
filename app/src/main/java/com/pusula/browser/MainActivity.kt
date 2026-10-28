@@ -5626,9 +5626,80 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
             "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
-            "if(window.__rotaYtmAbort){try{window.__rotaYtmAbort.abort();}catch(z){}}\n" +
-            "window.__rotaYtmAbort=new AbortController();\n" +
-            "var sig=window.__rotaYtmAbort.signal;\n" +
+            "if(window.__rotaYtmTimer){try{clearInterval(window.__rotaYtmTimer);}catch(z){}}\n" +
+            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
+            "window.__rotaYtmCtl=null;\n" +
+            // Gri yuvarlak dokunma geri bildirimi (ileri / geri / oynat-duraklat)
+            "if(!document.getElementById('__rota_ytm_fb')){\n" +
+            "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
+            "st.textContent=\n" +
+            "'ytmusic-player-page tp-yt-paper-icon-button,'+\n" +
+            "'ytmusic-player-page yt-icon-button,'+\n" +
+            "'ytmusic-player-page .play-pause-button,'+\n" +
+            "'ytmusic-player-page .previous-button,'+\n" +
+            "'ytmusic-player-page .next-button,'+\n" +
+            "'ytmusic-player-bar tp-yt-paper-icon-button,'+\n" +
+            "'ytmusic-player-bar yt-icon-button,'+\n" +
+            "'ytmusic-player-bar #play-pause-button,'+\n" +
+            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-bar .previous-button,ytmusic-player-bar .next-button{'+\n" +
+            "'-webkit-tap-highlight-color:transparent!important;'+\n" +
+            "'tap-highlight-color:transparent!important;'+\n" +
+            "'outline:none!important;'+\n" +
+            "'border-radius:50%!important;'+\n" +
+            "'overflow:hidden!important;'+\n" +
+            "'--paper-ripple-color:rgba(170,170,170,.4)!important;'+\n" +
+            "'--iron-ink-color:rgba(170,170,170,.4)!important;'+\n" +
+            "'}'+\n" +
+            "'ytmusic-player-page paper-ripple,ytmusic-player-bar paper-ripple,tp-yt-paper-icon-button paper-ripple{'+\n" +
+            "'color:rgba(170,170,170,.4)!important;'+\n" +
+            "'}'+\n" +
+            "'ytmusic-player-page .play-pause-button:focus,ytmusic-player-page .previous-button:focus,ytmusic-player-page .next-button:focus,'+\n" +
+            "'ytmusic-player-page tp-yt-paper-icon-button:focus,ytmusic-player-bar tp-yt-paper-icon-button:focus{'+\n" +
+            "'outline:none!important;box-shadow:none!important;background:transparent!important;'+\n" +
+            "'}';\n" +
+            "document.documentElement.appendChild(st);\n" +
+            "}\n" +
+            "function flashGray(el){\n" +
+            "try{\n" +
+            "if(!el||!el.getBoundingClientRect)return;\n" +
+            "var r=el.getBoundingClientRect();\n" +
+            "if(r.width<8||r.height<8)return;\n" +
+            "var size=Math.max(r.width,r.height)*1.35;\n" +
+            "var d=document.createElement('div');\n" +
+            "d.style.cssText='position:fixed;left:'+(r.left+r.width/2-size/2)+'px;top:'+(r.top+r.height/2-size/2)+\n" +
+            "'px;width:'+size+'px;height:'+size+'px;border-radius:50%;background:rgba(160,160,160,.38);'+\n" +
+            "'pointer-events:none;z-index:2147483646;opacity:1;transition:opacity .32s ease-out;';\n" +
+            "document.documentElement.appendChild(d);\n" +
+            "requestAnimationFrame(function(){d.style.opacity='0';});\n" +
+            "setTimeout(function(){try{d.remove();}catch(z){}},360);\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "function controlFromEvent(e){\n" +
+            "try{\n" +
+            "var path=e.composedPath?e.composedPath():[e.target];\n" +
+            "for(var i=0;i<path.length;i++){\n" +
+            "var n=path[i];if(!n||!n.tagName)continue;\n" +
+            "var tag=n.tagName.toLowerCase();\n" +
+            "var cls=(typeof n.className==='string'?n.className:'')||'';\n" +
+            "var id=n.id||'';\n" +
+            "if(/play-pause|previous-button|next-button/.test(cls)||id==='play-pause-button')return n;\n" +
+            "if(tag==='tp-yt-paper-icon-button'||tag==='yt-icon-button'){\n" +
+            "var rr=n.getBoundingClientRect();\n" +
+            // alt kontrol şeridi
+            "if(rr.top>window.innerHeight*0.45)return n;\n" +
+            "}\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "return null;\n" +
+            "}\n" +
+            "if(!window.__rotaYtmFbBound){\n" +
+            "window.__rotaYtmFbBound=1;\n" +
+            "document.addEventListener('pointerdown',function(e){\n" +
+            "if(!isFullPlayer())return;\n" +
+            "var el=controlFromEvent(e);\n" +
+            "if(el)flashGray(el);\n" +
+            "},{passive:true,capture:true});\n" +
+            "}\n" +
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
@@ -5654,27 +5725,19 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(z){}\n" +
             "return false;\n" +
             "}\n" +
-            // TEK İŞ: sol üst küçült tuşuna bas
             "function pressMinimize(){\n" +
             "if(!isFullPlayer())return;\n" +
             "var clicked=false;\n" +
-            "var sels=[\n" +
-            "'.player-minimize-button','.toggle-player-page-button',\n" +
-            "'tp-yt-paper-icon-button.toggle-player',\n" +
-            "'ytmusic-player-page tp-yt-paper-icon-button',\n" +
-            "'ytmusic-player-page button'\n" +
-            "];\n" +
+            "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','ytmusic-player-page tp-yt-paper-icon-button','ytmusic-player-page button'];\n" +
             "for(var i=0;i<sels.length&&!clicked;i++){\n" +
             "var nodes=document.querySelectorAll(sels[i]);\n" +
             "for(var j=0;j<nodes.length;j++){\n" +
             "var el=nodes[j],r=el.getBoundingClientRect();\n" +
-            // sol üst bölge
             "if(r.width>0&&r.height>0&&r.top>=0&&r.top<120&&r.left<120){\n" +
             "try{el.click();clicked=true;break;}catch(z){}\n" +
             "}\n" +
             "}\n" +
             "}\n" +
-            // elementFromPoint ile sol üst
             "if(!clicked){\n" +
             "try{\n" +
             "var pts=[[40,48],[48,56],[32,40],[56,64],[24,36]];\n" +
@@ -5686,14 +5749,12 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}\n" +
             "}catch(z){}\n" +
             "}\n" +
-            // Native dokunuş (RotaTap) — en güvenilir
             "try{\n" +
             "if(window.RotaTap){\n" +
             "window.RotaTap.tap(40/Math.max(1,window.innerWidth),48/Math.max(1,window.innerHeight));\n" +
             "setTimeout(function(){try{if(window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},350);\n" +
             "}\n" +
             "}catch(z){}\n" +
-            // Layout yedek
             "try{\n" +
             "var layout=document.querySelector('ytmusic-app-layout');\n" +
             "if(layout){\n" +
@@ -5702,7 +5763,16 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(typeof layout.collapsePlayerPage_==='function')try{layout.collapsePlayerPage_();}catch(z){}\n" +
             "}\n" +
             "}catch(z){}\n" +
+            "unbindGesture();\n" +
             "}\n" +
+            "function unbindGesture(){\n" +
+            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
+            "window.__rotaYtmCtl=null;\n" +
+            "}\n" +
+            "function bindGesture(){\n" +
+            "if(window.__rotaYtmCtl)return;\n" +
+            "window.__rotaYtmCtl=new AbortController();\n" +
+            "var sig=window.__rotaYtmCtl.signal;\n" +
             "var sx=0,sy=0,active=false;\n" +
             "document.addEventListener('touchstart',function(e){\n" +
             "active=false;\n" +
@@ -5716,7 +5786,6 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "document.addEventListener('touchmove',function(e){\n" +
             "if(!active||!e.touches||!e.touches[0])return;\n" +
             "var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;\n" +
-            // yatay ağırlıklıysa iptal
             "if(Math.abs(dx)>Math.abs(dy)*1.15)active=false;\n" +
             "},{passive:true,capture:true,signal:sig});\n" +
             "document.addEventListener('touchend',function(e){\n" +
@@ -5729,6 +5798,14 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "pressMinimize();\n" +
             "},{passive:true,capture:true,signal:sig});\n" +
             "document.addEventListener('touchcancel',function(){active=false;},{passive:true,capture:true,signal:sig});\n" +
+            "}\n" +
+            "window.__rotaYtmTimer=setInterval(function(){\n" +
+            "try{\n" +
+            "if(isFullPlayer())bindGesture();\n" +
+            "else unbindGesture();\n" +
+            "}catch(z){}\n" +
+            "},300);\n" +
+            "if(isFullPlayer())bindGesture();else unbindGesture();\n" +
             "}catch(e){}})();\n"
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
