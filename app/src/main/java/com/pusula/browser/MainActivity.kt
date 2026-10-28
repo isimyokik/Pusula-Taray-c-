@@ -5603,408 +5603,63 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
             "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
-            "if(window.__rotaMusicUx5)return;window.__rotaMusicUx5=1;\n" +
-            "var HS='ytmusic-play-button-renderer,#play-pause-button,.play-pause-button';\n" +
-            "var FX=['paper-ripple','tp-yt-paper-ripple','yt-touch-feedback-shape','.yt-spec-touch-feedback-shape','#ink'];\n" +
-            "var css='*{-webkit-tap-highlight-color:rgba(0,0,0,0)!important}html,body{overscroll-behavior-y:contain!important}*,*::before,*::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}*:not(ytmusic-player-page):not(ytmusic-player-page *){filter:none!important}';\n" +
-            "HS.split(',').forEach(function(h){\n" +
-            "css+=h+'{outline:none!important;--paper-ripple-color:transparent;--paper-ripple-opacity:0;--yt-spec-touch-response:transparent;--yt-spec-touch-response-v2:transparent;--yt-focus-color:transparent}';\n" +
-            "FX.forEach(function(f){css+=h+' '+f+'{display:none!important}';});\n" +
-            "});\n" +
-            "var st=document.createElement('style');st.id='__rota_ytm_ux5';st.textContent=css;\n" +
-            "document.documentElement.appendChild(st);\n" +
-            "var ov=null;\n" +
-            "function getOv(){\n" +
-            "if(ov&&ov.isConnected)return ov;\n" +
-            "ov=document.createElement('div');\n" +
-            "ov.style.cssText='position:fixed;left:0;top:0;border-radius:50%;background:rgba(150,150,150,.4);pointer-events:none;z-index:2147483646;opacity:0;display:none;';\n" +
-            "document.documentElement.appendChild(ov);\n" +
-            "return ov;\n" +
-            "}\n" +
-            "function findHost(e){\n" +
-            "var path=(e.composedPath&&e.composedPath())||[];\n" +
-            "for(var i=0;i<path.length;i++){\n" +
-            "var n=path[i];\n" +
-            "if(n&&n.matches&&n.matches(HS))return n;\n" +
-            "}\n" +
-            "for(var j=0;j<path.length;j++){\n" +
-            "var m=path[j];\n" +
-            "if(m&&m.getAttribute&&m.matches&&m.matches('button,[role=button],tp-yt-paper-icon-button,yt-icon-button')){\n" +
-            "var al=m.getAttribute('aria-label')||'';\n" +
-            "if(/^(oynat|duraklat|play|pause)\\b/i.test(al))return m;\n" +
-            "}\n" +
-            "}\n" +
-            "return null;\n" +
-            "}\n" +
-            "function inkDown(e){\n" +
+            // Önceki bozulmuş stilleri temizle
+            "function scrub(){\n" +
             "try{\n" +
-            "var h=findHost(e);if(!h)return;\n" +
-            "var r=h.getBoundingClientRect();\n" +
-            "if(r.width<8||r.width>150||Math.abs(r.width-r.height)>r.width*0.3)return;\n" +
-            "var o=getOv(),s=Math.max(r.width,r.height);\n" +
-            "o.style.transition='none';\n" +
-            "o.style.width=s+'px';o.style.height=s+'px';\n" +
-            "o.style.left=(r.left+(r.width-s)/2)+'px';o.style.top=(r.top+(r.height-s)/2)+'px';\n" +
-            "o.style.display='block';o.style.opacity='0';\n" +
-            "void o.offsetWidth;\n" +
-            "o.style.transition='opacity .07s ease-out';o.style.opacity='1';\n" +
+            "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
+            "['__rota_peek','__rota_peek2','__rota_noanim','__rota_debug','__adcover'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "var p=document.querySelector('ytmusic-player-page');\n" +
+            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index','background','background-color'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
             "}catch(z){}\n" +
             "}\n" +
-            "function inkUp(){\n" +
-            "try{\n" +
-            "if(!ov||ov.style.display==='none')return;\n" +
-            "ov.style.transition='opacity .32s ease-out';ov.style.opacity='0';\n" +
-            "var o=ov;setTimeout(function(){if(o.style.opacity==='0')o.style.display='none';},360);\n" +
-            "}catch(z){}\n" +
-            "}\n" +
-            "document.addEventListener('pointerdown',inkDown,true);\n" +
-            "window.addEventListener('pointerup',inkUp,true);\n" +
-            "window.addEventListener('pointercancel',inkUp,true);\n" +
-            "window.addEventListener('touchend',inkUp,true);\n" +
-            "window.addEventListener('touchcancel',inkUp,true);\n" +
-            "function clickable(e){\n" +
-            "var n=e;\n" +
-            "for(var k=0;k<12&&n;k++){\n" +
-            "if(n.nodeType===1&&n.matches&&n.matches('button,[role=button],tp-yt-paper-icon-button,yt-icon-button,a,[class*=minimize],[class*=collapse],[class*=toggle-player]'))return n;\n" +
-            "n=n.parentElement||(n.getRootNode&&n.getRootNode().host)||null;\n" +
-            "}\n" +
-            "return null;\n" +
-            "}\n" +
-            "function findChevron(){\n" +
-            "var pg=pageEl();if(!pg)return null;\n" +
-            "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','.toggle-player','[class*=minimize]','[class*=collapse-button]','[class*=dismiss]'];\n" +
-            "for(var i=0;i<sels.length;i++){var el=pg.querySelector(sels[i]);if(el)return el;}\n" +
-            "var all=pg.querySelectorAll('[aria-label]');\n" +
-            "for(var j=0;j<all.length;j++){\n" +
-            "var al=all[j].getAttribute('aria-label')||'';\n" +
-            "if(/(asagi|aşağı|collapse|minimi|kucult|küçült|down|player)/i.test(al))return all[j];\n" +
-            "}\n" +
-            "for(var y=16;y<=110;y+=12){\n" +
-            "for(var x=16;x<=96;x+=12){\n" +
-            "var c=clickable(document.elementFromPoint(x,y));\n" +
-            "if(c&&c.getBoundingClientRect().width<120)return c;\n" +
-            "}\n" +
-            "}\n" +
-            "return null;\n" +
-            "}\n" +
-            "function fullTap(el){\n" +
-            "var r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;\n" +
-            "try{\n" +
-            "var tc=new Touch({identifier:77,target:el,clientX:x,clientY:y});\n" +
-            "el.dispatchEvent(new TouchEvent('touchstart',{touches:[tc],targetTouches:[tc],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n" +
-            "el.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[tc],bubbles:true,cancelable:true,composed:true}));\n" +
-            "}catch(z){}\n" +
-            "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){\n" +
-            "var C=t.indexOf('pointer')===0?PointerEvent:MouseEvent;\n" +
-            "try{el.dispatchEvent(new C(t,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,view:window,button:0,pointerType:'touch',isPrimary:true}));}catch(z){}\n" +
-            "});\n" +
-            "}\n" +
-            "function tryNative(){\n" +
-            "if(!window.RotaTap)return false;\n" +
-            "var x=45,y=32,el=findChevron();\n" +
-            "if(el){var r=el.getBoundingClientRect();if(r.width>0&&r.top<200&&r.left<200){x=r.left+r.width/2;y=r.top+r.height/2;}}\n" +
-            "window.RotaTap.tap(x/window.innerWidth,y/window.innerHeight);\n" +
-            "return true;\n" +
-            "}\n" +
-            "function tryClick(){var el=findChevron();if(!el)return false;el.click();return true;}\n" +
-            "function tryTap(){var el=findChevron();if(!el)return false;fullTap(el);return true;}\n" +
-            "function tryLayout(){\n" +
-            "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
-            "if(!layout)return false;\n" +
-            "try{if('playerPageOpen_' in layout)layout.playerPageOpen_=false;}catch(z){}\n" +
-            "try{layout.removeAttribute('player-page-open_');}catch(z){}\n" +
-            "try{layout.setAttribute('player-ui-state_','PLAYER_BAR_ONLY');}catch(z){}\n" +
-            "return true;\n" +
-            "}\n" +
-            "function layoutSig(){\n" +
-            "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
-            "if(!l)return '';\n" +
-            "return l.getAttributeNames().map(function(k){return k+'='+l.getAttribute(k);}).join('|');\n" +
-            "}\n" +
-            "function openNow(){return pageOpen();}\n" +
-            "function showDebug(){\n" +
-            "try{\n" +
-            "var seen=[];\n" +
-            "for(var y=16;y<=110;y+=22){for(var x=16;x<=96;x+=26){\n" +
-            "var e=document.elementFromPoint(x,y),n=0;\n" +
-            "while(e&&n<3){\n" +
-            "var d=e.tagName.toLowerCase()+(e.className&&typeof e.className==='string'?'.'+e.className.trim().split(/\\s+/).slice(0,2).join('.'):'')+(e.getAttribute('aria-label')?'['+e.getAttribute('aria-label')+']':'');\n" +
-            "if(seen.indexOf(d)<0)seen.push(d);\n" +
-            "e=e.parentElement;n++;\n" +
-            "}\n" +
-            "}}\n" +
-            "var b=document.createElement('div');\n" +
-            "b.style.cssText='position:fixed;left:8px;right:8px;bottom:70px;z-index:2147483647;background:rgba(0,0,0,.85);color:#fff;font:11px/1.3 monospace;padding:8px;border-radius:8px;word-break:break-all;';\n" +
-            "b.textContent='Rota: küçült tuşu çalışmadı. '+seen.slice(0,14).join(' ; ');\n" +
-            "document.documentElement.appendChild(b);\n" +
-            "setTimeout(function(){try{b.remove();}catch(z){}},12000);\n" +
-            "}catch(z){}\n" +
-            "}\n" +
-            "function pageEl(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}\n" +
-            "function pageOpen(){\n" +
-            "var p=pageEl();if(!p)return false;\n" +
+            "scrub();\n" +
+            "setInterval(scrub,2000);\n" +
+            // Tam ekran oynatıcı açık mı?
+            "function isFullPlayer(){\n" +
+            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
+            "if(!p)return false;\n" +
             "try{\n" +
             "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
             "if(layout){\n" +
-            "var st=(layout.getAttribute('player-ui-state_')||layout.getAttribute('player-ui-state')||'');\n" +
-            "if(st==='PLAYER_BAR_ONLY'||/MINI|BAR_ONLY/i.test(st))return false;\n" +
+            "var st=layout.getAttribute('player-ui-state_')||'';\n" +
+            "if(st==='PLAYER_BAR_ONLY')return false;\n" +
             "if(layout.playerPageOpen_===false)return false;\n" +
-            "var openAttr=layout.hasAttribute('player-page-open_')||layout.hasAttribute('player-page-open');\n" +
-            "if(layout.playerPageOpen_!==true&&!openAttr){\n" +
-            "/* kapalı olabilir — geometri ile teyit */\n" +
-            "}\n" +
             "}\n" +
             "}catch(z){}\n" +
-            "var cs=getComputedStyle(p);\n" +
-            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
-            "if(parseFloat(cs.opacity)<0.15)return false;\n" +
             "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
-            "if(r.width<=0)return false;\n" +
-            "if(r.top>H*0.18)return false;\n" +
-            "if(r.height<H*0.55)return false;\n" +
-            "if(r.bottom<H*0.7)return false;\n" +
-            "return true;\n" +
+            "return r.width>0&&r.height>H*0.6&&r.top<H*0.2;\n" +
             "}\n" +
-            "var busyT=0,tracking=false,locked=false,busy=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
-            "function rubber(d){\n" +
-            "if(d<=0)return 0;\n" +
-            "var R=window.innerHeight*1.1;\n" +
-            "return R*(1-Math.exp(-d/R));\n" +
+            "function minimize(){\n" +
+            "if(!isFullPlayer())return;\n" +
+            "var sels=['.player-minimize-button','.toggle-player-page-button','[aria-label*=\"Küçült\"]','[aria-label*=\"Minimize\"]','[aria-label*=\"Down\"]','ytmusic-player-page .button-shape-button-container button'];\n" +
+            "for(var i=0;i<sels.length;i++){\n" +
+            "var el=document.querySelector(sels[i]);\n" +
+            "if(el){try{el.click();return;}catch(z){}}\n" +
             "}\n" +
-            "var peekEl=[];\n" +
-            "function peekOn(){\n" +
+            // Sol üst chevron bölgesine tıkla
             "try{\n" +
-            "if(!document.getElementById('__rota_peek')){\n" +
-            "var s=document.createElement('style');s.id='__rota_peek';\n" +
-            "s.textContent='html.rota-peek ytmusic-app-layout #content,html.rota-peek ytmusic-app-layout #main-panel,html.rota-peek ytmusic-app-layout ytmusic-browse-response,html.rota-peek ytmusic-app-layout #nav-bar-background,html.rota-peek ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek ytmusic-app-layout #content{display:block!important}html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}html.rota-peek ytmusic-player-page,html.rota-peek ytmusic-player-page #player-page{background-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}';\n" +
-            "document.documentElement.appendChild(s);\n" +
-            "}\n" +
-            "document.documentElement.classList.add('rota-peek');\n" +
-            "var l=document.querySelector('ytmusic-app-layout,#layout');\n" +
-            "if(l){\n" +
-            "var q=[l],n=0;\n" +
-            "while(q.length&&n<120){\n" +
-            "var e=q.shift();n++;\n" +
-            "if(e.nodeType===1&&e!==pg&&!(pg&&pg.contains(e))){\n" +
-            "var cs=getComputedStyle(e);\n" +
-            "var bf=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n" +
-            "var fl=cs.filter||'none';\n" +
-            "if(bf!=='none'||fl.indexOf('blur')>=0){\n" +
-            "peekEl.push([e,e.style.cssText]);\n" +
-            "e.style.setProperty('backdrop-filter','none','important');\n" +
-            "e.style.setProperty('-webkit-backdrop-filter','none','important');\n" +
-            "if(fl.indexOf('blur')>=0)e.style.setProperty('filter','none','important');\n" +
-            "}\n" +
-            "}\n" +
-            "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n" +
-            "}\n" +
-            "}\n" +
+            "var t=document.elementFromPoint(28,36);\n" +
+            "if(t){var b=t.closest('button,[role=button],tp-yt-paper-icon-button')||t;b.click&&b.click();}\n" +
             "}catch(z){}\n" +
             "}\n" +
-            "function peekOff(){\n" +
-            "try{\n" +
-            "document.documentElement.classList.remove('rota-peek');document.documentElement.classList.remove('rota-noanim');\n" +
-            "peekEl.forEach(function(a){a[0].style.cssText=a[1];});\n" +
-            "peekEl=[];\n" +
-            "}catch(z){}\n" +
-            "}\n" +
-            "function setOff(v){\n" +
-            "if(!pg)return;\n" +
-            "pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');\n" +
-            "pg.style.setProperty('border-radius',Math.min(v,28)+'px '+Math.min(v,28)+'px 0 0','important');\n" +
-            "}\n" +
-            "function clean(){\n" +
-            "if(!pg)return;\n" +
-            "peekOff();\n" +
-            "['transform','transition','border-radius','will-change','overflow','opacity'].forEach(function(k){pg.style.removeProperty(k);});\n" +
-            "busy=false;\n" +
-            "}\n" +
-            "function springBack(){\n" +
-            "if(!pg)return;\n" +
-            "busy=true;busyT=Date.now();\n" +
-            "pg.style.setProperty('transition','transform .55s cubic-bezier(.3,1.35,.5,1)','important');\n" +
-            "setOff(0);\n" +
-            "setTimeout(clean,600);\n" +
-            "}\n" +
-            "function commit(v){\n" +
-            "busy=true;busyT=Date.now();\n" +
-            "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
-            "var d=Math.max(170,Math.min(340,left/Math.max(v,0.9)));\n" +
-            "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.2,.7,.3,1)','important');\n" +
-            "setOff(H);\n" +
-            "setTimeout(afterDown,d);\n" +
-            "}\n" +
-            "function afterDown(){\n" +
-            "pg.style.setProperty('transition','none','important');\n" +
-            "pg.style.setProperty('opacity','0','important');\n" +
-            "pg.style.removeProperty('transform');\n" +
-            "pg.style.removeProperty('border-radius');\n" +
-            "document.documentElement.classList.add('rota-noanim');\n" +
-            "pg.style.setProperty('opacity','0','important');\n" +
-            "pg.style.removeProperty('transform');\n" +
-            "pg.style.removeProperty('border-radius');\n" +
-            "var tries=[tryNative,tryClick,tryTap,tryLayout],i=0;\n" +
-            "function success(){\n" +
-            "pg.style.removeProperty('opacity');\n" +
-            "clean();\n" +
-            "}\n" +
-            "function fail(){\n" +
-            "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
-            "pg.style.removeProperty('opacity');\n" +
-            "void pg.offsetWidth;\n" +
-            "showDebug();\n" +
-            "springBack();\n" +
-            "}\n" +
-            "function next(){\n" +
-            "if(i>=tries.length){fail();return;}\n" +
-            "var ok=false;\n" +
-            "try{ok=tries[i++]();}catch(z){}\n" +
-            "if(!ok){next();return;}\n" +
-            "var sig0=layoutSig(),t0=Date.now();\n" +
-            "(function poll(){\n" +
-            "var el=Date.now()-t0;\n" +
-            "if(!openNow()){success();return;}\n" +
-            "if(layoutSig()!==sig0){if(el>=1800){success();return;}}\n" +
-            "else if(el>=1000){next();return;}\n" +
-            "setTimeout(poll,60);\n" +
-            "})();\n" +
-            "}\n" +
-            "next();\n" +
-            "}\n" +
-            "var armed=true,sawClosed=false,busy=false,busyT=0,locked=false,tr=false,sx=0,sy=0,off=0,smp=[],pg=null;\n" +
-            "(function(){var q=document.createElement('style');q.id='__rota_noanim';q.textContent='html.rota-noanim ytmusic-app-layout,html.rota-noanim ytmusic-app-layout *{transition:none!important;animation:none!important}';document.documentElement.appendChild(q);})();\n" +
-            "function rubber(d){if(d<=0)return 0;var R=window.innerHeight*1.1;return R*(1-Math.exp(-d/R));}\n" +
-            "function setOff(v){if(!pg)return;pg.style.setProperty('transform','translate3d(0,'+v+'px,0)','important');}\n" +
-            "var pk2=[];\n" +
-            "function peek2On(){\n" +
-            "try{\n" +
-            "if(!pg)return;\n" +
-            "document.documentElement.classList.add('rota-peek2');\n" +
-            "if(!document.getElementById('__rota_peek2')){var rs=document.createElement('style');rs.id='__rota_peek2';rs.textContent='html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout #main-panel,html.rota-peek2 ytmusic-app-layout ytmusic-pages,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response,html.rota-peek2 ytmusic-app-layout #nav-bar-background,html.rota-peek2 ytmusic-app-layout ytmusic-nav-bar{visibility:visible!important;opacity:1!important}html.rota-peek2 ytmusic-app-layout #content,html.rota-peek2 ytmusic-app-layout ytmusic-browse-response{display:block!important}';document.documentElement.appendChild(rs);}\n" +
-            "var root=document.querySelector('ytmusic-app-layout,#layout')||document.body;\n" +
-            "var q=[root],n=0;\n" +
-            "while(q.length&&n<800){\n" +
-            "var e=q.shift();n++;\n" +
-            "if(e.nodeType!==1)continue;\n" +
-            "var inPg=(e===pg);\n" +
-            "var cs=getComputedStyle(e);\n" +
-            "var f=cs.filter||'none',b=cs.backdropFilter||cs.webkitBackdropFilter||'none';\n" +
-            "var fb=(f!=='none'&&!inPg&&f.indexOf('blur')>=0),bb=(b!=='none');\n" +
-            "if(fb||bb){\n" +
-            "pk2.push([e,e.style.getPropertyValue('filter'),e.style.getPropertyPriority('filter'),e.style.getPropertyValue('backdrop-filter'),e.style.getPropertyPriority('backdrop-filter')]);\n" +
-            "if(fb)e.style.setProperty('filter','none','important');\n" +
-            "if(bb){e.style.setProperty('backdrop-filter','none','important');e.style.setProperty('-webkit-backdrop-filter','none','important');}\n" +
-            "}\n" +
-            "if(inPg)continue;\n" +
-            "for(var c=e.firstElementChild;c;c=c.nextElementSibling)q.push(c);\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "}\n" +
-            "function peek2Off(){\n" +
-            "try{\n" +
-            "document.documentElement.classList.remove('rota-peek2');\n" +
-            "pk2.forEach(function(a){\n" +
-            "var e=a[0];\n" +
-            "try{\n" +
-            "if(a[1])e.style.setProperty('filter',a[1],a[2]);else e.style.removeProperty('filter');\n" +
-            "if(a[3])e.style.setProperty('backdrop-filter',a[3],a[4]);else e.style.removeProperty('backdrop-filter');\n" +
-            "e.style.removeProperty('-webkit-backdrop-filter');\n" +
-            "}catch(z){}\n" +
-            "});\n" +
-            "pk2=[];\n" +
-            "}catch(z){}\n" +
-            "}\n" +
-            "function cleanAll(){\n" +
-            "peek2Off();\n" +
-            "if(pg){['transform','transition','will-change','opacity'].forEach(function(k){pg.style.removeProperty(k);});}\n" +
-            "document.documentElement.classList.remove('rota-noanim');\n" +
-            "busy=false;\n" +
-            "}\n" +
-            "function springBack(){\n" +
-            "if(!pg)return;\n" +
-            "busy=true;busyT=Date.now();\n" +
-            "pg.style.setProperty('transition','transform .5s cubic-bezier(.3,1.3,.5,1)','important');\n" +
-            "setOff(0);\n" +
-            "setTimeout(cleanAll,560);\n" +
-            "}\n" +
-            "function closeDown(v){\n" +
-            "busy=true;busyT=Date.now();armed=false;sawClosed=false;\n" +
-            "var H=window.innerHeight,left=Math.max(H-off,1);\n" +
-            "var d=Math.max(380,Math.min(600,left/Math.max(v,0.5)));\n" +
-            "pg.style.setProperty('transition','transform '+d+'ms cubic-bezier(.3,.1,.25,1)','important');\n" +
-            "setOff(H);\n" +
-            "setTimeout(function(){\n" +
-            "pg.style.setProperty('transition','none','important');\n" +
-            "pg.style.setProperty('opacity','0','important');\n" +
-            "pg.style.removeProperty('transform');\n" +
-            "document.documentElement.classList.add('rota-noanim');\n" +
-            "var ok=false;\n" +
-            "try{ok=tryNative();}catch(z){}\n" +
-            "if(!ok){try{ok=tryClick();}catch(z){}}\n" +
-            "var t0=Date.now();\n" +
-            "(function poll(){\n" +
-            "if(!pageOpen()){setTimeout(cleanAll,650);return;}\n" +
-            "if(Date.now()-t0>1500){\n" +
-            "document.documentElement.classList.remove('rota-noanim');\n" +
-            "pg.style.setProperty('transform','translate3d(0,'+window.innerHeight+'px,0)','important');\n" +
-            "pg.style.removeProperty('opacity');\n" +
-            "void pg.offsetWidth;\n" +
-            "armed=true;\n" +
-            "springBack();\n" +
-            "return;\n" +
-            "}\n" +
-            "setTimeout(poll,50);\n" +
-            "})();\n" +
-            "},d);\n" +
-            "}\n" +
-            "setInterval(function(){\n" +
-            "try{\n" +
-            "if(!pageOpen())sawClosed=true;\n" +
-            "else if(sawClosed&&!armed&&!busy)armed=true;\n" +
-            "if(busy&&Date.now()-busyT>4000){cleanAll();}\n" +
-            "}catch(z){}\n" +
-            "},300);\n" +
+            "var sx=0,sy=0,tr=false;\n" +
             "document.addEventListener('touchstart',function(e){\n" +
             "tr=false;\n" +
             "if(!e.touches||e.touches.length!==1)return;\n" +
-            "if(typeof armed!=='undefined'&&!armed)return;\n" +
-            "if(!pageOpen())return;\n" +
-            "var t=e.touches[0];\n" +
-            "sx=t.clientX;sy=t.clientY;tr=true;\n" +
+            "if(!isFullPlayer())return;\n" +
+            "sx=e.touches[0].clientX;sy=e.touches[0].clientY;tr=true;\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchend',function(e){\n" +
             "if(!tr)return;tr=false;\n" +
-            "if(typeof armed!=='undefined'&&!armed)return;\n" +
-            "if(!pageOpen())return;\n" +
+            "if(!isFullPlayer())return;\n" +
             "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<48||Math.abs(dx)>dy*1.15)return;\n" +
-            "try{tryNative();}catch(z){}\n" +
-            "try{tryClick();}catch(z){}\n" +
-            "setTimeout(forceCleanPlayerChrome,400);\n" +
-            "setTimeout(forceCleanPlayerChrome,900);\n" +
+            "if(dy<56||Math.abs(dx)>dy)return;\n" +
+            "minimize();\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
-            "function forceCleanPlayerChrome(){\n" +
-            "try{\n" +
-            "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
-            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
-            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
-            "if(p){\n" +
-            "['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});\n" +
-            "}\n" +
-            "document.querySelectorAll('#content,#main-panel,ytmusic-browse-response,ytmusic-tabs,ytmusic-app-layout > *').forEach(function(el){\n" +
-            "try{\n" +
-            "if(el.style&&el.style.getPropertyValue('visibility')==='hidden')el.style.removeProperty('visibility');\n" +
-            "if(el.style&&el.style.getPropertyValue('opacity')==='0')el.style.removeProperty('opacity');\n" +
-            "if(el.style&&el.style.getPropertyValue('display')==='none'&&el.id==='content')el.style.removeProperty('display');\n" +
-            "}catch(z){}\n" +
-            "});\n" +
-            "}catch(z){}\n" +
-            "}\n" +
-            "forceCleanPlayerChrome();\n" +
-            "setInterval(function(){try{if(!pageOpen())forceCleanPlayerChrome();}catch(z){}},700);\n" +
             "}catch(e){}})();\n"
+
 
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
