@@ -5633,42 +5633,15 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(window.__rotaYtmTimer){try{clearInterval(window.__rotaYtmTimer);}catch(z){}}\n" +
             "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
             "window.__rotaYtmCtl=null;\n" +
-            // Mavi kare/ripple yok; gri daire var
+            // Sadece mavi kare tap-highlight'ı kapat; orijinal ileri/geri/oynat ripple kalsın
             "if(!document.getElementById('__rota_ytm_fb')){\n" +
             "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
             "st.textContent=\n" +
-            "'ytmusic-player-page,ytmusic-player-page *{-webkit-tap-highlight-color:transparent!important;tap-highlight-color:transparent!important;}'+\n" +
-            "'ytmusic-player-page *:focus,ytmusic-player-page *:active,ytmusic-player-page *:focus-visible,'+\n" +
-            "'ytmusic-player-bar *:focus,ytmusic-player-bar *:active{'+\n" +
-            "'outline:none!important;box-shadow:none!important;'+\n" +
-            "'}'+\n" +
-            "'ytmusic-player-page paper-ripple,ytmusic-player-page .paper-ripple,'+\n" +
-            "'ytmusic-player-bar paper-ripple,ytmusic-player-bar .paper-ripple,'+\n" +
-            "'tp-yt-paper-icon-button paper-ripple,yt-icon-button paper-ripple{'+\n" +
-            "'display:none!important;opacity:0!important;visibility:hidden!important;'+\n" +
-            "'}'+\n" +
-            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-page .play-pause-button,'+\n" +
-            "'ytmusic-player-page .previous-button,ytmusic-player-page .next-button,'+\n" +
-            "'ytmusic-player-page tp-yt-paper-icon-button,ytmusic-player-page yt-icon-button{'+\n" +
+            "'ytmusic-player-page,ytmusic-player-page *{-webkit-tap-highlight-color:transparent!important;}'+\n" +
+            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-page .play-pause-button{'+\n" +
             "'-webkit-tap-highlight-color:transparent!important;outline:none!important;'+\n" +
-            "'border-radius:50%!important;overflow:hidden!important;'+\n" +
-            "'--paper-ripple-color:transparent!important;'+\n" +
             "'}';\n" +
             "(document.documentElement||document).appendChild(st);\n" +
-            "}\n" +
-            "function flashGray(el){\n" +
-            "try{\n" +
-            "var r=el.getBoundingClientRect();\n" +
-            "if(r.width<8||r.height<8)return;\n" +
-            "var size=Math.max(r.width,r.height)*1.45;\n" +
-            "var d=document.createElement('div');\n" +
-            "d.style.cssText='position:fixed;left:'+(r.left+r.width/2-size/2)+'px;top:'+(r.top+r.height/2-size/2)+\n" +
-            "'px;width:'+size+'px;height:'+size+'px;border-radius:50%;background:rgba(160,160,160,.42);'+\n" +
-            "'pointer-events:none;z-index:2147483646;opacity:1;transition:opacity .28s ease-out;';\n" +
-            "(document.documentElement||document.body).appendChild(d);\n" +
-            "setTimeout(function(){d.style.opacity='0';},16);\n" +
-            "setTimeout(function(){try{d.remove();}catch(z){}},320);\n" +
-            "}catch(z){}\n" +
             "}\n" +
             "function isFullPlayer(){\n" +
             "try{\n" +
@@ -5697,27 +5670,11 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(z){}\n" +
             "return false;\n" +
             "}\n" +
-            "function controlEl(e){\n" +
-            "try{\n" +
-            "var path=e.composedPath?e.composedPath():[e.target];\n" +
-            "for(var i=0;i<path.length;i++){\n" +
-            "var n=path[i];if(!n||!n.tagName)continue;\n" +
-            "var cls=(typeof n.className==='string'?n.className:'')||'';\n" +
-            "var id=n.id||'';\n" +
-            "if(/play-pause|previous-button|next-button/.test(cls)||id==='play-pause-button')return n;\n" +
-            "var tag=n.tagName.toLowerCase();\n" +
-            "if((tag==='tp-yt-paper-icon-button'||tag==='yt-icon-button')&&n.getBoundingClientRect().top>window.innerHeight*0.4)return n;\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "return null;\n" +
-            "}\n" +
-            // TEK İŞ: sol üst küçült tuşuna native bas
             "function pressMinimize(){\n" +
             "if(!isFullPlayer())return;\n" +
             "try{\n" +
             "if(window.RotaTap){\n" +
             "var w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);\n" +
-            // sol üst chevron bölgesi (ekranın ~%7 x %6)
             "window.RotaTap.tap(36/w,48/h);\n" +
             "setTimeout(function(){try{if(window.RotaTap&&window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},280);\n" +
             "}\n" +
@@ -5747,7 +5704,6 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(!e.touches||e.touches.length!==1)return;\n" +
             "if(!isFullPlayer())return;\n" +
             "if(isOnSlider(e))return;\n" +
-            "var c=controlEl(e);if(c)flashGray(c);\n" +
             "sx=e.touches[0].clientX;sy=e.touches[0].clientY;active=true;\n" +
             "},{passive:true,capture:true,signal:sig});\n" +
             "document.addEventListener('touchmove',function(e){\n" +
