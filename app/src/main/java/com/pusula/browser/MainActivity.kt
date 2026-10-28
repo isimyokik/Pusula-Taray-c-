@@ -82,6 +82,7 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 
 class MainActivity : AppCompatActivity() {
+    private val posBridge by lazy { PosBridge(applicationContext) }
 
     private class BTab(val web: WebView, val bridge: PusulaBridge, val incognito: Boolean = false) {
         var title: String = "Yeni Sekme"
@@ -829,7 +830,7 @@ fun onMusicCatalog(raw: String?) {
         if (prefs.clearOnExit) {
             try {
                 clearBrowsingData()
-                prefs.clearHistory()
+                prefs.clearHistory(); posBridge.clear()
                 prefs.saveTabs(emptyList(), 0)
                 clearTabStates()
             } catch (_: Exception) { }
@@ -1210,6 +1211,7 @@ fun onMusicCatalog(raw: String?) {
         val tab = BTab(web, bridge, incognito)
         val s = web.settings
         applyWebColorScheme(web)
+        if (!incognito) try { web.addJavascriptInterface(posBridge, "RotaPos") } catch (_: Exception) { }
         s.javaScriptEnabled = true
         s.domStorageEnabled = true
         try { s.databaseEnabled = true } catch (_: Exception) { }
@@ -2162,6 +2164,10 @@ fun onMusicCatalog(raw: String?) {
             if (isYt(u)) {
                 if (syncYoutubeCookie()) { try { view?.reload() } catch (_: Exception) { } }
             }
+            // Videoların kaldığı yeri hatırla (gizli sekme ve YT Music hariç)
+            if (u.startsWith("http") && !tab.incognito && !u.contains("music.youtube.com")) {
+                try { view?.evaluateJavascript(RESUME_POS_JS, null) } catch (_: Exception) { }
+            }
             // YouTube ortadaki logo / büyük oynat katmanı + sayfa içi mini player
             if (u.contains("youtube.com") || u.contains("youtu.be") || u.contains("music.youtube.com")) {
                 try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
@@ -2934,7 +2940,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             return cell
         }
         quick.addView(qBtn("🕘", "Geçmiş") {
-            showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory() })
+            showEntries("Geçmiş", prefs.history(), { prefs.removeHistory(it.url) }, Pair("Temizle") { prefs.clearHistory(); posBridge.clear() })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
         quick.addView(qBtn("⭐", "Yer imleri") {
             showEntries("Yer İmleri", prefs.bookmarks(), { prefs.removeBookmark(it.url) }, null)
@@ -5357,7 +5363,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             prefs.clearOnExit = v
         })
         add(settingsRow("🕘", "Geçmişi temizle", null, null) {
-            themedConfirm("Geçmiş silinsin mi?", onYes = { prefs.clearHistory(); toast("Silindi") }, onNo = {})
+            themedConfirm("Geçmiş silinsin mi?", onYes = { prefs.clearHistory(); posBridge.clear(); toast("Silindi") }, onNo = {})
         })
         add(settingsRow("🧽", "Önbellek ve çerezler", null, null) {
             themedConfirm("Önbellek ve çerezler silinsin mi?", onYes = { clearBrowsingData(); toast("Temizlendi") }, onNo = {})
@@ -5603,50 +5609,108 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
             "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
-            "if(window.__rotaYtmSwipe)return;window.__rotaYtmSwipe=1;\n" +
-            "function playerEl(){return document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');}\n" +
-            "function isOpen(){\n" +
-            "var p=playerEl();if(!p)return false;\n" +
-            "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
-            "return r.width>40&&r.height>H*0.45&&r.top<H*0.3&&r.bottom>H*0.55;\n" +
+            "function scrub(){\n" +
+            "try{\n" +
+            "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
+            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "var p=document.querySelector('ytmusic-player-page');\n" +
+            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
+            "}catch(z){}\n" +
             "}\n" +
-            "function isSeek(el){\n" +
-            "return !!(el&&el.closest&&el.closest('tp-yt-paper-slider,yt-slider,[role=slider],#progress-bar,.progress-bar,.progress-container'));\n" +
+            "scrub();\n" +
+            "function isFullPlayer(){\n" +
+            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
+            "if(!p)return false;\n" +
+            "try{\n" +
+            "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
+            "if(layout){\n" +
+            "var st=layout.getAttribute('player-ui-state_')||'';\n" +
+            "if(st==='PLAYER_BAR_ONLY')return false;\n" +
+            "if(layout.playerPageOpen_===false)return false;\n" +
             "}\n" +
-            "function minBtn(){\n" +
-            "var p=playerEl();if(!p)return null;\n" +
-            "var list=p.querySelectorAll('button,tp-yt-paper-icon-button,[role=button]');\n" +
-            "for(var i=0;i<list.length;i++){\n" +
-            "var el=list[i],r=el.getBoundingClientRect();\n" +
-            "if(r.width>=20&&r.height>=20&&r.top>=0&&r.top<110&&r.left>=0&&r.left<110)return el;\n" +
+            "}catch(z){}\n" +
+            "var cs=getComputedStyle(p);\n" +
+            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
+            "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
+            "return r.width>0&&r.height>H*0.55&&r.top<H*0.22;\n" +
             "}\n" +
-            "try{var t=document.elementFromPoint(36,40);if(t){var b=t.closest('button,tp-yt-paper-icon-button,[role=button]');if(b&&p.contains(b))return b;}}catch(z){}\n" +
+            "function findMinBtn(){\n" +
+            "var sels=[\n" +
+            "'.player-minimize-button',\n" +
+            "'.toggle-player-page-button',\n" +
+            "'tp-yt-paper-icon-button.toggle-player',\n" +
+            "'ytmusic-player-page .exit-fullscreen-button',\n" +
+            "'ytmusic-player-page [aria-label*=\"Küçült\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Down\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Close\"]',\n" +
+            "'ytmusic-player-page button'\n" +
+            "];\n" +
+            "for(var i=0;i<sels.length;i++){\n" +
+            "var nodes=document.querySelectorAll(sels[i]);\n" +
+            "for(var j=0;j<nodes.length;j++){\n" +
+            "var el=nodes[j],r=el.getBoundingClientRect();\n" +
+            "if(r.width>0&&r.height>0&&r.top<120&&r.left<120)return el;\n" +
+            "}\n" +
+            "}\n" +
+            "try{\n" +
+            "var t=document.elementFromPoint(28,40);\n" +
+            "if(t)return t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;\n" +
+            "}catch(z){}\n" +
             "return null;\n" +
             "}\n" +
-            "function pressMin(){\n" +
-            "var el=minBtn();if(!el)return;\n" +
+            "function minimize(){\n" +
+            "if(!isFullPlayer())return;\n" +
+            "var el=findMinBtn();\n" +
+            "if(!el)return;\n" +
             "try{el.click();}catch(z){}\n" +
+            "try{\n" +
+            "if(window.RotaTap){\n" +
+            "var r=el.getBoundingClientRect();\n" +
+            "var x=(r.left+r.width/2)/window.innerWidth;\n" +
+            "var y=(r.top+r.height/2)/window.innerHeight;\n" +
+            "window.RotaTap.tap(x,y);\n" +
             "}\n" +
-            "var sx=0,sy=0,on=0;\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "function unlock(){\n" +
+            "try{\n" +
+            "['html','body','ytmusic-app','ytmusic-app-layout','#layout','#content','#main-panel','#contents','ytmusic-browse-response','ytmusic-tabbed-search-results-renderer','ytmusic-section-list-renderer'].forEach(function(q){\n" +
+            "document.querySelectorAll(q).forEach(function(el){\n" +
+            "var st=el.style;if(!st)return;\n" +
+            "if(st.overflow==='hidden'||st.overflowY==='hidden'){st.removeProperty('overflow');st.removeProperty('overflow-y');}\n" +
+            "if(st.touchAction==='none'||st.touchAction==='pinch-zoom'){st.removeProperty('touch-action');}\n" +
+            "if(st.pointerEvents==='none'&&q!=='ytmusic-app-layout'){st.removeProperty('pointer-events');}\n" +
+            "if(el.hasAttribute&&el.hasAttribute('dragging'))el.removeAttribute('dragging');\n" +
+            "});\n" +
+            "});\n" +
+            "document.querySelectorAll('tp-yt-paper-slider,tp-yt-paper-progress,#progress-bar,#sliderBar').forEach(function(el){try{el.removeAttribute('dragging');el.removeAttribute('pressed');el.removeAttribute('immediate-value-changing');}catch(z){}});\n" +
+            "['pointerup','mouseup','touchend'].forEach(function(n){try{document.dispatchEvent(new Event(n,{bubbles:true}));}catch(z){}});\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "setInterval(function(){if(!isFullPlayer())unlock();},500);\n" +
+            "document.addEventListener('touchend',function(){setTimeout(function(){if(!isFullPlayer())unlock();},150);setTimeout(function(){if(!isFullPlayer())unlock();},700);},{passive:true,capture:true});\n" +
+            "var sx=0,sy=0,tr=false;\n" +
             "document.addEventListener('touchstart',function(e){\n" +
-            "on=0;\n" +
+            "tr=false;\n" +
             "if(!e.touches||e.touches.length!==1)return;\n" +
-            "if(!isOpen())return;\n" +
-            "var t=e.touches[0],el=null;\n" +
-            "try{el=document.elementFromPoint(t.clientX,t.clientY);}catch(z){}\n" +
-            "if(isSeek(el))return;\n" +
-            "sx=t.clientX;sy=t.clientY;on=1;\n" +
+            "if(!isFullPlayer())return;\n" +
+            "try{if(e.target&&e.target.closest&&e.target.closest('tp-yt-paper-slider,#progress-bar,#sliderBar,.slider,#slider-container,ytmusic-player-bar,.time-info'))return;}catch(z){}\n" +
+            "sx=e.touches[0].clientX;\n" +
+            "sy=e.touches[0].clientY;\n" +
+            "tr=true;\n" +
             "},{passive:true,capture:true});\n" +
             "document.addEventListener('touchend',function(e){\n" +
-            "if(!on)return;on=0;\n" +
-            "if(!isOpen())return;\n" +
+            "if(!tr)return;tr=false;\n" +
+            "if(!isFullPlayer())return;\n" +
             "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
             "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<44||Math.abs(dx)>dy)return;\n" +
-            "pressMin();\n" +
+            "if(dy<50||Math.abs(dx)>dy*1.1)return;\n" +
+            "minimize();\n" +
             "},{passive:true,capture:true});\n" +
-            "document.addEventListener('touchcancel',function(){on=0;},{passive:true,capture:true});\n" +
-            "}catch(e){}})();\n
+            "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
+            "}catch(e){}})();\n"
+
 
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
@@ -5940,6 +6004,64 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         if(!window.__rotaNpTimer)window.__rotaNpTimer=setInterval(stop,600);
         stop();
         }catch(e){}})();
+        """
+
+        // Videonun kaldığı dakikayı saklar/geri yükler; YouTube küçük resimlerine kırmızı ilerleme çubuğu ekler
+        const val RESUME_POS_JS = """
+(function(){try{
+if(window.__rotaPos||typeof RotaPos==='undefined')return;
+window.__rotaPos=true;
+var isYt=location.hostname.indexOf('youtube.com')>=0;
+function key(){
+ var p=location.pathname;
+ if(isYt){
+  if(p==='/watch'){var m=location.search.match(/[?&]v=([^&]+)/);return m?'yt:'+m[1]:'';}
+  var s=p.match(/^\/shorts\/([^\/?]+)/);return s?'yt:'+s[1]:'';
+ }
+ return 'u:'+location.origin+p+location.search;
+}
+var last='',since=0,restored=false,tick=0;
+setInterval(function(){try{
+ var v=document.querySelector('video');if(!v)return;
+ var k=key();
+ if(k!==last){last=k;restored=false;since=Date.now();return;}
+ if(!k||Date.now()-since<3000)return;
+ var d=v.duration;if(!d||isNaN(d)||!isFinite(d)||d<120||v.readyState<1)return;
+ if(!restored){
+  restored=true;
+  var s=RotaPos.get(k);
+  if(s){var t=parseFloat(s.split('|')[0]);if(t>5&&t<d-20&&v.currentTime<5){v.currentTime=t;}}
+  return;
+ }
+ tick++;
+ var ct=v.currentTime;
+ if(ct>=d-20){RotaPos.remove(k);}
+ else if(ct>10&&tick%5===0){RotaPos.put(k,ct,d);}
+}catch(e){}},1000);
+window.addEventListener('pagehide',function(){try{var v=document.querySelector('video'),k=key();if(v&&k&&restored&&v.duration>=120&&v.currentTime>10&&v.currentTime<v.duration-20)RotaPos.put(k,v.currentTime,v.duration);}catch(e){}});
+if(isYt){
+ function bars(){try{
+  var all=JSON.parse(RotaPos.all());
+  var as=document.querySelectorAll('a[href*="/watch?v="]');
+  for(var i=0;i<as.length;i++){
+   var a=as[i],m=a.getAttribute('href').match(/[?&]v=([^&]+)/);if(!m)continue;
+   var e=all[m[1]];if(!e||!e[1])continue;
+   var img=a.querySelector('img');if(!img)continue;
+   var box=img.parentElement;if(!box)continue;
+   var pct=Math.max(0,Math.min(100,e[0]/e[1]*100));
+   var b=box.querySelector('[data-rota-bar]');
+   if(!b){
+    if(getComputedStyle(box).position==='static')box.style.position='relative';
+    b=document.createElement('div');b.setAttribute('data-rota-bar','1');
+    b.style.cssText='position:absolute;left:0;bottom:0;height:3px;background:#f00;z-index:5;pointer-events:none';
+    box.appendChild(b);
+   }
+   b.style.width=pct+'%';
+  }
+ }catch(e){}}
+ setInterval(bars,3000);bars();
+}
+}catch(e){}})();
         """
 
         // Normal videolar altyazısız başlar (reklam dışında). Kullanıcı sonradan açarsa karışılmaz.
@@ -6292,4 +6414,44 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
 
 
     }
+}
+
+/** Videoların kaldığı yeri (dakika) saklar. Sadece gizli olmayan sekmelere eklenir. */
+class PosBridge(ctx: android.content.Context) {
+    private val sp = ctx.getSharedPreferences("rota_pos", android.content.Context.MODE_PRIVATE)
+
+    @android.webkit.JavascriptInterface
+    fun get(key: String): String = sp.getString("k:" + key.take(300), "") ?: ""
+
+    @android.webkit.JavascriptInterface
+    fun put(key: String, t: Double, dur: Double) {
+        if (key.isBlank() || t.isNaN() || dur.isNaN()) return
+        val ed = sp.edit()
+        ed.putString("k:" + key.take(300), "$t|$dur|${System.currentTimeMillis()}")
+        val keys = sp.all.keys.filter { it.startsWith("k:") }
+        if (keys.size > 600) {
+            val old = keys.sortedBy { (sp.getString(it, "")?.split("|")?.getOrNull(2)?.toLongOrNull() ?: 0L) }.take(keys.size - 500)
+            for (k in old) ed.remove(k)
+        }
+        ed.apply()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun remove(key: String) { sp.edit().remove("k:" + key.take(300)).apply() }
+
+    /** YouTube video kimlikleri için {id:[saniye,süre]} */
+    @android.webkit.JavascriptInterface
+    fun all(): String {
+        val o = org.json.JSONObject()
+        for ((k, v) in sp.all) {
+            if (!k.startsWith("k:yt:") || v !is String) continue
+            val p = v.split("|")
+            val t = p.getOrNull(0)?.toDoubleOrNull() ?: continue
+            val d = p.getOrNull(1)?.toDoubleOrNull() ?: continue
+            o.put(k.removePrefix("k:yt:"), org.json.JSONArray().put(t).put(d))
+        }
+        return o.toString()
+    }
+
+    fun clear() { sp.edit().clear().apply() }
 }
