@@ -102,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         var capScript: ScriptHandler? = null
         var openScript: ScriptHandler? = null
         var progressScript: ScriptHandler? = null
+        var ytmUxScript: ScriptHandler? = null
         var errorUrl: String? = null
         var errorLoading: Boolean = false
         var networkRetryUsed: Boolean = false
@@ -1357,6 +1358,7 @@ fun onMusicCatalog(raw: String?) {
             else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
             // YouTube kaldığın yerden devam (reklam ayarından bağımsız)
             if (t.progressScript == null) t.progressScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_PROGRESS_JS, setOf("*"))
+            if (t.ytmUxScript == null) t.ytmUxScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_MUSIC_UX_JS, setOf("*"))
             if (prefs.bgPlay && t.keepScript == null) t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS, setOf("*"))
             else if (!prefs.bgPlay && t.keepScript != null) { t.keepScript?.remove(); t.keepScript = null }
         } catch (_: Exception) { }
@@ -5625,93 +5627,56 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
         val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
-            "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
+            "if((location.hostname||'').indexOf('music.youtube.com')<0)return;\n" +
             "if(window.__rotaYtmTimer){try{clearInterval(window.__rotaYtmTimer);}catch(z){}}\n" +
             "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
             "window.__rotaYtmCtl=null;\n" +
-            // Gri yuvarlak dokunma geri bildirimi (ileri / geri / oynat-duraklat)
+            // gri yuvarlak feedback CSS
             "if(!document.getElementById('__rota_ytm_fb')){\n" +
             "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
             "st.textContent=\n" +
-            "'ytmusic-player-page tp-yt-paper-icon-button,'+\n" +
-            "'ytmusic-player-page yt-icon-button,'+\n" +
-            "'ytmusic-player-page .play-pause-button,'+\n" +
-            "'ytmusic-player-page .previous-button,'+\n" +
-            "'ytmusic-player-page .next-button,'+\n" +
-            "'ytmusic-player-bar tp-yt-paper-icon-button,'+\n" +
-            "'ytmusic-player-bar yt-icon-button,'+\n" +
-            "'ytmusic-player-bar #play-pause-button,'+\n" +
-            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-bar .previous-button,ytmusic-player-bar .next-button{'+\n" +
-            "'-webkit-tap-highlight-color:transparent!important;'+\n" +
-            "'tap-highlight-color:transparent!important;'+\n" +
-            "'outline:none!important;'+\n" +
-            "'border-radius:50%!important;'+\n" +
-            "'overflow:hidden!important;'+\n" +
-            "'--paper-ripple-color:rgba(170,170,170,.4)!important;'+\n" +
-            "'--iron-ink-color:rgba(170,170,170,.4)!important;'+\n" +
+            "'ytmusic-player-page tp-yt-paper-icon-button,ytmusic-player-page yt-icon-button,'+\n" +
+            "'ytmusic-player-page .play-pause-button,ytmusic-player-page .previous-button,ytmusic-player-page .next-button,'+\n" +
+            "'ytmusic-player-bar tp-yt-paper-icon-button,ytmusic-player-bar yt-icon-button,'+\n" +
+            "'#play-pause-button,ytmusic-play-button-renderer{'+\n" +
+            "'-webkit-tap-highlight-color:transparent!important;outline:none!important;'+\n" +
+            "'border-radius:50%!important;overflow:hidden!important;'+\n" +
+            "'--paper-ripple-color:rgba(170,170,170,.45)!important;'+\n" +
             "'}'+\n" +
-            "'ytmusic-player-page paper-ripple,ytmusic-player-bar paper-ripple,tp-yt-paper-icon-button paper-ripple{'+\n" +
-            "'color:rgba(170,170,170,.4)!important;'+\n" +
-            "'}'+\n" +
-            "'ytmusic-player-page .play-pause-button:focus,ytmusic-player-page .previous-button:focus,ytmusic-player-page .next-button:focus,'+\n" +
-            "'ytmusic-player-page tp-yt-paper-icon-button:focus,ytmusic-player-bar tp-yt-paper-icon-button:focus{'+\n" +
-            "'outline:none!important;box-shadow:none!important;background:transparent!important;'+\n" +
-            "'}';\n" +
-            "document.documentElement.appendChild(st);\n" +
+            "'ytmusic-player-page paper-ripple,ytmusic-player-bar paper-ripple{color:rgba(170,170,170,.45)!important;}';\n" +
+            "(document.documentElement||document).appendChild(st);\n" +
             "}\n" +
             "function flashGray(el){\n" +
             "try{\n" +
-            "if(!el||!el.getBoundingClientRect)return;\n" +
             "var r=el.getBoundingClientRect();\n" +
             "if(r.width<8||r.height<8)return;\n" +
-            "var size=Math.max(r.width,r.height)*1.35;\n" +
+            "var size=Math.max(r.width,r.height)*1.4;\n" +
             "var d=document.createElement('div');\n" +
             "d.style.cssText='position:fixed;left:'+(r.left+r.width/2-size/2)+'px;top:'+(r.top+r.height/2-size/2)+\n" +
-            "'px;width:'+size+'px;height:'+size+'px;border-radius:50%;background:rgba(160,160,160,.38);'+\n" +
-            "'pointer-events:none;z-index:2147483646;opacity:1;transition:opacity .32s ease-out;';\n" +
-            "document.documentElement.appendChild(d);\n" +
-            "requestAnimationFrame(function(){d.style.opacity='0';});\n" +
-            "setTimeout(function(){try{d.remove();}catch(z){}},360);\n" +
+            "'px;width:'+size+'px;height:'+size+'px;border-radius:50%;background:rgba(160,160,160,.4);'+\n" +
+            "'pointer-events:none;z-index:2147483646;opacity:1;transition:opacity .3s ease-out;';\n" +
+            "(document.documentElement||document.body).appendChild(d);\n" +
+            "setTimeout(function(){d.style.opacity='0';},20);\n" +
+            "setTimeout(function(){try{d.remove();}catch(z){}},340);\n" +
             "}catch(z){}\n" +
-            "}\n" +
-            "function controlFromEvent(e){\n" +
-            "try{\n" +
-            "var path=e.composedPath?e.composedPath():[e.target];\n" +
-            "for(var i=0;i<path.length;i++){\n" +
-            "var n=path[i];if(!n||!n.tagName)continue;\n" +
-            "var tag=n.tagName.toLowerCase();\n" +
-            "var cls=(typeof n.className==='string'?n.className:'')||'';\n" +
-            "var id=n.id||'';\n" +
-            "if(/play-pause|previous-button|next-button/.test(cls)||id==='play-pause-button')return n;\n" +
-            "if(tag==='tp-yt-paper-icon-button'||tag==='yt-icon-button'){\n" +
-            "var rr=n.getBoundingClientRect();\n" +
-            // alt kontrol şeridi
-            "if(rr.top>window.innerHeight*0.45)return n;\n" +
-            "}\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "return null;\n" +
-            "}\n" +
-            "if(!window.__rotaYtmFbBound){\n" +
-            "window.__rotaYtmFbBound=1;\n" +
-            "document.addEventListener('pointerdown',function(e){\n" +
-            "if(!isFullPlayer())return;\n" +
-            "var el=controlFromEvent(e);\n" +
-            "if(el)flashGray(el);\n" +
-            "},{passive:true,capture:true});\n" +
             "}\n" +
             "function isFullPlayer(){\n" +
-            "var p=document.querySelector('ytmusic-player-page');\n" +
-            "if(!p)return false;\n" +
             "try{\n" +
             "var layout=document.querySelector('ytmusic-app-layout');\n" +
             "if(layout){\n" +
-            "var st=(layout.getAttribute('player-ui-state_')||'');\n" +
-            "if(st==='PLAYER_BAR_ONLY')return false;\n" +
+            "var st=layout.getAttribute('player-ui-state_')||layout.getAttribute('player-ui-state')||'';\n" +
+            "if(st==='PLAYER_BAR_ONLY'||st==='MINIPLAYER')return false;\n" +
+            "if(st==='PLAYER_PAGE_OPEN'||st==='FULLSCREEN_PLAYER'||st==='PLAYER_PAGE_PLAYER_BAR')return true;\n" +
+            "if(layout.playerPageOpen_===false)return false;\n" +
+            "if(layout.playerPageOpen_===true)return true;\n" +
             "}\n" +
-            "}catch(z){}\n" +
+            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
+            "if(!p)return false;\n" +
+            "var cs=getComputedStyle(p);\n" +
+            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
             "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
-            "return r.height>H*0.45&&r.top<H*0.3;\n" +
+            "return r.height>H*0.35&&r.width>0;\n" +
+            "}catch(z){return false;}\n" +
             "}\n" +
             "function isOnSlider(e){\n" +
             "try{\n" +
@@ -5725,34 +5690,59 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(z){}\n" +
             "return false;\n" +
             "}\n" +
+            "function controlEl(e){\n" +
+            "try{\n" +
+            "var path=e.composedPath?e.composedPath():[e.target];\n" +
+            "for(var i=0;i<path.length;i++){\n" +
+            "var n=path[i];if(!n||!n.tagName)continue;\n" +
+            "var cls=(typeof n.className==='string'?n.className:'')||'';\n" +
+            "var id=n.id||'';\n" +
+            "if(/play-pause|previous-button|next-button/.test(cls)||id==='play-pause-button')return n;\n" +
+            "var tag=n.tagName.toLowerCase();\n" +
+            "if(tag==='tp-yt-paper-icon-button'||tag==='yt-icon-button'){\n" +
+            "var rr=n.getBoundingClientRect();\n" +
+            "if(rr.top>window.innerHeight*0.4)return n;\n" +
+            "}\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "return null;\n" +
+            "}\n" +
             "function pressMinimize(){\n" +
             "if(!isFullPlayer())return;\n" +
             "var clicked=false;\n" +
-            "var sels=['.player-minimize-button','.toggle-player-page-button','tp-yt-paper-icon-button.toggle-player','ytmusic-player-page tp-yt-paper-icon-button','ytmusic-player-page button'];\n" +
+            "var sels=[\n" +
+            "'.player-minimize-button','.toggle-player-page-button',\n" +
+            "'tp-yt-paper-icon-button.toggle-player',\n" +
+            "'ytmusic-player-page .exit-fullscreen-button',\n" +
+            "'ytmusic-player-page [aria-label*=\"Küçült\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Down\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Collapse\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Close\"]'\n" +
+            "];\n" +
             "for(var i=0;i<sels.length&&!clicked;i++){\n" +
+            "try{\n" +
             "var nodes=document.querySelectorAll(sels[i]);\n" +
             "for(var j=0;j<nodes.length;j++){\n" +
             "var el=nodes[j],r=el.getBoundingClientRect();\n" +
-            "if(r.width>0&&r.height>0&&r.top>=0&&r.top<120&&r.left<120){\n" +
-            "try{el.click();clicked=true;break;}catch(z){}\n" +
+            "if(r.width>0&&r.height>0&&r.top<130&&r.left<140){try{el.click();clicked=true;break;}catch(z){}}\n" +
             "}\n" +
-            "}\n" +
+            "}catch(z){}\n" +
             "}\n" +
             "if(!clicked){\n" +
             "try{\n" +
-            "var pts=[[40,48],[48,56],[32,40],[56,64],[24,36]];\n" +
-            "for(var k=0;k<pts.length&&!clicked;k++){\n" +
-            "var t=document.elementFromPoint(pts[k][0],pts[k][1]);\n" +
-            "if(!t)continue;\n" +
-            "var b=t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;\n" +
+            "[[36,44],[48,52],[28,36],[56,60],[20,32],[64,48]].forEach(function(pt){\n" +
+            "if(clicked)return;\n" +
+            "var t=document.elementFromPoint(pt[0],pt[1]);if(!t)return;\n" +
+            "var b=t.closest('button,[role=button],tp-yt-paper-icon-button,yt-icon-button,a')||t;\n" +
             "try{b.click();clicked=true;}catch(z){}\n" +
-            "}\n" +
+            "});\n" +
             "}catch(z){}\n" +
             "}\n" +
             "try{\n" +
             "if(window.RotaTap){\n" +
             "window.RotaTap.tap(40/Math.max(1,window.innerWidth),48/Math.max(1,window.innerHeight));\n" +
-            "setTimeout(function(){try{if(window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},350);\n" +
+            "setTimeout(function(){try{if(window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},300);\n" +
             "}\n" +
             "}catch(z){}\n" +
             "try{\n" +
@@ -5774,38 +5764,51 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "window.__rotaYtmCtl=new AbortController();\n" +
             "var sig=window.__rotaYtmCtl.signal;\n" +
             "var sx=0,sy=0,active=false;\n" +
-            "document.addEventListener('touchstart',function(e){\n" +
+            "function down(x,y,e){\n" +
             "active=false;\n" +
-            "if(!e.touches||e.touches.length!==1)return;\n" +
             "if(!isFullPlayer())return;\n" +
-            "if(isOnSlider(e))return;\n" +
-            "sx=e.touches[0].clientX;\n" +
-            "sy=e.touches[0].clientY;\n" +
-            "active=true;\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchmove',function(e){\n" +
-            "if(!active||!e.touches||!e.touches[0])return;\n" +
-            "var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;\n" +
+            "if(e&&isOnSlider(e))return;\n" +
+            "sx=x;sy=y;active=true;\n" +
+            "}\n" +
+            "function move(x,y){\n" +
+            "if(!active)return;\n" +
+            "var dx=x-sx,dy=y-sy;\n" +
             "if(Math.abs(dx)>Math.abs(dy)*1.15)active=false;\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchend',function(e){\n" +
+            "}\n" +
+            "function up(x,y,e){\n" +
             "if(!active)return;active=false;\n" +
             "if(!isFullPlayer())return;\n" +
-            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
-            "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
+            "var dy=y-sy,dx=x-sx;\n" +
             "if(dy<48)return;\n" +
             "if(Math.abs(dx)>dy*0.95)return;\n" +
             "pressMinimize();\n" +
+            "}\n" +
+            "document.addEventListener('touchstart',function(e){\n" +
+            "if(!e.touches||e.touches.length!==1)return;\n" +
+            "down(e.touches[0].clientX,e.touches[0].clientY,e);\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('touchmove',function(e){\n" +
+            "if(!e.touches||!e.touches[0])return;\n" +
+            "move(e.touches[0].clientX,e.touches[0].clientY);\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('touchend',function(e){\n" +
+            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
+            "up(t.clientX,t.clientY,e);\n" +
             "},{passive:true,capture:true,signal:sig});\n" +
             "document.addEventListener('touchcancel',function(){active=false;},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('pointerdown',function(e){\n" +
+            "if(e.pointerType==='mouse'&&e.button!==0)return;\n" +
+            "var c=controlEl(e);if(c)flashGray(c);\n" +
+            "down(e.clientX,e.clientY,e);\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('pointermove',function(e){move(e.clientX,e.clientY);},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('pointerup',function(e){up(e.clientX,e.clientY,e);},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('pointercancel',function(){active=false;},{passive:true,capture:true,signal:sig});\n" +
             "}\n" +
             "window.__rotaYtmTimer=setInterval(function(){\n" +
-            "try{\n" +
-            "if(isFullPlayer())bindGesture();\n" +
-            "else unbindGesture();\n" +
-            "}catch(z){}\n" +
-            "},300);\n" +
-            "if(isFullPlayer())bindGesture();else unbindGesture();\n" +
+            "try{if(isFullPlayer())bindGesture();else unbindGesture();}catch(z){}\n" +
+            "},250);\n" +
+            "try{if(isFullPlayer())bindGesture();else unbindGesture();}catch(z){}\n" +
             "}catch(e){}})();\n"
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
