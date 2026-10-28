@@ -221,6 +221,8 @@ class MainActivity : AppCompatActivity() {
     private var extSeenSince = 0L
     private var extQuietSince = 0L
     private var mediaChangedAt = 0L
+    private var mediaPlayStartAt = 0L
+    private var retriedTitle = ""
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
@@ -616,6 +618,21 @@ class MainActivity : AppCompatActivity() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         if (changed) mediaChangedAt = now
+        // YT Music: şarkı başlar başlamaz kendiliğinden durduysa (kullanıcı/odak durdurmadıysa) bir kez daha başlat
+        if (playing && !lastPlaying) mediaPlayStartAt = now
+        if (!playing && lastPlaying && !pausedByAudioFocus && now - mediaPlayStartAt < 4000L) {
+            val src = mediaSrc
+            if (src != null && src.url.contains("music.youtube.com") && retriedTitle != title) {
+                retriedTitle = title
+                try {
+                    src.web.evaluateJavascript("(function(){return (window.__userPause||window.__rotaFocusPaused)?'1':'0';})();") { r ->
+                        if (r != null && !r.contains("1")) {
+                            try { src.web.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null) } catch (_: Exception) { }
+                        }
+                    }
+                } catch (_: Exception) { }
+            }
+        }
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
         if (playing && !pausedByAudioFocus) {
@@ -5323,23 +5340,19 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
         scroll.addView(grid)
         rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val closeAll = textBtn("Tüm sekmeleri kapat") {
-            themedConfirm("Tüm sekmeler kapatılsın mı?", onYes = { d.dismiss(); closeAllTabs() }, onNo = {})
-        }
-        closeAll.textSize = 14.5f
-        closeAll.setTypeface(null, Typeface.BOLD)
-        closeAll.setTextColor(0xFFFF5C6C.toInt())
-        rootV.addView(closeAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(4) })
-
         val actions = LinearLayout(this)
         actions.orientation = LinearLayout.HORIZONTAL
-        actions.setPadding(0, dp(6), 0, 0)
+        actions.setPadding(0, dp(10), 0, 0)
         val b1 = pillBtn("＋  Yeni sekme", intArrayOf(cAccent, cAccent2)) { d.dismiss(); openTab(null) }
         val b2 = pillBtn("🕶  Gizli sekme", intArrayOf(0xFF6D2BD9.toInt(), 0xFFC026D3.toInt())) { d.dismiss(); openTab(null, true, true) }
         val l1 = LinearLayout.LayoutParams(0, dp(48), 1f); l1.rightMargin = dp(6)
         val l2 = LinearLayout.LayoutParams(0, dp(48), 1f); l2.leftMargin = dp(6)
         actions.addView(b1, l1); actions.addView(b2, l2)
         rootV.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val closeAll = pillBtn("✕  Tüm sekmeleri kapat", intArrayOf(0xFFE5484D.toInt(), 0xFFFF6B81.toInt())) {
+            themedConfirm("Tüm sekmeler kapatılsın mı?", onYes = { d.dismiss(); closeAllTabs() }, onNo = {})
+        }
+        rootV.addView(closeAll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) })
 
         fillTabs(grid, title, d)
         sheetWindow(d, rootV, true)
@@ -6716,12 +6729,18 @@ if(isYt){
             // Arka plan / KEEP_PLAYING tekrar başlatmasın
             "window.__userPause=true;" +
             "window.__rotaFocusPaused=true;" +
+            "var music=(location.hostname||'').indexOf('music.youtube')>=0;" +
+            "var did=false;" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "if(m.ended)return;" +
             "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0?m.volume:1);m.dataset._afv=String(f);}" +
             "m.dataset.pusulaWasPlaying='1';" +
-            "m.volume=0;m.muted=true;" +
-            "try{m.pause();}catch(z){}" +
+            "if(music){" +
+            // YT Music: kendi oynat/duraklat düğmesiyle durdur (öğeyi sessize alıp zorla durdurmak oynatıcıyı bozuyordu)
+            "if(!m.paused&&!did){var b=document.querySelector('ytmusic-player-bar #play-pause-button,#play-pause-button');" +
+            "if(b){did=true;b.click();}else{m.pause();}}" +
+            "m.volume=0;" +
+            "}else{m.volume=0;m.muted=true;try{m.pause();}catch(z){}}" +
             "}catch(x){}});" +
             "}catch(e){}})();"
 
@@ -6779,6 +6798,10 @@ if(isYt){
             "m.volume=Math.max(0,Math.min(1,to*__F__));" +
             "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
             "}catch(x){}});" +
+            "if((location.hostname||'').indexOf('music.youtube')>=0){setTimeout(function(){try{" +
+            "var any=Array.from(document.querySelectorAll('video,audio')).some(function(m){return !m.paused&&!m.ended;});" +
+            "if(!any){var b=document.querySelector('ytmusic-player-bar #play-pause-button,#play-pause-button');if(b)b.click();}" +
+            "}catch(z){}},350);}" +
             "}catch(e){}})();"
 
         // Kullanıcı müdahalesi: geçişi bırak, sesi tam seviyeye döndür
