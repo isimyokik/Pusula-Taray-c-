@@ -168,6 +168,12 @@ class MainActivity : AppCompatActivity() {
     /** Başka uygulama odağı KALICI aldıysa (GAIN hiç gelmeyebilir) sessizlik bitince kendiliğinden devam et. */
     private val focusResumeFallback = true
     private val focusFallbackWindowMs = 3 * 60 * 1000L
+    /**
+     * WebView (Chromium) medya çalarken kendi ses odağını da ister. Aynı uygulama iki ayrı odak isteyince
+     * biri diğerine "odağı kaybettin" der: YouTube'da ilk video başlayıp hemen duruyor ve sesi 0'da kalıyordu.
+     * Bu yüzden WebView medyası için uygulamanın ayrı odak istemesi kapalı.
+     */
+    private val webAudioFocusEnabled = false
     private var focusLevel = 1.0
     private var focusFadeRunnable: Runnable? = null
     private var focusPauseSince = 0L
@@ -192,6 +198,7 @@ class MainActivity : AppCompatActivity() {
     private val mediaStatePoll = object : Runnable {
         override fun run() {
             pollMedia()
+            try { evalExternalAudio() } catch (_: Exception) { }
             // Auto kaydırma çubuğu için konum daha sık güncellenir
             handler.postDelayed(this, 1000L)
         }
@@ -203,6 +210,94 @@ class MainActivity : AppCompatActivity() {
 
     private val audioManager: AudioManager by lazy {
         getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+
+    // ---- Başka uygulamanın sesini (WhatsApp sesli mesajı, başka müzik çalar…) ses odağı istemeden algılama ----
+    // Uygulama kendi ses odağı istemediği için (WebView ile çakışıyordu) odak olayı gelmiyordu; WebView sadece
+    // sesi kısıp öyle bırakıyordu. Burada sistemin "şu an çalan sesler" listesine bakılır: biz çalarken
+    // listede fazladan bir medya sesi belirirse başkası çalıyordur → yavaşça kıs ve DURAKLAT.
+    // Biz durakladıktan sonra listede hiç medya sesi kalmazsa ses bitmiştir → yavaşça aç ve devam et.
+    private var extBaseline = -1
+    private var extSeenSince = 0L
+    private var extQuietSince = 0L
+    private var mediaChangedAt = 0L
+    private var playbackCb: AudioManager.AudioPlaybackCallback? = null
+    private val extCheck = Runnable { evalExternalAudio() }
+
+    private fun countMediaConfigs(): Int {
+        if (Build.VERSION.SDK_INT < 26) return 0
+        return try {
+            audioManager.activePlaybackConfigurations.count { c ->
+                when (c.audioAttributes.usage) {
+                    AudioAttributes.USAGE_MEDIA,
+                    AudioAttributes.USAGE_GAME,
+                    AudioAttributes.USAGE_ASSISTANT,
+                    AudioAttributes.USAGE_VOICE_COMMUNICATION -> true
+                    else -> false
+                }
+            }
+        } catch (_: Exception) { 0 }
+    }
+
+    private fun registerExternalAudioWatch() {
+        if (Build.VERSION.SDK_INT < 26 || playbackCb != null) return
+        try {
+            val cb = object : AudioManager.AudioPlaybackCallback() {
+                override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
+                    handler.removeCallbacks(extCheck)
+                    handler.postDelayed(extCheck, 350L)
+                }
+            }
+            audioManager.registerAudioPlaybackCallback(cb, handler)
+            playbackCb = cb
+        } catch (_: Exception) { }
+    }
+
+    private fun unregisterExternalAudioWatch() {
+        try { playbackCb?.let { audioManager.unregisterAudioPlaybackCallback(it) } } catch (_: Exception) { }
+        playbackCb = null
+        handler.removeCallbacks(extCheck)
+    }
+
+    private fun beginExternalPause() {
+        if (pausedByAudioFocus) return
+        pausedByAudioFocus = true
+        focusPauseSince = android.os.SystemClock.elapsedRealtime()
+        focusPermanentLoss = false
+        extQuietSince = 0L
+        injectAllMedia(AUDIO_FOCUS_PREP_JS.replace("__FRESH__", if (focusLevel >= 0.999) "1" else "0"))
+        runFocusFade(0.0, focusFadeOutMs, false) {
+            injectAllMedia(AUDIO_FOCUS_PAUSE_JS)
+            focusLevel = 0.0
+        }
+        lastPlaying = false
+        updateFocusNotification(false)
+    }
+
+    private fun evalExternalAudio() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val n = countMediaConfigs()
+        if (pausedByAudioFocus) {
+            if (focusFadeRunnable != null || focusPermanentLoss) { extQuietSince = 0L; return }
+            if (n == 0) {
+                if (extQuietSince == 0L) extQuietSince = now
+                else if (now - extQuietSince >= 900L && now - focusPauseSince > 2500L) {
+                    extQuietSince = 0L
+                    resumeFromFocus(false)
+                }
+            } else extQuietSince = 0L
+            return
+        }
+        val ourPlaying = hasMedia && lastPlaying
+        if (!ourPlaying || focusFadeRunnable != null || now - mediaChangedAt < 5000L) {
+            extBaseline = -1; extSeenSince = 0L
+            return
+        }
+        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) extBaseline = n
+        if (extBaseline >= 1 && n > extBaseline) {
+            if (extSeenSince == 0L) extSeenSince = now
+            else if (now - extSeenSince >= 700L) { extSeenSince = 0L; beginExternalPause() }
+        } else extSeenSince = 0L
     }
 
     /**
@@ -494,6 +589,12 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) { return }
         title = cleanMeta(title); artist = cleanMeta(artist)
         if (pausedByAudioFocus && focusFadeRunnable != null) playing = false
+        // Odak duraklatması takıldıysa (GAIN gelmedi) ve kullanıcı videoyu kendisi başlattıysa:
+        // bayrakları temizle, susturulmuş sesi geri aç
+        if (has && playing && pausedByAudioFocus && focusFadeRunnable == null &&
+            android.os.SystemClock.elapsedRealtime() - focusPauseSince > 2500L) {
+            abortFocusPause()
+        }
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
             if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); abandonMediaAudioFocus() }
@@ -504,12 +605,15 @@ class MainActivity : AppCompatActivity() {
         val jumped = hasMedia && Math.abs(pos - expected) > 2500L
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
+        if (changed) mediaChangedAt = now
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
         if (playing && !pausedByAudioFocus) {
-            handler.postDelayed({
-                if (lastPlaying && !pausedByAudioFocus) requestMediaAudioFocus()
-            }, 1800L)
+            if (webAudioFocusEnabled) {
+                handler.postDelayed({
+                    if (lastPlaying && !pausedByAudioFocus) requestMediaAudioFocus()
+                }, 1800L)
+            }
             // Takılı mute/volume=0 (reklam veya eski focus) temizle
             if (playChanged) {
                 injectAllMedia(
@@ -910,6 +1014,7 @@ fun onMusicCatalog(raw: String?) {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        registerExternalAudioWatch()
         loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
@@ -1079,6 +1184,7 @@ fun onMusicCatalog(raw: String?) {
     }
 
     override fun onDestroy() {
+        try { unregisterExternalAudioWatch() } catch (_: Exception) { }
         try { abandonMediaAudioFocus() } catch (_: Exception) { }
         try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
         handler.removeCallbacks(backgroundMediaPump)
@@ -6639,6 +6745,7 @@ if(isYt){
         const val AUDIO_FOCUS_CLEAR_JS =
             "(function(){try{" +
             "window.__rotaFocusPaused=false;" +
+            "window.__userPause=false;" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "m.muted=false;m.volume=to;" +
