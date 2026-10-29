@@ -100,6 +100,7 @@ class MainActivity : AppCompatActivity() {
         var progress: Int = 100
         var preview: Bitmap? = null
         var adScript: ScriptHandler? = null
+        var adKey: String = ""
         var keepScript: ScriptHandler? = null
         var hookScript: ScriptHandler? = null
         var capScript: ScriptHandler? = null
@@ -1982,14 +1983,27 @@ fun onMusicCatalog(raw: String?) {
         return tab
     }
 
+    // YouTube reklam davranışı (ayarlardan açılıp kapanır): veri temizleme / ağ engeli / hızlı atlama
+    private val ytPrefs by lazy { getSharedPreferences("rota_yt_mode", Context.MODE_PRIVATE) }
+    private fun ytClean() = ytPrefs.getBoolean("clean", true)
+    private fun ytNetBlock() = ytPrefs.getBoolean("net", false)
+    private fun ytSkip() = ytPrefs.getBoolean("skip", true)
+    private fun ytScriptKey(): String = if (!ytClean() && !ytSkip()) "" else "c" + ytClean() + "s" + ytSkip()
+    private fun ytScriptSource(): String =
+        (if (ytClean()) STABLE_AD_BLOCKER_JS else "") + "\n" + (if (ytSkip()) YT_FAST_SKIP_JS else "")
+    private fun onYoutubePage(u: String) = u.contains("youtube.com") || u.contains("youtu.be")
+
     private fun syncScripts(t: BTab) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         try {
             if (t.openScript == null) t.openScript = WebViewCompat.addDocumentStartJavaScript(t.web, OPEN_APP_HIDE_JS, setOf("*"))
             if (t.capScript == null) t.capScript = WebViewCompat.addDocumentStartJavaScript(t.web, CAPTIONS_OFF_JS, setOf("*"))
             if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
-            if (prefs.adBlock && t.adScript == null) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, STABLE_AD_BLOCKER_JS, setOf("*"))
-            else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
+            val wantAd = if (prefs.adBlock) ytScriptKey() else ""
+            if (wantAd != t.adKey) {
+                t.adScript?.remove(); t.adScript = null; t.adKey = wantAd
+                if (wantAd.isNotEmpty()) t.adScript = WebViewCompat.addDocumentStartJavaScript(t.web, ytScriptSource(), setOf("*"))
+            }
             // YouTube kaldığın yerden devam (reklam ayarından bağımsız)
             if (t.progressScript == null) t.progressScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_PROGRESS_JS, setOf("*"))
             if (t.ytmUxScript == null) t.ytmUxScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_MUSIC_UX_JS, setOf("*"))
@@ -2784,7 +2798,7 @@ fun onMusicCatalog(raw: String?) {
         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
             val uri = request?.url ?: return null
             // Reklam isteği: boş 204 — oynatıcı timeout (≈15sn) beklemesin
-            if (prefs.adBlock && request?.isForMainFrame != true && shouldBlockAd(uri)) {
+            if (prefs.adBlock && request?.isForMainFrame != true && (ytNetBlock() || !onYoutubePage(tab.url)) && shouldBlockAd(uri)) {
                 return WebResourceResponse(
                     "text/plain", "utf-8", 204, "No Content",
                     mapOf("Access-Control-Allow-Origin" to "*"),
@@ -2858,7 +2872,7 @@ fun onMusicCatalog(raw: String?) {
             if (isYt(u)) {
                 if (syncYoutubeCookie()) { try { view?.reload() } catch (_: Exception) { } }
                 if (prefs.adBlock) {
-                    try { view?.evaluateJavascript(STABLE_AD_BLOCKER_JS, null) } catch (_: Exception) { }
+                    try { view?.evaluateJavascript(ytScriptSource(), null) } catch (_: Exception) { }
                 }
             }
             // Videoların kaldığı yeri hatırla (gizli sekme ve YT Music hariç)
@@ -6920,6 +6934,15 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         add(switchRow("🛡️", "Reklam engelleyici", "YouTube reklamlarını atlar", prefs.adBlock) { v ->
             prefs.adBlock = v; settingsChanged()
         })
+        add(switchRow("🧹", "YouTube: reklam verisini sil", "Oynatıcıya giden reklam verisini temizler. Video geç açılıyorsa kapat", ytClean()) { v ->
+            ytPrefs.edit().putBoolean("clean", v).apply(); settingsChanged()
+        })
+        add(switchRow("🚫", "YouTube: reklam adreslerini engelle", "YouTube bunu fark edip videoyu bekletiyor olabilir. Geç açılıyorsa kapat", ytNetBlock()) { v ->
+            ytPrefs.edit().putBoolean("net", v).apply(); settingsChanged()
+        })
+        add(switchRow("⏩", "YouTube: reklamı hızlı atla", "Reklam çıkarsa sessize alır, 16 kat hızlandırır, Atla'ya basar", ytSkip()) { v ->
+            ytPrefs.edit().putBoolean("skip", v).apply(); settingsChanged()
+        })
         add(switchRow("🎧", "Arka planda çalma", "Uygulamadan çıkınca müzik sürer", prefs.bgPlay) { v ->
             prefs.bgPlay = v; settingsChanged()
         })
@@ -7320,11 +7343,48 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "return JSON.stringify(out.slice(0,60));" +
             "}catch(e){return '[]';}})();"
 
+        const val YT_FAST_SKIP_JS =
+            "(function(){\n" +
+            "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;\n" +
+            "if(window.__rotaFastSkip)return;window.__rotaFastSkip=1;\n" +
+            "// Hiçbir ağ isteği engellenmez, hiçbir yanıt değiştirilmez: YouTube gecikme uygulamaz.\n" +
+            "// Reklam çıkarsa: sessiz, görünmez, 16x hızlı, Atla düğmesine bas.\n" +
+            "try{\n" +
+            "var css=document.createElement('style');\n" +
+            "css.textContent='.html5-video-player.ad-showing .html5-main-video,.html5-video-player.ad-interrupting .html5-main-video{opacity:0!important}'+\n" +
+            "'.ytp-ad-overlay-container,.ytp-ad-text-overlay,.ytp-ad-image-overlay,.ytp-ad-player-overlay{opacity:0!important}'+\n" +
+            "'.ytp-ad-skip-button-container,.ytp-skip-ad-button,.ytp-ad-skip-button-modern{opacity:0!important}';\n" +
+            "(document.head||document.documentElement).appendChild(css);\n" +
+            "}catch(e){}\n" +
+            "var saved=null;\n" +
+            "function tick(){\n" +
+            "try{\n" +
+            "var pl=document.querySelector('.html5-video-player');\n" +
+            "if(!pl)return;\n" +
+            "var v=pl.querySelector('video.html5-main-video')||pl.querySelector('video');\n" +
+            "if(!v)return;\n" +
+            "var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');\n" +
+            "if(ad){\n" +
+            "if(!saved)saved={rate:v.playbackRate||1,muted:v.muted};\n" +
+            "v.muted=true;\n" +
+            "if(v.playbackRate!==16){try{v.playbackRate=16;}catch(e){}}\n" +
+            "var b=pl.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,[id^=skip-button] button,[id^=skip-button]');\n" +
+            "if(b)b.click();\n" +
+            "}else if(saved){\n" +
+            "try{v.playbackRate=saved.rate>=16?1:saved.rate;}catch(e){}\n" +
+            "v.muted=saved.muted;\n" +
+            "saved=null;\n" +
+            "}\n" +
+            "}catch(e){}\n" +
+            "}\n" +
+            "setInterval(tick,100);\n" +
+            "})();\n"
+
         const val STABLE_AD_BLOCKER_JS =
             "(function(){\n" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;\n" +
             "if(window.__rotaAdStripV3)return;window.__rotaAdStripV3=1;\n" +
-            "var DBG=true;\n" +
+            "var DBG=false;\n" +
             "var T0=Date.now(),ev=[],slow=[],box=null,adCnt=0,pend={},pidc=0,lt=0,ltn=0;\n" +
             "function shortU(u){return String(u).replace(/^https?:\\/\\//,'').split('?')[0].slice(0,55);}\n" +
             "function log(){try{console.log('[rota-yt] '+[].slice.call(arguments).join(' '));}catch(e){}}\n" +
