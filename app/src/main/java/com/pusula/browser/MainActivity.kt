@@ -333,66 +333,85 @@ class MainActivity : AppCompatActivity() {
         if (!hasMedia && !lastPlaying) return
         pausedByAudioFocus = true
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
-        focusNotifHoldUntil = Long.MAX_VALUE / 4
         focusPermanentLoss = false
-        focusResumePlayUntil = 0L
         extQuietSince = 0L
-        hasMedia = true
-        lastPlaying = false
         externalPeakConfigs = countMediaConfigs().coerceAtLeast(1)
         handler.postDelayed({
             if (pausedByAudioFocus) {
-            // WhatsApp sesi isMusicActive=false olabilir; en az 2 sn bekle, config düşünce devam et
-            if (now - focusPauseSince < 2000L) {
+                externalPeakConfigs = maxOf(externalPeakConfigs, countMediaConfigs())
+            }
+        }, 400L)
+        // Sadece volume=0 — pause yok, mute yok, bildirim yok
+        injectAllMedia(
+            "(function(){try{" +
+            "window.__rotaFocusPaused=true;" +
+            "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
+            "var list=[];" +
+            "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
+            "else list=Array.from(document.querySelectorAll('video,audio'));" +
+            "list.forEach(function(m){try{" +
+            "if(m.ended)return;" +
+            "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0.05)?m.volume:1;m.dataset._afv=String(f);}" +
+            "m.volume=0;" +
+            "}catch(x){}});" +
+            "}catch(e){}})();"
+        )
+        focusLevel = 0.0
+        handler.removeCallbacks(extCheck)
+        handler.postDelayed(extCheck, 500L)
+    }
+
+    private fun evalExternalAudio() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val n = countMediaConfigs()
+        if (pausedByAudioFocus) {
+            if (now - focusPauseSince < 1500L) {
                 handler.postDelayed(extCheck, 400L)
                 return
             }
-            val n = countMediaConfigs()
-            val musicActive = try { audioManager.isMusicActive } catch (_: Exception) { false }
-            // Dış ses bitti: config peak altına düştü veya 0
-            val externalGone = n == 0 || n < externalPeakConfigs
-            val quiet = externalGone && !musicActive
-            if (quiet) {
+            val peak = externalPeakConfigs.coerceAtLeast(1)
+            val externalGone = n == 0 || n < peak
+            if (externalGone) {
                 if (extQuietSince == 0L) {
                     extQuietSince = now
-                    handler.postDelayed(extCheck, 500L)
-                } else if (now - extQuietSince >= 600L) {
+                    handler.postDelayed(extCheck, 450L)
+                } else if (now - extQuietSince >= 500L) {
                     extQuietSince = 0L
                     resumeFromFocus(false)
                 } else handler.postDelayed(extCheck, 300L)
             } else {
-                // Hâlâ dış ses var gibi — peak güncelle
                 if (n > externalPeakConfigs) externalPeakConfigs = n
                 extQuietSince = 0L
-                handler.postDelayed(extCheck, 500L)
+                handler.postDelayed(extCheck, 450L)
             }
             return
         }
-
         val ourPlaying = hasMedia && lastPlaying
         if (!ourPlaying || focusFadeRunnable != null || now - mediaChangedAt < 5000L) {
             extBaseline = -1; extSeenSince = 0L
             return
         }
-        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) { extBaseline = n; extBaseTuples = tupleCounts() }
+        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) {
+            extBaseline = n
+            extBaseTuples = tupleCounts()
+        }
         if (extBaseline >= 1 && n > extBaseline) {
-            if (extSeenSince == 0L) { extSeenSince = now; handler.postDelayed(extCheck, 230L) }
-            else if (now - extSeenSince >= 200L) { extSeenSince = 0L; beginExternalPause() }
+            if (extSeenSince == 0L) {
+                extSeenSince = now
+                handler.postDelayed(extCheck, 230L)
+            } else if (now - extSeenSince >= 200L) {
+                extSeenSince = 0L
+                beginExternalPause()
+            }
         } else extSeenSince = 0L
     }
 
-    /**
-     * Başka uygulama (WhatsApp sesi, telefon, Spotify…) medya çalınca bizim medyayı durdur;
-     * onlar bitince (AUDIOFOCUS_GAIN) kaldığı yerden devam ettir.
-     * YouTube ilk video / reklam akışına karışmaz: sadece gerçek focus kaybında devreye girer.
-     */
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
         if (android.os.SystemClock.elapsedRealtime() < ignoreFocusUntil) return@OnAudioFocusChangeListener
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // Tam pause bildirim öldürüyordu — duck yolunu kullan
                 focusPermanentLoss = change == AudioManager.AUDIOFOCUS_LOSS
                 if (focusPermanentLoss) hasAudioFocus = false
                 beginExternalPause()
@@ -401,7 +420,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.3f", x.coerceIn(0.0, 1.0))
+private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.3f", x.coerceIn(0.0, 1.0))
 
     private fun updateFocusNotification(playing: Boolean) {
         if (hasMedia) {
@@ -457,71 +476,37 @@ class MainActivity : AppCompatActivity() {
         if (!pausedByAudioFocus) return
         val now = android.os.SystemClock.elapsedRealtime()
         pausedByAudioFocus = false
-        lastPlaying = true
-        hasMedia = true
-        mediaChangedAt = now
-        focusIgnoreExtUntil = now + 4_000L
-        focusNotifHoldUntil = now + 120_000L
-        focusResumePlayUntil = now + 45_000L
+        focusIgnoreExtUntil = now + 2_500L
         extQuietSince = 0L
         externalPeakConfigs = 0
         handler.removeCallbacks(focusNotifKeepAlive)
         cancelFocusFade()
         stopFocusResumeWatch()
-        if (reacquire) {
-            hasAudioFocus = false
-            requestMediaAudioFocus()
-        }
-        fun notifOn() {
-            try {
-                PlaybackService.update(
-                    this@MainActivity, true,
-                    lastTitle.ifBlank { "YouTube Music" }, lastArtist,
-                    isInPictureInPictureMode, -1L, -2L, lastArtUrl
-                )
-            } catch (_: Exception) { }
-        }
-        notifOn()
-        val playJs =
+        // Volume 0 → eski seviye, yavaşça (~0.5 sn). pause/play yok.
+        injectAllMedia(
             "(function(){try{" +
-            "window.__userPause=false;window.__rotaFocusPaused=false;" +
+            "window.__rotaFocusPaused=false;" +
             "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
             "var list=[];" +
             "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
             "else list=Array.from(document.querySelectorAll('video,audio'));" +
             "list.forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
-            "m.dataset.pusulaWasPlaying='1';" +
-            "m.muted=false;m.volume=to;" +
-            "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+            "m.muted=false;" +
+            "var from=(typeof m.volume==='number'?m.volume:0);" +
+            "var steps=12,i=0;" +
+            "var iv=setInterval(function(){try{" +
+            "i++;m.volume=Math.min(to,from+(to-from)*(i/steps));" +
+            "if(i>=steps){clearInterval(iv);m.volume=to;}" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},40);" +
             "}catch(x){}});" +
-            // YTM oynat tuşu (sadece pause iken)
-            "if(ytm){var sels=['ytmusic-player-bar #play-pause-button','#play-pause-button','ytmusic-player-bar .play-pause-button'];" +
-            "for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(!b)continue;" +
-            "var al=(b.getAttribute('aria-label')||'')+(b.getAttribute('title')||'');" +
-            "if(/pause|duraklat/i.test(al))return;" +
-            "try{b.click();return;}catch(z){}}}" +
             "}catch(e){}})();"
-        val targets = linkedSetOf<BTab>()
-        mediaSrc?.let { targets.add(it) }
-        mediaTarget()?.let { targets.add(it) }
-        miniTab?.let { targets.add(it) }
-        tabs.getOrNull(cur)?.let { targets.add(it) }
-        for (tab in tabs) {
-            if (tab.url.contains("music.youtube", true) || tab.url.contains("youtube.com", true)) targets.add(tab)
+        )
+        focusLevel = 1.0
+        if (reacquire) {
+            hasAudioFocus = false
+            requestMediaAudioFocus()
         }
-        for (tab in targets) {
-            try { tab.web.onResume() } catch (_: Exception) { }
-            try { tab.web.evaluateJavascript(playJs, null) } catch (_: Exception) { }
-        }
-        handler.postDelayed({
-            notifOn()
-            for (tab in targets) {
-                try { tab.web.evaluateJavascript(playJs, null) } catch (_: Exception) { }
-            }
-        }, 800L)
-        handler.postDelayed({ notifOn() }, 2000L)
-        handler.postDelayed({ notifOn() }, 4000L)
     }
 
     private fun abortFocusPause() {
