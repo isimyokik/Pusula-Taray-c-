@@ -3884,9 +3884,18 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     ?: a.firstOrNull { it.first.startsWith("A:") }?.second
                     ?: a.maxByOrNull { it.second.length }?.second
             }
-            fun adaptive(h: Int): String? =
-                links.firstOrNull { it.first == "V:$h" }?.second
-                    ?: links.firstOrNull { it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h }?.second
+            fun adaptive(h: Int): String? {
+                val cands = links.filter {
+                    it.first == "V:$h" ||
+                        (it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h)
+                }
+                // mp4/avc (itag 137/136…) birleştirmede webm'den daha stabil
+                return cands.firstOrNull { u ->
+                    val x = u.second.lowercase()
+                    "mime=video%2fmp4" in x || "avc1" in x || "itag=137" in x || "itag=136" in x ||
+                        "itag=135" in x || "itag=399" in x || "itag=298" in x
+                }?.second ?: cands.firstOrNull()?.second
+            }
             val audio = bestAudio()
             when {
                 audioOnly && audio != null ->
@@ -4491,12 +4500,38 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 val kind = o.optString("k")
                 val q = o.optString("q")
                 val itag = o.optInt("itag", 0)
+                val h0 = o.optInt("h", 0)
+                val h = when {
+                    h0 > 0 -> h0
+                    else -> Regex("""(\d{3,4})""").find(q)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+                }
+                val mime = o.optString("mime").lowercase()
+                val isAudio = kind == "a" || o.optBoolean("audio") || mime.contains("audio") ||
+                    itag in listOf(139, 140, 141, 249, 250, 251)
                 val label = when {
-                    kind == "a" || o.optBoolean("audio") -> "MP3"
-                    q.isNotBlank() -> "MP4 $q"
-                    itag == 18 -> "MP4 360p"
-                    itag == 22 -> "MP4 720p"
-                    else -> "MP4"
+                    isAudio -> when {
+                        mime.contains("mp4") || itag in listOf(140, 141) -> "A:M4A"
+                        mime.contains("webm") || itag in listOf(249, 250, 251) -> "A:OPUS"
+                        else -> "A:AUD"
+                    }
+                    kind == "v" || (mime.contains("video") && !mime.contains("audio")) -> {
+                        val hh = when {
+                            h > 0 -> h
+                            itag in listOf(137, 399, 248) -> 1080
+                            itag in listOf(136, 298, 247) -> 720
+                            itag in listOf(135, 244) -> 480
+                            itag in listOf(134, 243) -> 360
+                            else -> 0
+                        }
+                        if (hh > 0) "V:$hh" else "V:0"
+                    }
+                    else -> when {
+                        q.isNotBlank() -> "MP4 $q"
+                        itag == 18 -> "MP4 360p"
+                        itag == 22 -> "MP4 720p"
+                        itag == 37 || itag == 38 -> "MP4 1080p"
+                        else -> "MP4"
+                    }
                 }
                 out.add(label to u)
             }
@@ -4516,6 +4551,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             val clients = listOf(
                 YtCli("ANDROID", "19.28.35", "3", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip"),
                 YtCli("IOS", "19.28.1", "5", "com.google.ios.youtube/19.28.1 (iPhone16,2; U; CPU iOS 17_5 like Mac OS X;)"),
+                YtCli("TVHTML5", "7.20240723.15.00", "7", "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"),
                 YtCli("ANDROID", "18.48.37", "3", "com.google.android.youtube/18.48.37 (Linux; U; Android 13) gzip")
             )
             fun parseStreaming(sd: JSONObject) {
@@ -4568,7 +4604,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 eatFormats(sd.optJSONArray("adaptiveFormats"))
             }
             for (cli in clients) {
-                if (links.any { it.first.startsWith("V:") || it.first.startsWith("MP4") }) break
+                if (links.any { it.first == "V:1080" } && links.any { it.first.startsWith("A:") }) break
                 try {
                     val clientObj = JSONObject()
                         .put("clientName", cli.name)
@@ -4831,8 +4867,12 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 val ok = muxAv(vFile.absolutePath, aFile.absolutePath, oFile.absolutePath)
                 vFile.delete(); aFile.delete()
                 if (!ok || !oFile.exists()) {
+                    // Birleştirme olmadı: en azından progressive dene; tek başına adaptive video sesiz kalır
                     handler.post {
-                        startDownload(videoUrl, null, null, "video/mp4", outName)
+                        toast("1080 birleştirilemedi, alternatif deneniyor")
+                        // Ses+video ayrı indirme yerine kullanıcıya düşük progressive yoksa video stream
+                        startDownload(videoUrl, null, null, "video/mp4", outName.replace(".mp4", "_video.mp4"))
+                        startDownload(audioUrl, null, null, "audio/mp4", outName.replace(".mp4", "_audio.m4a"))
                     }
                     return@Thread
                 }
@@ -6300,183 +6340,34 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
 
 
         // YouTube sayfasından progressive + ses URL'lerini çıkar (cipher'sız olanlar)
+
         const val YT_EXTRACT_FORMATS_JS =
             "(function(){try{" +
             "function collect(p){if(!p||!p.streamingData)return[];var out=[];" +
-            "function push(f,k){if(!f)return;var u=f.url||'';if(!u&&f.signatureCipher){var m=/url=([^&]+)/.exec(f.signatureCipher);if(m)u=decodeURIComponent(m[1]);}" +
+            "function push(f,k){if(!f)return;var u=f.url||'';" +
+            "if(!u&&f.signatureCipher){var m=/url=([^&]+)/.exec(f.signatureCipher);if(m)u=decodeURIComponent(m[1]);}" +
             "if(!u||u.indexOf('http')!==0)return;" +
-            // cipher imzası yoksa URL işe yaramaz; sadece düz url alanları al
             "if(f.signatureCipher&&!f.url)return;" +
-            "out.push({u:u,itag:f.itag||0,q:f.qualityLabel||'',k:k,audio:!!((f.mimeType||'').indexOf('audio')>=0)});} " +
+            "var mime=(f.mimeType||'');var h=f.height||0;" +
+            "if(!h&&f.qualityLabel){var qm=/(\\d{3,4})/.exec(f.qualityLabel);if(qm)h=parseInt(qm[1],10)||0;}" +
+            "out.push({u:u,itag:f.itag||0,q:f.qualityLabel||'',k:k,h:h," +
+            "audio:mime.indexOf('audio')>=0,mime:mime});}" +
             "(p.streamingData.formats||[]).forEach(function(f){push(f,'p');});" +
             "(p.streamingData.adaptiveFormats||[]).forEach(function(f){" +
-            "var m=(f.mimeType||'');if(m.indexOf('audio')>=0)push(f,'a');" +
+            "var m=(f.mimeType||'');" +
+            "if(m.indexOf('audio')>=0)push(f,'a');" +
+            "else if(m.indexOf('video')>=0)push(f,'v');" +
             "});return out;}" +
             "var p=window.ytInitialPlayerResponse||window.playerResponse||null;" +
             "if(!p){try{var s=document.getElementById('player-response')||document.getElementById('ytInitialPlayerResponse');" +
             "if(s&&s.textContent)p=JSON.parse(s.textContent);}catch(e){}}" +
+            "if(!p){try{var pl=document.getElementById('movie_player');" +
+            "if(pl&&pl.getPlayerResponse){var pr=pl.getPlayerResponse();p=typeof pr==='string'?JSON.parse(pr):pr;}}catch(e){}}" +
             "if(!p){try{for(var k in window){if(k&&k.indexOf('ytInitialPlayerResponse')>=0&&window[k]&&window[k].streamingData){p=window[k];break;}}}catch(e){}}" +
             "var out=collect(p);" +
-            "if(!out.length){var v=document.querySelector('video');if(v&&v.currentSrc&&v.currentSrc.indexOf('http')===0)" +
-            "out.push({u:v.currentSrc,itag:0,q:'playing',k:'p',audio:false});}" +
-            "return JSON.stringify(out.slice(0,20));" +
+            "return JSON.stringify(out.slice(0,60));" +
             "}catch(e){return '[]';}})();"
 
-
-                  // YouTube / YouTube Music: "uygulamada aç / izle / en iyi deneyim" pencerelerini kapatır
-                  const val YT_PROMO_JS = """
-                  (function(){try{
-                  if(window.__rotaPromo)return;window.__rotaPromo=1;
-                  var re=/uygulama(y[ıi]|n[ıi]|s[ıi]nda)?\s*(dene|a[cç]|y[üu]kle|indir|edin|al\b|ile|izle|dinle)|uygulamada\s*(a[cç]|dinle|izle|devam)|en iyi deneyim|t[üu]m [öo]zellik|get\s*the\s*app|open\s*(in\s*)?(the\s*)?app|try\s*the\s*app|use\s*the\s*app|install\s*(the\s*)?app|download\s*the\s*app|listen\s*in\s*the\s*app|watch\s*in\s*(the\s*)?(youtube\s*)?app|continue\s*in\s*(the\s*)?app|better\s*on\s*the\s*app|youtube music uygulamas[ıi]nda/i;
-                  var no=/^(hay[ıi]r|şimdi de[gğ]il|simdi degil|belki sonra|not now|no,? thanks|continue in browser|taray[ıi]c[ıi]da devam|kapat|close|dismiss|vazge[cç]|×|✕)/i;
-                  function hide(e){if(!e||!e.style)return;try{e.style.setProperty('display','none','important');e.style.setProperty('visibility','hidden','important');e.style.setProperty('pointer-events','none','important');e.setAttribute('aria-hidden','true');}catch(x){}}
-                  function killBackdrop(){
-                  document.querySelectorAll('iron-overlay-backdrop,tp-yt-iron-overlay-backdrop,.dialog-backdrop,[class*="overlay-backdrop"]').forEach(hide);
-                  try{document.body.style.setProperty('overflow','auto','important');document.documentElement.style.setProperty('overflow','auto','important');}catch(x){}
-                  }
-                  function scan(){
-                  document.querySelectorAll('ytmusic-mealbar-promo-renderer,ytmusic-app-promo,ytm-promo-banner,ytm-app-promo,ytmusic-premium-upsell,ytm-open-app-button-renderer,ytm-open-app-banner-renderer,ytd-open-app-button-renderer,ytmusic-open-app-button,[class*="app-promo"],[class*="open-app"],[class*="get-app"],[id*="app-promo"],[id*="open-app"]').forEach(hide);
-                  document.querySelectorAll('a,button,[role=button],yt-button-renderer,ytmusic-button-renderer,ytm-button-renderer').forEach(function(e){
-                  var t=((e.getAttribute('aria-label')||'')+' '+(e.textContent||'')).replace(/\s+/g,' ').trim();
-                  if(t&&t.length<120&&re.test(t)){var c=e.closest('ytmusic-mealbar-promo-renderer,ytm-promo-banner,tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog],ytm-bottom-sheet-renderer,ytmusic-popup-container')||e;hide(c);killBackdrop();}
-                  });
-                  document.querySelectorAll('tp-yt-paper-dialog,yt-confirm-dialog-renderer,[role=dialog],ytmusic-popup-container,ytm-bottom-sheet-renderer,yt-upsell-dialog-renderer').forEach(function(d){
-                  var t=(d.textContent||'').replace(/\s+/g,' ');
-                  if(t.length<900&&re.test(t)){
-                  d.querySelectorAll('a,button,[role=button]').forEach(function(b){var bt=(b.textContent||b.getAttribute('aria-label')||'').trim();if(no.test(bt)){try{b.click();}catch(x){}}});
-                  hide(d);killBackdrop();
-                  }
-                  });
-                  }
-                  setInterval(scan,400);scan();
-                  var mo=new MutationObserver(function(){scan();});
-                  try{mo.observe(document.documentElement,{childList:true,subtree:true});}catch(x){}
-                  }catch(e){}})();
-                  """
-
-        // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-                                val YT_MUSIC_UX_JS =
-            "(function(){try{\n" +
-            "if((location.hostname||'').indexOf('music.youtube')<0)return;\n" +
-            "if(window.__rotaYtmTimer){try{clearInterval(window.__rotaYtmTimer);}catch(z){}}\n" +
-            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
-            "window.__rotaYtmCtl=null;\n" +
-            // Sadece mavi kare tap-highlight'ı kapat; orijinal ileri/geri/oynat ripple kalsın
-            "if(!document.getElementById('__rota_ytm_fb')){\n" +
-            "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
-            "st.textContent=\n" +
-            "'ytmusic-player-page,ytmusic-player-page *{-webkit-tap-highlight-color:transparent!important;}'+\n" +
-            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-page .play-pause-button{'+\n" +
-            "'-webkit-tap-highlight-color:transparent!important;outline:none!important;'+\n" +
-            "'}';\n" +
-            "(document.documentElement||document).appendChild(st);\n" +
-            "}\n" +
-            "function isFullPlayer(){\n" +
-            "try{\n" +
-            "var p=document.querySelector('ytmusic-player-page');\n" +
-            "if(!p)return false;\n" +
-            "var layout=document.querySelector('ytmusic-app-layout');\n" +
-            "if(layout){\n" +
-            "var st=layout.getAttribute('player-ui-state_')||'';\n" +
-            "if(st==='PLAYER_BAR_ONLY'||st==='MINIPLAYER')return false;\n" +
-            "}\n" +
-            "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
-            "var cs=getComputedStyle(p);\n" +
-            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
-            "return r.height>H*0.5&&r.top<H*0.25&&r.width>0;\n" +
-            "}catch(z){return false;}\n" +
-            "}\n" +
-            "function isOnSlider(e){\n" +
-            "try{\n" +
-            "var path=e.composedPath?e.composedPath():[e.target];\n" +
-            "for(var i=0;i<path.length;i++){\n" +
-            "var n=path[i];if(!n||!n.tagName)continue;\n" +
-            "var t=n.tagName.toLowerCase();\n" +
-            "if(t.indexOf('slider')>=0||t.indexOf('progress')>=0)return true;\n" +
-            "if((n.id||'')==='progress-bar'||(n.id||'')==='sliderBar')return true;\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "return false;\n" +
-            "}\n" +
-            "function pressMinimize(){\n" +
-            "if(!isFullPlayer())return;\n" +
-            "try{\n" +
-            "if(window.RotaTap){\n" +
-            "var w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);\n" +
-            "window.RotaTap.tap(36/w,48/h);\n" +
-            "setTimeout(function(){try{if(window.RotaTap&&window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},280);\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "try{\n" +
-            "var pts=[[36,48],[48,56],[28,40],[56,64]];\n" +
-            "for(var i=0;i<pts.length;i++){\n" +
-            "var t=document.elementFromPoint(pts[i][0],pts[i][1]);\n" +
-            "if(!t)continue;\n" +
-            "var b=t.closest('button,[role=button],tp-yt-paper-icon-button,yt-icon-button')||t;\n" +
-            "try{b.click();}catch(z){}\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "unbindGesture();\n" +
-            "}\n" +
-            "function unbindGesture(){\n" +
-            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
-            "window.__rotaYtmCtl=null;\n" +
-            "}\n" +
-            "function bindGesture(){\n" +
-            "if(window.__rotaYtmCtl)return;\n" +
-            "window.__rotaYtmCtl=new AbortController();\n" +
-            "var sig=window.__rotaYtmCtl.signal;\n" +
-            "var sx=0,sy=0,active=false;\n" +
-            "document.addEventListener('touchstart',function(e){\n" +
-            "active=false;\n" +
-            "if(!e.touches||e.touches.length!==1)return;\n" +
-            "if(!isFullPlayer())return;\n" +
-            "if(isOnSlider(e))return;\n" +
-            "sx=e.touches[0].clientX;sy=e.touches[0].clientY;active=true;\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchmove',function(e){\n" +
-            "if(!active||!e.touches||!e.touches[0])return;\n" +
-            "var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;\n" +
-            "if(Math.abs(dx)>Math.abs(dy)*1.1)active=false;\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchend',function(e){\n" +
-            "if(!active)return;active=false;\n" +
-            "if(!isFullPlayer())return;\n" +
-            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
-            "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<40)return;\n" +
-            "if(Math.abs(dx)>dy*0.9)return;\n" +
-            "pressMinimize();\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchcancel',function(){active=false;},{passive:true,capture:true,signal:sig});\n" +
-            "}\n" +
-            "window.__rotaYtmTimer=setInterval(function(){\n" +
-            "try{\n" +
-            "if(isFullPlayer())bindGesture();\n" +
-            "else unbindGesture();\n" +
-            "}catch(z){}\n" +
-            "},200);\n" +
-            "try{if(isFullPlayer())bindGesture();else unbindGesture();}catch(z){}\n" +
-            "}catch(e){}})();\n"
-const val KEEP_PLAYING_JS =
-            "(function(){try{" +
-                "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
-                "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
-                "document.addEventListener('visibilitychange',function(e){" +
-                "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
-                "e.stopImmediatePropagation();},true);" +
-                // Kullanıcı durdurduysa arka planda tekrar başlatma
-                "document.addEventListener('pause',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
-                "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
-                "if(window.__pipBlock&&!window.__userPause)return;" +
-                "m.dataset.pusulaWasPlaying='';}catch(z){}},true);" +
-                "document.addEventListener('play',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
-                "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
-                "m.dataset.pusulaWasPlaying='1';window.__userPause=false;}catch(z){}},true);" +
-                "}catch(e){}})();"
-
-        // Reklam sırasında: siyah bekleme ekranı örtülür, ses tamamen kısılır, altyazı ve reklam arayüzü gizlenir,
-        // reklam 16 kat hızlandırılır ve "Atla" düğmesine basılır. Reklam bitince ekran varsayılan haline döner.
         const val STABLE_AD_BLOCKER_JS =
             "(function(){" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
