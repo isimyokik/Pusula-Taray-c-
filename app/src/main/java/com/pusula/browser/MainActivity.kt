@@ -6850,6 +6850,64 @@ if(isYt){
         const val MEDIA_HOOK_JS =
             "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
 
+        const val YT_MUSIC_UX_JS =
+            "(function(){try{\n" +
+            "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
+            "if(window.__rotaYtmSwipe)return;window.__rotaYtmSwipe=1;\n" +
+            // Eski bozuk stilleri bir kez temizle (siyah perde)
+            "try{\n" +
+            "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
+            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "var _p=document.querySelector('ytmusic-player-page');\n" +
+            "if(_p){['transform','transition','opacity','border-radius','will-change','pointer-events','filter'].forEach(function(k){try{_p.style.removeProperty(k);}catch(z){}});}\n" +
+            "}catch(z){}\n" +
+            "function isOpen(){\n" +
+            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
+            "if(!p)return false;\n" +
+            "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
+            "return r.width>40&&r.height>H*0.45&&r.top<H*0.3&&r.bottom>H*0.55;\n" +
+            "}\n" +
+            "function isSeek(el){\n" +
+            "return !!(el&&el.closest&&el.closest('tp-yt-paper-slider,yt-slider,[role=slider],#progress-bar,.progress-bar,.progress-container'));\n" +
+            "}\n" +
+            "function minBtn(){\n" +
+            "var p=document.querySelector('ytmusic-player-page');\n" +
+            "if(!p)return null;\n" +
+            "var list=p.querySelectorAll('button,tp-yt-paper-icon-button,[role=button]');\n" +
+            "for(var i=0;i<list.length;i++){\n" +
+            "var el=list[i],r=el.getBoundingClientRect();\n" +
+            "if(r.width>=20&&r.height>=20&&r.top>=0&&r.top<110&&r.left>=0&&r.left<110)return el;\n" +
+            "}\n" +
+            "try{var t=document.elementFromPoint(36,40);if(t){var b=t.closest('button,tp-yt-paper-icon-button,[role=button]');if(b&&p.contains(b))return b;}}catch(z){}\n" +
+            "return null;\n" +
+            "}\n" +
+            "function pressMin(){\n" +
+            "if(!isOpen())return;\n" +
+            "var el=minBtn();if(!el)return;\n" +
+            "try{el.click();}catch(z){}\n" +
+            "}\n" +
+            "var sx=0,sy=0,on=0;\n" +
+            "document.addEventListener('touchstart',function(e){\n" +
+            "on=0;\n" +
+            "if(!e.touches||e.touches.length!==1)return;\n" +
+            "if(!isOpen())return;\n" +
+            "var t=e.touches[0],el=null;\n" +
+            "try{el=document.elementFromPoint(t.clientX,t.clientY);}catch(z){}\n" +
+            "if(isSeek(el))return;\n" +
+            "sx=t.clientX;sy=t.clientY;on=1;\n" +
+            "},{passive:true,capture:true});\n" +
+            "document.addEventListener('touchend',function(e){\n" +
+            "if(!on)return;on=0;\n" +
+            "if(!isOpen())return;\n" +
+            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
+            "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
+            "if(dy<44||Math.abs(dx)>dy)return;\n" +
+            "pressMin();\n" +
+            "},{passive:true,capture:true});\n" +
+            "document.addEventListener('touchcancel',function(){on=0;},{passive:true,capture:true});\n" +
+            "}catch(e){}})();\n"
+
+
         const val YT_MUSIC_CATALOG_JS =
         "(function(){try{" +
         "if(!/music\\.youtube\\.com/i.test(location.hostname||''))return JSON.stringify({playlists:[],songs:[],page:location.href});" +
