@@ -106,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         var openScript: ScriptHandler? = null
         var progressScript: ScriptHandler? = null
         var ytmUxScript: ScriptHandler? = null
+        var fastPlayScript: ScriptHandler? = null
         var errorUrl: String? = null
         var errorLoading: Boolean = false
         var networkRetryUsed: Boolean = false
@@ -1992,6 +1993,7 @@ fun onMusicCatalog(raw: String?) {
             else if (!prefs.adBlock && t.adScript != null) { t.adScript?.remove(); t.adScript = null }
             // YouTube kaldığın yerden devam (reklam ayarından bağımsız)
             if (t.progressScript == null) t.progressScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_PROGRESS_JS, setOf("*"))
+            if (t.fastPlayScript == null) t.fastPlayScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_FAST_START_JS, setOf("*"))
             if (t.ytmUxScript == null) t.ytmUxScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_MUSIC_UX_JS, setOf("*"))
             if (prefs.bgPlay && t.keepScript == null) t.keepScript = WebViewCompat.addDocumentStartJavaScript(t.web, KEEP_PLAYING_JS, setOf("*"))
             else if (!prefs.bgPlay && t.keepScript != null) { t.keepScript?.remove(); t.keepScript = null }
@@ -2870,6 +2872,9 @@ fun onMusicCatalog(raw: String?) {
                 try { view?.evaluateJavascript(YT_HIDE_LOGO_JS, null) } catch (_: Exception) { }
                 try { view?.evaluateJavascript(YT_PROMO_JS, null) } catch (_: Exception) { }
                 try { view?.evaluateJavascript(YT_MINI_PLAYER_JS, null) } catch (_: Exception) { }
+                try { view?.evaluateJavascript(YT_FAST_START_JS, null) } catch (_: Exception) { }
+                handler.postDelayed({ try { view?.evaluateJavascript(YT_FAST_START_JS, null) } catch (_: Exception) { } }, 350)
+                handler.postDelayed({ try { view?.evaluateJavascript(YT_FAST_START_JS, null) } catch (_: Exception) { } }, 900)
                 if (u.contains("music.youtube.com")) {
                     try { view?.evaluateJavascript(YT_MUSIC_UX_JS, null) } catch (_: Exception) { }
                     handler.postDelayed({
@@ -7736,7 +7741,52 @@ if(isYt){
             "}catch(e){}})();"
 
         // Zorla oynat (toggle yok)
-        const val MEDIA_FORCE_PLAY_JS =
+        /**
+         * YouTube: videoya tıklanınca büyük play / "cued" beklemesin, hemen oynasın.
+         * SPA (önerilen videoya tıklama) dahil — href değişince tekrar dener.
+         * Kullanıcı bilerek durdurduysa (currentTime>1.5 + pause) zorlamaz.
+         */
+        const val YT_FAST_START_JS =
+            "(function(){try{" +
+            "if(!/youtube\\.com|youtu\\.be/i.test(location.hostname||''))return;" +
+            "if(window.__rotaFastStart)return;window.__rotaFastStart=1;" +
+            "function isWatch(){" +
+            "var p=location.pathname||'';" +
+            "return p.indexOf('/watch')===0||p.indexOf('/shorts/')===0||p.indexOf('/live/')===0||p.indexOf('/embed/')===0;" +
+            "}" +
+            "function tryPlay(){" +
+            "try{" +
+            "if(window.__userPause)return;" +
+            "if(!isWatch())return;" +
+            "var v=document.querySelector('video.html5-main-video')||document.querySelector('#movie_player video')||document.querySelector('video');" +
+            "if(v){" +
+            "if(v.paused&&(v.currentTime||0)>1.5)return;" +
+            "if(!v.paused&&!v.ended)return;" +
+            "}" +
+            "try{var mp=document.getElementById('movie_player');" +
+            "if(mp){var st=(typeof mp.getPlayerState==='function')?mp.getPlayerState():null;" +
+            "if(st===5||st===2||st===-1||st===0||st===null){if(typeof mp.playVideo==='function')mp.playVideo();}" +
+            "}}catch(z){}" +
+            "if(v){try{v.muted=false;}catch(z){}try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(z){}}" +
+            "var sel=['.ytp-large-play-button','button.ytp-large-play-button','.ytp-cued-thumbnail-overlay','.ytp-cued-thumbnail-overlay-image','button[aria-label*=\"Oynat\"]','button[aria-label*=\"Play\"]'];" +
+            "for(var i=0;i<sel.length;i++){var b=document.querySelector(sel[i]);if(b){try{b.click();}catch(z){}}}" +
+            "}catch(e){}" +
+            "}" +
+            "tryPlay();" +
+            "setTimeout(tryPlay,200);setTimeout(tryPlay,500);setTimeout(tryPlay,1000);setTimeout(tryPlay,1800);" +
+            "if(!window.__rotaFastIv)window.__rotaFastIv=setInterval(tryPlay,700);" +
+            "var last=location.href;" +
+            "if(!window.__rotaFastNav)window.__rotaFastNav=setInterval(function(){" +
+            "if(location.href===last)return;last=location.href;" +
+            "window.__userPause=false;" +
+            "setTimeout(tryPlay,80);setTimeout(tryPlay,300);setTimeout(tryPlay,700);setTimeout(tryPlay,1400);" +
+            "},250);" +
+            "try{window.addEventListener('yt-navigate-finish',function(){window.__userPause=false;setTimeout(tryPlay,50);setTimeout(tryPlay,400);});}catch(z){}" +
+            "try{document.addEventListener('yt-navigate-finish',function(){window.__userPause=false;setTimeout(tryPlay,50);setTimeout(tryPlay,400);});}catch(z){}" +
+            "}catch(e){}})();"
+
+
+                const val MEDIA_FORCE_PLAY_JS =
             "(function(){try{" +
             "window.__userPause=false;" +
             "document.querySelectorAll('video,audio').forEach(function(m){" +
