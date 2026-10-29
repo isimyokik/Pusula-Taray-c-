@@ -7319,84 +7319,125 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val STABLE_AD_BLOCKER_JS =
             "(function(){" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
-            "if(window.__rotaAdBlockV3)return;window.__rotaAdBlockV3=1;" +
-            "var lastAd=0;" +
-            "function clickSkip(root){" +
+            "if(window.__rotaAdStripV1)return;window.__rotaAdStripV1=1;" +
+            // Oynatıcı yanıtından reklam planını sil — reklam hiç planlanmasın
+            "function stripAds(o){" +
+            "if(!o||typeof o!=='object')return o;" +
             "try{" +
-            "var qs=['.ytp-skip-ad-button','.ytp-ad-skip-button','.ytp-ad-skip-button-modern'," +
-            "'.ytp-ad-skip-button-container button','.ytp-ad-skip-button-slot button'," +
-            "'[id^=skip-button]','.ytp-ad-overlay-close-button','button[aria-label*=\"Skip\"]'," +
-            "'button[aria-label*=\"Atla\"]','button[aria-label*=\"skip\"]'];" +
-            "for(var i=0;i<qs.length;i++){" +
-            "var list=(root||document).querySelectorAll(qs[i]);" +
-            "for(var j=0;j<list.length;j++){try{list[j].click();}catch(z){}}" +
+            "if(Array.isArray(o)){for(var i=0;i<o.length;i++)stripAds(o[i]);return o;}" +
+            "var kill=['adPlacements','playerAds','adSlots','adBreakHeartbeatParams'," +
+            "'adPlacementCueMap','adPlacementVector','adSensitivity','adReasons'," +
+            "'adParams','adSafetyReason','adsSlots','adBreakServiceHost','adModule'," +
+            "'adVisibility','adTitle','adLayoutInfo','playerAdParams'];" +
+            "for(var k=0;k<kill.length;k++){if(o[kill[k]]!==undefined)delete o[kill[k]];}" +
+            "if(o.playerConfig&&o.playerConfig.audioConfig){" +
+            "try{delete o.playerConfig.audioConfig.autoplay;}catch(x){}" +
             "}" +
-            "document.querySelectorAll('button').forEach(function(b){" +
-            "try{var t=((b.textContent||'')+' '+(b.getAttribute('aria-label')||'')).toLowerCase();" +
-            "if(/^(skip|atla)|reklamı? atla|skip ad/.test(t.trim()))b.click();}catch(z){}});" +
+            // playerResponse / videoDetails yanları
+            "if(o.playerResponse)stripAds(o.playerResponse);" +
+            "if(o.response)stripAds(o.response);" +
+            "var keys=Object.keys(o);" +
+            "for(var j=0;j<keys.length;j++){" +
+            "var v=o[keys[j]];" +
+            "if(v&&typeof v==='object')stripAds(v);" +
+            "}" +
+            "}catch(e){}" +
+            "return o;" +
+            "}" +
+            "function stripStr(s){" +
+            "if(typeof s!=='string'||s.length<20)return s;" +
+            "if(s.indexOf('adPlacements')<0&&s.indexOf('playerAds')<0&&s.indexOf('adSlots')<0)return s;" +
+            "try{var j=JSON.parse(s);stripAds(j);return JSON.stringify(j);}catch(e){return s;}" +
+            "}" +
+            // Sayfadaki ilk player yanıtı
+            "function scrubInitial(){" +
+            "try{" +
+            "if(window.ytInitialPlayerResponse)stripAds(window.ytInitialPlayerResponse);" +
+            "if(window.ytInitialData)stripAds(window.ytInitialData);" +
+            "if(window.ytplayer&&window.ytplayer.config&&window.ytplayer.config.args){" +
+            "var a=window.ytplayer.config.args;" +
+            "if(a.raw_player_response){try{" +
+            "var r=typeof a.raw_player_response==='string'?JSON.parse(a.raw_player_response):a.raw_player_response;" +
+            "stripAds(r);a.raw_player_response=typeof a.raw_player_response==='string'?JSON.stringify(r):r;" +
+            "}catch(x){}}" +
+            "if(a.player_response){try{" +
+            "var r2=typeof a.player_response==='string'?JSON.parse(a.player_response):a.player_response;" +
+            "stripAds(r2);a.player_response=typeof a.player_response==='string'?JSON.stringify(r2):r2;" +
+            "}catch(x){}}" +
+            "}" +
             "}catch(e){}" +
             "}" +
-            "function isAd(pl){" +
-            "if(!pl)return false;" +
-            "if(pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting'))return true;" +
-            "if(pl.querySelector('.ytp-ad-player-overlay,.ytp-ad-player-overlay-layout,.ytp-ad-text," +
-            ".ytp-ad-simple-ad-badge,.ytp-ad-preview-container,.ytp-ad-image-overlay,.video-ads .ad-container'))return true;" +
-            "return false;" +
+            // JSON.parse kancası
+            "try{" +
+            "var _jp=JSON.parse;" +
+            "JSON.parse=function(text,rev){" +
+            "var o=_jp.call(JSON,text,rev);" +
+            "try{" +
+            "if(o&&typeof o==='object'){" +
+            "var t=text;" +
+            "if(typeof t==='string'&&(t.indexOf('adPlacements')>=0||t.indexOf('playerAds')>=0||t.indexOf('streamingData')>=0))stripAds(o);" +
             "}" +
-            "function killAd(pl,vd){" +
-            "try{" +
-            "clickSkip(pl);" +
-            "if(vd){" +
-            "try{vd.muted=true;vd.volume=0;}catch(x){}" +
-            "try{vd.playbackRate=16;}catch(x){}" +
-            // Reklam videosunun sonuna at — asıl videoyu değil, ad-showing sırasındaki src
-            "try{" +
-            "if(isFinite(vd.duration)&&vd.duration>0&&vd.duration<240){vd.currentTime=Math.max(0,vd.duration-0.05);}" +
-            "else{vd.currentTime=1e5;}" +
             "}catch(x){}" +
-            "}" +
-            "try{pl.classList.remove('ad-showing');pl.classList.remove('ad-interrupting');}catch(x){}" +
-            // UI temizle
-            "try{document.querySelectorAll('.ytp-ad-module,.ytp-ad-player-overlay,.ytp-ad-player-overlay-layout," +
-            ".ytp-ad-text,.ytp-ad-overlay-container,.ytp-ad-image-overlay,.ytp-ad-progress-list," +
-            "ytd-ad-slot-renderer,.video-ads').forEach(function(el){" +
-            "el.style.setProperty('display','none','important');});}catch(x){}" +
-            "try{var mp=document.getElementById('movie_player');" +
-            "if(mp&&typeof mp.skipAd==='function')mp.skipAd();}catch(x){}" +
+            "return o;" +
+            "};" +
             "}catch(e){}" +
-            "}" +
-            "function restore(vd){" +
-            "if(!vd)return;" +
-            "try{vd.playbackRate=1;}catch(x){}" +
-            "try{vd.muted=false;if(vd.volume<0.05)vd.volume=1;}catch(x){}" +
-            "try{if(vd.paused){window.__forcePause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}}catch(x){}" +
-            "}" +
-            "function check(){" +
+            // fetch kancası (innertube player)
             "try{" +
-            "var pl=document.querySelector('.html5-video-player')||document.getElementById('movie_player');" +
-            "if(!pl)return;" +
-            "var vd=pl.querySelector('video');" +
-            "if(isAd(pl)){" +
-            "lastAd=Date.now();" +
-            "killAd(pl,vd);" +
-            "}else if(lastAd&&(Date.now()-lastAd)<1500){" +
-            "restore(vd);" +
-            "lastAd=0;" +
+            "var _fetch=window.fetch;" +
+            "if(_fetch){window.fetch=function(){" +
+            "var args=arguments;" +
+            "var u='';try{u=(typeof args[0]==='string')?args[0]:(args[0]&&args[0].url)||'';}catch(x){}" +
+            "return _fetch.apply(this,args).then(function(res){" +
+            "try{" +
+            "if(!/youtubei\\/v1\\/(player|next|reel)/.test(u)&&u.indexOf('youtube.com')<0)return res;" +
+            "var ct=(res.headers&&res.headers.get&&res.headers.get('content-type'))||'';" +
+            "if(ct.indexOf('json')<0&&ct.indexOf('javascript')<0&&u.indexOf('/player')<0)return res;" +
+            "return res.clone().text().then(function(txt){" +
+            "var out=stripStr(txt);" +
+            "return new Response(out,{status:res.status,statusText:res.statusText,headers:res.headers});" +
+            "}).catch(function(){return res;});" +
+            "}catch(e){return res;}" +
+            "});" +
+            "};}" +
+            "}catch(e){}" +
+            // XHR kancası
+            "try{" +
+            "var XO=XMLHttpRequest.prototype.open;" +
+            "var XS=XMLHttpRequest.prototype.send;" +
+            "XMLHttpRequest.prototype.open=function(m,u){" +
+            "this.__rotaU=u||'';return XO.apply(this,arguments);" +
+            "};" +
+            "XMLHttpRequest.prototype.send=function(){" +
+            "var xhr=this;" +
+            "var u=xhr.__rotaU||'';" +
+            "if(/youtubei\\/v1\\/(player|next)/.test(u)||(u.indexOf('googlevideo')<0&&u.indexOf('ad')>=0&&u.indexOf('youtube')>=0)){" +
+            "xhr.addEventListener('readystatechange',function(){" +
+            "if(xhr.readyState===4&&xhr.responseType!=='arraybuffer'&&xhr.responseType!=='blob'){" +
+            "try{" +
+            "var txt=xhr.responseText;" +
+            "if(txt&&(txt.indexOf('adPlacements')>=0||txt.indexOf('playerAds')>=0)){" +
+            "var cleaned=stripStr(txt);" +
+            "try{Object.defineProperty(xhr,'responseText',{get:function(){return cleaned;}});}catch(x){}" +
+            "try{Object.defineProperty(xhr,'response',{get:function(){return cleaned;}});}catch(x){}" +
             "}" +
             "}catch(e){}" +
             "}" +
-            "var obs=null,obsPl=null;" +
-            "function watch(){" +
-            "var pl=document.querySelector('.html5-video-player')||document.getElementById('movie_player');" +
-            "if(pl&&pl!==obsPl){" +
-            "obsPl=pl;" +
-            "if(obs)try{obs.disconnect();}catch(x){}" +
-            "obs=new MutationObserver(function(){check();});" +
-            "obs.observe(pl,{attributes:true,attributeFilter:['class'],childList:true,subtree:true});" +
+            "});" +
             "}" +
-            "}" +
-            "setInterval(function(){watch();check();},40);" +
-            "document.addEventListener('yt-navigate-finish',function(){setTimeout(check,50);},true);" +
+            "return XS.apply(this,arguments);" +
+            "};" +
+            "}catch(e){}" +
+            "scrubInitial();" +
+            "setInterval(scrubInitial,1000);" +
+            // Nadir kaçan DOM reklamı — sadece atla tıkla, videoyu bozma
+            "setInterval(function(){" +
+            "try{" +
+            "var pl=document.querySelector('.html5-video-player');" +
+            "if(!pl||!pl.classList.contains('ad-showing'))return;" +
+            "var b=pl.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,[id^=skip-button]');" +
+            "if(b)try{b.click();}catch(x){}" +
+            "}catch(e){}" +
+            "},500);" +
             "})();"
 
 
