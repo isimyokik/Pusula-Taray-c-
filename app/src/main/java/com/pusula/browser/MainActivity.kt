@@ -380,8 +380,8 @@ class MainActivity : AppCompatActivity() {
         focusPermanentLoss = false
         extQuietSince = 0L
         externalPeakConfigs = countMediaConfigs().coerceAtLeast(1)
-        // Tüm medya (YT, YTM, diğer siteler): sadece volume duck.
-        // Bildirim playing kalır; pause/mute yok.
+        // Sadece ses seviyesi: yavaşça sıfıra iner ve sayfanın kendi volume yazmaları engellenir.
+        // Bildirim/hasMedia/lastPlaying/pause/mute YOK.
         duckBaseline = extBaseline
         injectAllMedia(AUDIO_DUCK_BEGIN_JS)
         runDuckFade(0.0, duckFadeOutMs) {
@@ -673,11 +673,8 @@ private fun abortFocusPause() {
 private fun pollMedia() {
         // Tüm medya sekmeleri sorgulanır; çalan sekme kaynak seçilir (YouTube / YT Music çakışması olmasın)
         fun isMediaUrl(u: String): Boolean {
-            val x = u.lowercase().trim()
-            if (x.isEmpty() || x == "about:blank") return false
-            if (x.startsWith("chrome://") || x.startsWith("data:")) return false
-            // Tüm http(s) sayfalar: Spotify, SoundCloud, yerli siteler, YT, YTM…
-            return x.startsWith("http://") || x.startsWith("https://")
+            val x = u.lowercase()
+            return x.contains("youtube.com") || x.contains("youtu.be") || x.contains("music.youtube")
         }
         val cands = ArrayList<BTab>()
         miniTab?.let { cands.add(it) }
