@@ -8336,5 +8336,4 @@ class PosBridge(ctx: android.content.Context) {
     }
 
     fun clear() { sp.edit().clear().apply() }
-}      "},500);\n" +
-            "})();\n"
+}
