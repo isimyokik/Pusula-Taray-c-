@@ -7324,14 +7324,46 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "(function(){\n" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;\n" +
             "if(window.__rotaAdStripV3)return;window.__rotaAdStripV3=1;\n" +
+            "var DBG=true;\n" +
+            "var T0=Date.now(),ev=[],slow=[],box=null,adCnt=0;\n" +
             "function log(){try{console.log('[rota-yt] '+[].slice.call(arguments).join(' '));}catch(e){}}\n" +
+            "function draw(){\n" +
+            "if(!DBG)return;\n" +
+            "try{\n" +
+            "var par=document.body||document.documentElement;if(!par)return;\n" +
+            "if(!box||!box.isConnected){\n" +
+            "box=document.createElement('div');\n" +
+            "box.style.cssText='position:fixed;left:4px;bottom:70px;z-index:2147483647;max-width:94vw;background:rgba(0,0,0,.75);color:#7CFC00;font:10px/1.3 monospace;padding:4px 6px;border-radius:4px;pointer-events:none;white-space:pre-wrap;word-break:break-all';\n" +
+            "par.appendChild(box);\n" +
+            "}\n" +
+            "box.textContent=ev.concat(slow).join('\\n');\n" +
+            "}catch(e){}\n" +
+            "}\n" +
+            "function mark(s){ev.push(((Date.now()-T0)/1000).toFixed(1)+'s '+s);if(ev.length>14)ev.shift();log(s);draw();}\n" +
+            "function resetDbg(id){T0=Date.now();ev=[];slow=[];adCnt=0;mark('video '+id);}\n" +
+            "try{\n" +
+            "new PerformanceObserver(function(l){\n" +
+            "l.getEntries().forEach(function(e){\n" +
+            "if(e.duration>700){\n" +
+            "var u=String(e.name).replace(/^https?:\\/\\//,'');\n" +
+            "slow.push('YAVAS '+Math.round(e.duration)+'ms '+(e.responseStatus||'')+' '+u.slice(0,70));\n" +
+            "if(slow.length>5)slow.shift();draw();\n" +
+            "}\n" +
+            "});\n" +
+            "}).observe({type:'resource',buffered:false});\n" +
+            "}catch(e){}\n" +
+            "['loadstart','loadedmetadata','canplay','playing','waiting','stalled','error'].forEach(function(t){\n" +
+            "document.addEventListener(t,function(e){\n" +
+            "try{if(e.target&&e.target.tagName==='VIDEO'&&(t!=='waiting'||Math.random()<1))mark('video:'+t);}catch(x){}\n" +
+            "},true);\n" +
+            "});\n" +
             "// Reklam alanlarını boşalt: oynatıcı reklam beklemeden içeriğe geçer\n" +
             "function cleanPlayer(pr){\n" +
             "if(!pr||typeof pr!=='object')return false;\n" +
             "var hit=false;\n" +
             "try{\n" +
-            "if('adPlacements' in pr){pr.adPlacements=[];hit=true;}\n" +
-            "if('playerAds' in pr){pr.playerAds=[];hit=true;}\n" +
+            "if('adPlacements' in pr){if(pr.adPlacements&&pr.adPlacements.length)adCnt+=pr.adPlacements.length;pr.adPlacements=[];hit=true;}\n" +
+            "if('playerAds' in pr){if(pr.playerAds&&pr.playerAds.length)adCnt+=pr.playerAds.length;pr.playerAds=[];hit=true;}\n" +
             "if('adSlots' in pr){pr.adSlots=[];hit=true;}\n" +
             "if(pr.adPlacementCueMap){pr.adPlacementCueMap={};hit=true;}\n" +
             "if(pr.adBreakHeartbeatParams){delete pr.adBreakHeartbeatParams;hit=true;}\n" +
@@ -7352,7 +7384,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "function hasMarker(s){return s.indexOf('adPlacements')>=0||s.indexOf('playerAds')>=0||s.indexOf('adSlots')>=0;}\n" +
             "function cleanText(s){\n" +
             "if(typeof s!=='string'||!hasMarker(s))return s;\n" +
-            "try{var j=JSON.parse(s);cleanRoot(j);log('player yaniti temizlendi');return JSON.stringify(j);}catch(e){return s;}\n" +
+            "try{var j=JSON.parse(s);var b=adCnt;cleanRoot(j);mark('player yaniti: reklam '+(adCnt>b?(adCnt-b)+' adet SILINDI':'yok'));return JSON.stringify(j);}catch(e){return s;}\n" +
             "}\n" +
             "// Sayfa ilk yüklenirken: değişken atanır atanmaz temizle (yarış yok)\n" +
             "function trap(name){\n" +
@@ -7363,7 +7395,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(cur)cleanPlayer(cur);\n" +
             "Object.defineProperty(window,name,{configurable:true,enumerable:true,\n" +
             "get:function(){return cur;},\n" +
-            "set:function(v){try{if(cleanPlayer(v))log(name,'temizlendi');}catch(e){}cur=v;}});\n" +
+            "set:function(v){try{var b=adCnt;if(cleanPlayer(v))mark('ilk yukleme: reklam '+(adCnt>b?(adCnt-b)+' adet SILINDI':'yok'));}catch(e){}cur=v;}});\n" +
             "}catch(e){}\n" +
             "}\n" +
             "trap('ytInitialPlayerResponse');\n" +
@@ -7401,6 +7433,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "window.fetch=function(input,init){\n" +
             "var u='';try{u=typeof input==='string'?input:(input&&(input.url||input.href))||'';}catch(x){}\n" +
             "var p=_fetch.apply(this,arguments);\n" +
+            "if(/youtubei\\/v1\\/next/.test(u))resetDbg('gezinme basladi');\n" +
             "if(!RE.test(u))return p;\n" +
             "return p.then(function(res){\n" +
             "if(!res||!res.ok)return res;\n" +
@@ -7447,7 +7480,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(e){}\n" +
             "},400);\n" +
             "// Kurtarıcı: video başlarken (reklam yokken) dönen simgede takılırsa dürt\n" +
-            "var st={id:'',since:0,k1:0,k2:0};\n" +
+            "var st={id:'',since:0,k1:0,k2:0},dbgBuf=false,dbgAd=false;\n" +
             "setInterval(function(){\n" +
             "try{\n" +
             "if(location.pathname!=='/watch'){st.since=0;return;}\n" +
@@ -7455,17 +7488,20 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(!pl){st.since=0;return;}\n" +
             "var cl=pl.classList,v=pl.querySelector('video');\n" +
             "var ad=cl.contains('ad-showing')||cl.contains('ad-interrupting');\n" +
-            "if(ad||!v||!cl.contains('buffering-mode')||v.currentTime>1){st.since=0;return;}\n" +
+            "var buf=cl.contains('buffering-mode');\n" +
+            "if(buf!==dbgBuf){dbgBuf=buf;if(DBG)mark(buf?'spinner basladi':'spinner bitti');}\n" +
+            "if(ad!==dbgAd){dbgAd=ad;if(DBG)mark(ad?'REKLAM gosteriliyor':'reklam bitti');}\n" +
+            "if(ad||!v||!buf||v.currentTime>1){st.since=0;return;}\n" +
             "var id='';try{id=pl.getVideoData().video_id||'';}catch(e){}\n" +
             "var now=Date.now();\n" +
-            "if(id!==st.id||!st.since){st={id:id,since:now,k1:0,k2:0};return;}\n" +
+            "if(id!==st.id||!st.since){if(id!==st.id)mark('video id '+id);st={id:id,since:now,k1:0,k2:0};return;}\n" +
             "var d=now-st.since;\n" +
-            "if(d>2500&&!st.k1){\n" +
-            "st.k1=1;log('takildi, dürtülüyor',id,d);\n" +
+            "if(d>1200&&!st.k1){\n" +
+            "st.k1=1;mark('TAKILDI: dürtülüyor');\n" +
             "try{if(pl.playVideo)pl.playVideo();}catch(e){}\n" +
             "try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}\n" +
-            "}else if(d>5000&&!st.k2&&id){\n" +
-            "st.k2=1;log('hala takili, yeniden yükleniyor',id,d);\n" +
+            "}else if(d>4000&&!st.k2&&id){\n" +
+            "st.k2=1;mark('hala takili: yeniden yukleniyor');\n" +
             "try{if(pl.loadVideoById)pl.loadVideoById(id);}catch(e){}\n" +
             "}\n" +
             "}catch(e){}\n" +
