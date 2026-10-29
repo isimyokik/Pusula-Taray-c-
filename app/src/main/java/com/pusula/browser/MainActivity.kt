@@ -280,7 +280,7 @@ class MainActivity : AppCompatActivity() {
             for (c in audioManager.activePlaybackConfigurations) {
                 if (Build.VERSION.SDK_INT >= 28) {
                     try {
-                        if (c.clientUid == myUid) continue
+                        if (playbackClientUid(c) == myUid) continue
                     } catch (_: Exception) { }
                 }
                 val a = c.audioAttributes
@@ -307,6 +307,17 @@ class MainActivity : AppCompatActivity() {
         else -> true
     }
 
+
+    /** API 28+ getClientUid(); derleme SDK'sında property yoksa reflection. */
+    private fun playbackClientUid(c: android.media.AudioPlaybackConfiguration): Int {
+        if (Build.VERSION.SDK_INT < 28) return -1
+        return try {
+            c.javaClass.getMethod("getClientUid").invoke(c) as Int
+        } catch (_: Exception) {
+            -1
+        }
+    }
+
     /**
      * Başka uygulamanın medya seslerini sayar. Kendi WebView sekmelerimiz (aynı UID)
      * dış ses SANILMAZ — aksi halde sekme değiştirince müzik sessize iniyordu.
@@ -319,7 +330,7 @@ class MainActivity : AppCompatActivity() {
                 // Kendi uygulamamızın (tüm sekmeler) sesini dış ses sayma
                 if (Build.VERSION.SDK_INT >= 28) {
                     try {
-                        if (c.clientUid == myUid) return@count false
+                        if (playbackClientUid(c) == myUid) return@count false
                     } catch (_: Exception) { }
                 }
                 usageCounts(c.audioAttributes.usage)
