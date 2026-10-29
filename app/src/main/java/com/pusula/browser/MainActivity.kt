@@ -250,9 +250,10 @@ class MainActivity : AppCompatActivity() {
     private val focusNotifKeepAlive = object : Runnable {
         override fun run() {
             if (!pausedByAudioFocus) return
+            // Duck: müzik çalıyor (ses 0) — bildirim playing kalsın
             try {
                 PlaybackService.update(
-                    this@MainActivity, false,
+                    this@MainActivity, true,
                     lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                     isInPictureInPictureMode, -1L, -2L, lastArtUrl
                 )
@@ -274,8 +275,14 @@ class MainActivity : AppCompatActivity() {
     private fun tupleCounts(): Map<String, Int> {
         val m = HashMap<String, Int>()
         if (Build.VERSION.SDK_INT < 26) return m
+        val myUid = android.os.Process.myUid()
         try {
             for (c in audioManager.activePlaybackConfigurations) {
+                if (Build.VERSION.SDK_INT >= 28) {
+                    try {
+                        if (c.clientUid == myUid) continue
+                    } catch (_: Exception) { }
+                }
                 val a = c.audioAttributes
                 if (!usageCounts(a.usage)) continue
                 val k = a.usage.toString() + "/" + a.contentType
@@ -300,65 +307,33 @@ class MainActivity : AppCompatActivity() {
         else -> true
     }
 
-    private fun countMediaConfigs(): Int = activeUsages().count { u ->
-        when (u) {
-            AudioAttributes.USAGE_ALARM,
-            AudioAttributes.USAGE_NOTIFICATION,
-            AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
-            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
-            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT,
-            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
-            AudioAttributes.USAGE_NOTIFICATION_EVENT,
-            AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY,
-            AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE,
-            AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
-            AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING -> false
-            else -> true
-        }
-    }
-
-
-    private fun playbackClientUid(c: android.media.AudioPlaybackConfiguration): Int {
-        try {
-            val m = c.javaClass.methods.firstOrNull {
-                it.name == "getClientUid" && it.parameterTypes.isEmpty()
-            } ?: return -1
-            return (m.invoke(c) as? Int) ?: -1
-        } catch (_: Exception) {
-            return -1
-        }
-    }
-
     /**
-     * Başka uygulama medya sayısı. UID yoksa -1 (baseline kullanılır).
-     * Kendi WebView UID'si sayılmaz → YT↔YTM sekme geçişi sessiz kalmaz.
+     * Başka uygulamanın medya seslerini sayar. Kendi WebView sekmelerimiz (aynı UID)
+     * dış ses SANILMAZ — aksi halde sekme değiştirince müzik sessize iniyordu.
      */
-    private fun countExternalMediaConfigs(): Int {
-        if (Build.VERSION.SDK_INT < 26) return -1
+    private fun countMediaConfigs(): Int {
+        if (Build.VERSION.SDK_INT < 26) return 0
         val myUid = android.os.Process.myUid()
-        var n = 0
-        var sawUid = false
-        try {
-            for (c in audioManager.activePlaybackConfigurations) {
-                if (!usageCounts(c.audioAttributes.usage)) continue
-                val uid = playbackClientUid(c)
-                if (uid >= 0) {
-                    sawUid = true
-                    if (uid != myUid) n++
+        return try {
+            audioManager.activePlaybackConfigurations.count { c ->
+                // Kendi uygulamamızın (tüm sekmeler) sesini dış ses sayma
+                if (Build.VERSION.SDK_INT >= 28) {
+                    try {
+                        if (c.clientUid == myUid) return@count false
+                    } catch (_: Exception) { }
                 }
+                usageCounts(c.audioAttributes.usage)
             }
         } catch (_: Exception) {
-            return -1
+            0
         }
-        return if (sawUid) n else -1
     }
-
 
     private fun registerExternalAudioWatch() {
         if (Build.VERSION.SDK_INT < 26 || playbackCb != null) return
         try {
             val cb = object : AudioManager.AudioPlaybackCallback() {
-                override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
+                override fun onPlaybackConfigChanged(configs: List<android.media.AudioPlaybackConfiguration>) {
                     handler.removeCallbacks(extCheck)
                     handler.postDelayed(extCheck, 60L)
                 }
@@ -415,8 +390,7 @@ class MainActivity : AppCompatActivity() {
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
         focusPermanentLoss = false
         extQuietSince = 0L
-        val _pe = countExternalMediaConfigs()
-        externalPeakConfigs = if (_pe >= 0) _pe.coerceAtLeast(1) else countMediaConfigs().coerceAtLeast(1)
+        externalPeakConfigs = countMediaConfigs().coerceAtLeast(1)
         // Sadece ses seviyesi: yavaşça sıfıra iner ve sayfanın kendi volume yazmaları engellenir.
         // Bildirim/hasMedia/lastPlaying/pause/mute YOK.
         duckBaseline = extBaseline
@@ -430,72 +404,49 @@ class MainActivity : AppCompatActivity() {
 
 private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
-        val nExt = countExternalMediaConfigs()
-        val nAll = countMediaConfigs()
-        val useUid = nExt >= 0
-
+        val n = countMediaConfigs()
         if (pausedByAudioFocus) {
-            if (now - focusPauseSince < 800L) {
-                handler.postDelayed(extCheck, 400L)
+            // Erken açılma = sızıntı. En az 2 sn bekle, config net düşünce aç.
+            if (now - focusPauseSince < 2000L) {
+                handler.postDelayed(extCheck, 500L)
                 return
             }
-            val stillExternal = if (useUid) {
-                nExt >= 1
-            } else {
-                nAll >= externalPeakConfigs.coerceAtLeast(1)
-            }
-            if (!stillExternal) {
-                if (extQuietSince == 0L) {
-                    extQuietSince = now
-                    handler.postDelayed(extCheck, 400L)
-                } else if (now - extQuietSince >= 500L) {
-                    extQuietSince = 0L
-                    resumeFromFocus(false)
-                } else handler.postDelayed(extCheck, 300L)
-            } else {
+            val peak = externalPeakConfigs.coerceAtLeast(1)
+            if (n >= peak) {
                 extQuietSince = 0L
-                if (!useUid && nAll > externalPeakConfigs) externalPeakConfigs = nAll
-                handler.postDelayed(extCheck, 450L)
+                handler.postDelayed(extCheck, 500L)
+                return
+            }
+            // Config düştü
+            if (extQuietSince == 0L) {
+                extQuietSince = now
+                handler.postDelayed(extCheck, 600L)
+            } else if (now - extQuietSince >= 700L) {
+                extQuietSince = 0L
+                resumeFromFocus(false)
+            } else {
+                handler.postDelayed(extCheck, 400L)
             }
             return
         }
-
         val ourPlaying = hasMedia && lastPlaying
-        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null) {
-            extBaseline = -1
-            extSeenSince = 0L
+        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null || now - mediaChangedAt < 5000L) {
+            extBaseline = -1; extSeenSince = 0L
             return
         }
-
-        if (useUid) {
-            if (nExt >= 1) {
-                if (extSeenSince == 0L) {
-                    extSeenSince = now
-                    handler.postDelayed(extCheck, 200L)
-                } else if (now - extSeenSince >= 200L) {
-                    extSeenSince = 0L
-                    beginExternalPause()
-                }
-            } else {
-                extSeenSince = 0L
-            }
-        } else {
-            if (nAll >= 1 && (extBaseline < 0 || nAll < extBaseline)) {
-                extBaseline = nAll
-                extBaseTuples = tupleCounts()
-            }
-            if (extBaseline >= 1 && nAll > extBaseline) {
-                if (extSeenSince == 0L) {
-                    extSeenSince = now
-                    handler.postDelayed(extCheck, 250L)
-                } else if (now - extSeenSince >= 250L) {
-                    extSeenSince = 0L
-                    beginExternalPause()
-                }
-            } else {
-                extSeenSince = 0L
-            }
+        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) {
+            extBaseline = n
+            extBaseTuples = tupleCounts()
         }
+        if (extBaseline >= 1 && n > extBaseline) {
+            if (extSeenSince == 0L) {
+                extSeenSince = now
+                handler.postDelayed(extCheck, 250L)
+            } else if (now - extSeenSince >= 250L) {
+                extSeenSince = 0L
+                beginExternalPause()
+            }
+        } else extSeenSince = 0L
     }
 
 private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
@@ -812,7 +763,9 @@ private fun pollMedia() {
             }
         } catch (_: Exception) { return }
         title = cleanMeta(title); artist = cleanMeta(artist)
-        if (pausedByAudioFocus && focusFadeRunnable != null) playing = false
+        // Duck = volume 0, müzik çalmaya devam — poll "paused" dese de bildirim playing
+        if (pausedByAudioFocus) playing = true
+        else if (focusFadeRunnable != null) playing = false
         // Devam sonrası poll gecikmeli false dönebilir; bildirim çalıyor kalsın
         if (!pausedByAudioFocus && android.os.SystemClock.elapsedRealtime() < focusResumePlayUntil) {
             if (!playing) playing = true
@@ -822,7 +775,8 @@ private fun pollMedia() {
             val now0 = android.os.SystemClock.elapsedRealtime()
             // Focus / devam penceresinde servisi ASLA durdurma
             if (pausedByAudioFocus || now0 < focusNotifHoldUntil || now0 < focusResumePlayUntil) {
-                val showPlay = (!pausedByAudioFocus) && (now0 < focusResumePlayUntil || lastPlaying)
+                // Duck sırasında da playing: sadece ses kısık
+                val showPlay = pausedByAudioFocus || now0 < focusResumePlayUntil || lastPlaying
                 try {
                     PlaybackService.update(
                         this, showPlay,
@@ -1179,8 +1133,14 @@ fun onMusicCatalog(raw: String?) {
             try { shown?.onResume() } catch (_: Exception) { }
             try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
             if (pausedByAudioFocus) {
-                // Bildirim ayakta kalsın, idle stop tetiklenmesin
-                try { PlaybackService.update(this@MainActivity, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
+                // Duck: idle stop olmasın, bildirim playing (müzik durmadı)
+                try {
+                    PlaybackService.update(
+                        this@MainActivity, true,
+                        lastTitle.ifBlank { "YouTube Music" }, lastArtist,
+                        false, -1L, -2L, lastArtUrl
+                    )
+                } catch (_: Exception) { }
                 handler.postDelayed(this, 2000L)
                 return
             }
