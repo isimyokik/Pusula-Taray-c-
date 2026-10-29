@@ -4044,91 +4044,68 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
         }
         fun pickAndStart(links: List<Pair<String, String>>) {
-            fun isAudioLab(label: String, url: String): Boolean {
+            // pasted-text-11 mantığı: sesli progressive 720p (itag 22) öncelik — hızlı, sesli
+            fun isAudio(label: String, url: String): Boolean {
                 if (label.startsWith("A:")) return true
                 val x = "$label $url".lowercase()
                 return x.contains("mp3") || x.contains("audio") || x.contains("m4a") ||
-                    x.contains("mime=audio") || x.contains("itag=140") || x.contains("itag=251")
+                    x.contains("mime=audio") || x.contains("itag=140") || x.contains("itag=251") ||
+                    x.contains("itag=139") || x.contains("itag=249") || x.contains("itag=250")
+            }
+            fun looksProgressive(url: String): Boolean {
+                val u = url.lowercase()
+                return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
+                    u.contains("itag=37") ||
+                    (u.contains("mime=video") && u.contains("audio")) ||
+                    (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
             }
             fun bestAudio(): String? {
-                val a = links.filter { isAudioLab(it.first, it.second) }
+                val a = links.filter { isAudio(it.first, it.second) }
                 return a.firstOrNull { it.first == "A:M4A" }?.second
                     ?: a.firstOrNull { it.first.startsWith("A:") }?.second
                     ?: a.maxByOrNull { it.second.length }?.second
             }
-            fun isAvcUrl(url: String): Boolean {
-                val x = url.lowercase()
-                if ("vp9" in x || "vp09" in x || "webm" in x) return false
-                return "avc1" in x || "mime=video%2fmp4" in x || "mime=video/mp4" in x ||
-                    Regex("itag=(137|136|135|134|133|160|298|299|264|266|399|398|397)").containsMatchIn(x)
-            }
-            fun adaptive(h: Int): String? {
-                val cands = links.filter {
-                    it.first == "V:$h" ||
-                        (it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h)
-                }
-                return cands.firstOrNull { isAvcUrl(it.second) }?.second
-            }
-            fun looksProgressive(url: String): Boolean {
-                val u = url.lowercase()
-                // Adaptive sadece video (mime=video, audio yok) → sesiz dosya; alma
-                if (u.contains("mime=video") && !u.contains("audio")) return false
-                if (u.contains("itag=137") || u.contains("itag=136") || u.contains("itag=135") ||
-                    u.contains("itag=298") || u.contains("itag=299") || u.contains("itag=248") ||
-                    u.contains("itag=247") || u.contains("itag=399") || u.contains("itag=398")) return false
-                // Sesli progressive: 22=720p, 18=360p, 37=1080p
-                return u.contains("itag=22") || u.contains("itag=18") || u.contains("itag=37") ||
-                    u.contains("itag=38") ||
-                    (u.contains("ratebypass") && (u.contains("mime=video") && u.contains("audio"))) ||
-                    (u.contains("mime=video") && u.contains("audio"))
-            }
-            fun progScore(label: String, url: String): Int {
-                val x = "$label $url".lowercase()
-                return when {
-                    "1080" in x || "itag=37" in x -> 1080
-                    "720" in x || "itag=22" in x -> 720
-                    "480" in x -> 480
-                    "360" in x || "itag=18" in x -> 360
-                    else -> 100
-                }
-            }
+            fun adaptive(h: Int): String? =
+                links.firstOrNull { it.first == "V:$h" }?.second
+                    ?: links.firstOrNull { it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h }?.second
             val audio = bestAudio()
-            if (audioOnly && audio != null) {
-                toast("İndiriliyor…")
-                startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
-                return
+            when {
+                audioOnly && audio != null -> {
+                    toast("İndiriliyor…")
+                    startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+                }
+                !audioOnly -> {
+                    // 1) itag 22 / MP4 720p progressive (sesli, tek dosya)
+                    val prog720 = links.firstOrNull {
+                        !isAudio(it.first, it.second) && (
+                            it.second.lowercase().contains("itag=22") ||
+                                it.first.contains("720")
+                            ) && looksProgressive(it.second)
+                    }?.second
+                        ?: links.firstOrNull { it.first == "MP4 720p" }?.second
+                    // 2) diğer progressive
+                    val prog = prog720
+                        ?: links.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
+                        ?: links.firstOrNull {
+                            it.first.startsWith("MP4") && !isAudio(it.first, it.second)
+                        }?.second
+                    when {
+                        prog != null -> {
+                            toast("İndiriliyor…")
+                            startDownload(prog, null, null, "video/mp4", "$base.mp4")
+                        }
+                        // Yedek: birleştirme (11'deki sıra)
+                        adaptive(720) != null && audio != null ->
+                            downloadAndMerge(adaptive(720)!!, audio, "$base.mp4", prog)
+                        adaptive(1080) != null && audio != null ->
+                            downloadAndMerge(adaptive(1080)!!, audio, "$base.mp4", prog)
+                        adaptive(480) != null && audio != null ->
+                            downloadAndMerge(adaptive(480)!!, audio, "$base.mp4", prog)
+                        else -> toast("İndirme linki alınamadı")
+                    }
+                }
+                else -> toast("İndirme linki alınamadı")
             }
-            // Önce kesin sesli progressive (itag 22 = 720p)
-            val prog22 = links.firstOrNull { looksProgressive(it.second) && it.second.lowercase().contains("itag=22") }?.second
-            val prog = prog22 ?: links.filter {
-                !isAudioLab(it.first, it.second) && looksProgressive(it.second)
-            }.maxByOrNull { progScore(it.first, it.second) }?.second
-            if (prog != null) {
-                toast("İndiriliyor…")
-                startDownload(prog, null, null, "video/mp4", "$base.mp4")
-                return
-            }
-            val heights = links.mapNotNull {
-                if (it.first.startsWith("V:")) it.first.removePrefix("V:").toIntOrNull() else null
-            }.filter { it >= 240 }.distinct().sortedDescending()
-            val bestH = heights.firstOrNull()
-            val vBest = bestH?.let { adaptive(it) }
-            val aacOk = audio != null && run {
-                val x = audio!!.lowercase()
-                "itag=140" in x || "itag=141" in x || "mp4a" in x ||
-                    "mime=audio%2fmp4" in x || "mime=audio/mp4" in x ||
-                    links.any { it.second == audio && it.first == "A:M4A" }
-            }
-            if (vBest != null && aacOk) {
-                toast("İndiriliyor…")
-                downloadAndMerge(vBest, audio!!, "$base.mp4", null)
-                return
-            }
-            if (audio != null) {
-                startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
-                return
-            }
-            toast("İndirme linki alınamadı")
         }
 
         // PipePipe/yt-dlp tarzı: önce Innertube (1080p adaptive), sayfa yedek, SaveFrom son
