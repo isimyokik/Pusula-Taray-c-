@@ -235,6 +235,22 @@ class MainActivity : AppCompatActivity() {
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
+    /** Pause süresince bildirimi ayakta tut (idle stop olmasın) */
+    private val focusNotifKeepAlive = object : Runnable {
+        override fun run() {
+            if (!pausedByAudioFocus) return
+            try {
+                PlaybackService.update(
+                    this@MainActivity, false,
+                    lastTitle.ifBlank { "YouTube Music" }, lastArtist,
+                    isInPictureInPictureMode, -1L, -2L, lastArtUrl
+                )
+            } catch (_: Exception) { }
+            handler.postDelayed(this, 5000L)
+        }
+    }
+
+
     /** Bildirim/alarm/zil/navigasyon sesleri sayılmaz; geri kalan her şey (usage 0 dahil) başka bir ses sayılır. */
     private fun activeUsages(): List<Int> {
         if (Build.VERSION.SDK_INT < 26) return emptyList()
