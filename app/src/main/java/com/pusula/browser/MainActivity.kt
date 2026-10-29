@@ -7319,118 +7319,84 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val STABLE_AD_BLOCKER_JS =
             "(function(){" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
-            "if(window.__rotaAdBlockV2)return;window.__rotaAdBlockV2=1;" +
-            "var fast=false,gap=0,cover=null,obs=null,obsPl=null,tick=0,adSince=0;" +
-            "var sels=['.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info','.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text','.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container','.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list','.ytp-ad-feedback-dialog-container','.caption-window','.ytp-caption-window-container','.ytp-caption-segment','.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial','ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer','.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'];" +
-            "function hideAdUi(on){" +
-            "for(var i=0;i<sels.length;i++){" +
-            "document.querySelectorAll(sels[i]).forEach(function(el){" +
+            "if(window.__rotaAdBlockV3)return;window.__rotaAdBlockV3=1;" +
+            "var lastAd=0;" +
+            "function clickSkip(root){" +
             "try{" +
-            "if(on){el.style.setProperty('display','none','important');el.style.setProperty('visibility','hidden','important');el.style.setProperty('opacity','0','important');}" +
-            "else{el.style.removeProperty('display');el.style.removeProperty('visibility');el.style.removeProperty('opacity');}" +
-            "}catch(x){}" +
-            "});" +
-            "}" +
-            "}" +
-            "function trySkip(pl){" +
-            "try{" +
-            "var qs=['.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-skip-ad-button','.ytp-ad-skip-button-container button','.ytp-ad-skip-button-slot button','button.ytp-ad-skip-button-modern','[class*=\"ad-skip\"] button','[class*=\"skip-button\"]','button[aria-label*=\"Skip\"]','button[aria-label*=\"Atla\"]','button[aria-label*=\"skip\"]','.ytp-ad-overlay-close-button','button.ytp-ad-overlay-close-button','.ytp-ad-overlay-close-container button'];" +
+            "var qs=['.ytp-skip-ad-button','.ytp-ad-skip-button','.ytp-ad-skip-button-modern'," +
+            "'.ytp-ad-skip-button-container button','.ytp-ad-skip-button-slot button'," +
+            "'[id^=skip-button]','.ytp-ad-overlay-close-button','button[aria-label*=\"Skip\"]'," +
+            "'button[aria-label*=\"Atla\"]','button[aria-label*=\"skip\"]'];" +
             "for(var i=0;i<qs.length;i++){" +
-            "var list=(pl||document).querySelectorAll(qs[i]);" +
+            "var list=(root||document).querySelectorAll(qs[i]);" +
             "for(var j=0;j<list.length;j++){try{list[j].click();}catch(z){}}" +
             "}" +
-            "document.querySelectorAll('button,.ytp-button').forEach(function(b){" +
+            "document.querySelectorAll('button').forEach(function(b){" +
             "try{var t=((b.textContent||'')+' '+(b.getAttribute('aria-label')||'')).toLowerCase();" +
-            "if(/skip|atla|reklam[ıi] atla/.test(t))b.click();}catch(z){}});" +
+            "if(/^(skip|atla)|reklamı? atla|skip ad/.test(t.trim()))b.click();}catch(z){}});" +
             "}catch(e){}" +
             "}" +
-            "function ensureCover(pl){" +
-            "if(cover&&cover.parentNode===pl)return cover;" +
-            "cover=document.createElement('div');" +
-            "cover.id='__adcover';" +
-            "cover.style.cssText='position:absolute;left:0;top:0;right:0;bottom:0;background:#000;z-index:2147483000;pointer-events:none;display:none';" +
-            "if(!document.getElementById('__adcss')){" +
-            "var st=document.createElement('style');" +
-            "st.id='__adcss';" +
-            "st.textContent='@keyframes __adsp{to{transform:rotate(360deg)}}';" +
-            "document.documentElement.appendChild(st);" +
+            "function isAd(pl){" +
+            "if(!pl)return false;" +
+            "if(pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting'))return true;" +
+            "if(pl.querySelector('.ytp-ad-player-overlay,.ytp-ad-player-overlay-layout,.ytp-ad-text," +
+            ".ytp-ad-simple-ad-badge,.ytp-ad-preview-container,.ytp-ad-image-overlay,.video-ads .ad-container'))return true;" +
+            "return false;" +
             "}" +
-            "var sp=document.createElement('div');" +
-            "sp.style.cssText='position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;box-sizing:border-box;border:4px solid rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.9);border-radius:50%;animation:__adsp .9s linear infinite';" +
-            "cover.appendChild(sp);" +
-            "pl.appendChild(cover);" +
-            "return cover;" +
+            "function killAd(pl,vd){" +
+            "try{" +
+            "clickSkip(pl);" +
+            "if(vd){" +
+            "try{vd.muted=true;vd.volume=0;}catch(x){}" +
+            "try{vd.playbackRate=16;}catch(x){}" +
+            // Reklam videosunun sonuna at — asıl videoyu değil, ad-showing sırasındaki src
+            "try{" +
+            "if(isFinite(vd.duration)&&vd.duration>0&&vd.duration<240){vd.currentTime=Math.max(0,vd.duration-0.05);}" +
+            "else{vd.currentTime=1e5;}" +
+            "}catch(x){}" +
             "}" +
-            "function endAd(vd){" +
-            "fast=false;adSince=0;" +
-            "hideAdUi(false);" +
-            "if(!vd)return;" +
-            "vd.style.visibility='';" +
-            "vd.playbackRate=1;" +
-            "vd.muted=false;" +
-            "var tv=parseFloat(vd.dataset.pv||'1')||1;" +
-            "vd.volume=0;" +
-            "var k=0;" +
-            "var iv=setInterval(function(){k++;vd.muted=false;vd.volume=Math.min(tv,tv*(k/12));if(k>=12){clearInterval(iv);vd.volume=tv;vd.muted=false;}},30);" +
-            "}" +
-            "function forceUnstick(pl,vd,cv){" +
             "try{pl.classList.remove('ad-showing');pl.classList.remove('ad-interrupting');}catch(x){}" +
-            "if(cv)cv.style.display='none';" +
-            "endAd(vd);" +
-            "if(vd&&vd.paused){try{window.__userPause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
+            // UI temizle
+            "try{document.querySelectorAll('.ytp-ad-module,.ytp-ad-player-overlay,.ytp-ad-player-overlay-layout," +
+            ".ytp-ad-text,.ytp-ad-overlay-container,.ytp-ad-image-overlay,.ytp-ad-progress-list," +
+            "ytd-ad-slot-renderer,.video-ads').forEach(function(el){" +
+            "el.style.setProperty('display','none','important');});}catch(x){}" +
+            "try{var mp=document.getElementById('movie_player');" +
+            "if(mp&&typeof mp.skipAd==='function')mp.skipAd();}catch(x){}" +
+            "}catch(e){}" +
+            "}" +
+            "function restore(vd){" +
+            "if(!vd)return;" +
+            "try{vd.playbackRate=1;}catch(x){}" +
+            "try{vd.muted=false;if(vd.volume<0.05)vd.volume=1;}catch(x){}" +
+            "try{if(vd.paused){window.__forcePause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}}catch(x){}" +
             "}" +
             "function check(){" +
             "try{" +
-            "var pl=document.querySelector('.html5-video-player');" +
+            "var pl=document.querySelector('.html5-video-player')||document.getElementById('movie_player');" +
             "if(!pl)return;" +
             "var vd=pl.querySelector('video');" +
-            "var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');" +
-            "var cv=ensureCover(pl);" +
-            "if(ad){" +
-            "if(!adSince)adSince=Date.now();" +
-            "gap=0;" +
-            "cv.style.display='block';" +
-            "tick++;" +
-            "if(tick%5===1)hideAdUi(true);" +
-            "if(vd){" +
-            "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
-            "try{vd.volume=0;vd.muted=true;}catch(x){}" +
-            "vd.style.visibility='hidden';" +
-            "try{if(vd.playbackRate<16)vd.playbackRate=16;}catch(x){}" +
-            // Reklam süresinin sonuna at — beklemeden bitsin
-            "try{if(isFinite(vd.duration)&&vd.duration>0&&vd.duration<180){vd.currentTime=Math.max(0,vd.duration-0.15);}}catch(x){}" +
+            "if(isAd(pl)){" +
+            "lastAd=Date.now();" +
+            "killAd(pl,vd);" +
+            "}else if(lastAd&&(Date.now()-lastAd)<1500){" +
+            "restore(vd);" +
+            "lastAd=0;" +
             "}" +
-            "trySkip(pl);" +
-            // Player API skip
-            "try{var mp=document.getElementById('movie_player');" +
-            "if(mp){if(typeof mp.skipAd==='function')mp.skipAd();" +
-            "if(typeof mp.cancelPlayback==='function'&&pl.classList.contains('ad-showing')){/*no*/}}" +
-            "}catch(x){}" +
-            // 2.5 sn'den uzun sürerse zorla çık
-            "if(adSince&&(Date.now()-adSince)>2500){forceUnstick(pl,vd,cv);}" +
-            "}else if(fast||cv.style.display!=='none'){" +
-            "adSince=0;" +
-            "if(vd&&vd.playbackRate>1)vd.playbackRate=1;" +
-            "gap++;" +
-            "if(gap>=2){" +
-            "gap=0;" +
-            "cv.style.display='none';" +
-            "endAd(vd);" +
-            "if(vd&&vd.paused){try{window.__userPause=false;var p=vd.play();if(p&&p.catch)p.catch(function(){});}catch(x){}}" +
-            "}" +
-            "}else{adSince=0;}" +
             "}catch(e){}" +
             "}" +
+            "var obs=null,obsPl=null;" +
             "function watch(){" +
-            "var pl=document.querySelector('.html5-video-player');" +
+            "var pl=document.querySelector('.html5-video-player')||document.getElementById('movie_player');" +
             "if(pl&&pl!==obsPl){" +
             "obsPl=pl;" +
-            "if(obs)obs.disconnect();" +
-            "obs=new MutationObserver(check);" +
-            "obs.observe(pl,{attributes:true,attributeFilter:['class']});" +
+            "if(obs)try{obs.disconnect();}catch(x){}" +
+            "obs=new MutationObserver(function(){check();});" +
+            "obs.observe(pl,{attributes:true,attributeFilter:['class'],childList:true,subtree:true});" +
             "}" +
             "}" +
-            "setInterval(function(){watch();check();},60);" +
+            "setInterval(function(){watch();check();},40);" +
+            "document.addEventListener('yt-navigate-finish',function(){setTimeout(check,50);},true);" +
             "})();"
 
 
