@@ -6341,6 +6341,152 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
 
         // YouTube sayfasından progressive + ses URL'lerini çıkar (cipher'sız olanlar)
 
+        const val YT_MUSIC_UX_JS =
+            "(function(){try{\n" +
+            "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
+            "function scrub(){\n" +
+            "try{\n" +
+            "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
+            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "var p=document.querySelector('ytmusic-player-page');\n" +
+            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "scrub();\n" +
+            "function isFullPlayer(){\n" +
+            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
+            "if(!p)return false;\n" +
+            "try{\n" +
+            "var layout=document.querySelector('ytmusic-app-layout,#layout');\n" +
+            "if(layout){\n" +
+            "var st=layout.getAttribute('player-ui-state_')||'';\n" +
+            "if(st==='PLAYER_BAR_ONLY')return false;\n" +
+            "if(layout.playerPageOpen_===false)return false;\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "var cs=getComputedStyle(p);\n" +
+            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
+            "var r=p.getBoundingClientRect(),H=window.innerHeight;\n" +
+            "return r.width>0&&r.height>H*0.55&&r.top<H*0.22;\n" +
+            "}\n" +
+            "function findMinBtn(){\n" +
+            "var sels=[\n" +
+            "'.player-minimize-button',\n" +
+            "'.toggle-player-page-button',\n" +
+            "'tp-yt-paper-icon-button.toggle-player',\n" +
+            "'ytmusic-player-page .exit-fullscreen-button',\n" +
+            "'ytmusic-player-page [aria-label*=\"Küçült\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Minimize\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Down\"]',\n" +
+            "'ytmusic-player-page [aria-label*=\"Close\"]',\n" +
+            "'ytmusic-player-page button'\n" +
+            "];\n" +
+            "for(var i=0;i<sels.length;i++){\n" +
+            "var nodes=document.querySelectorAll(sels[i]);\n" +
+            "for(var j=0;j<nodes.length;j++){\n" +
+            "var el=nodes[j],r=el.getBoundingClientRect();\n" +
+            "if(r.width>0&&r.height>0&&r.top<120&&r.left<120)return el;\n" +
+            "}\n" +
+            "}\n" +
+            "try{\n" +
+            "var t=document.elementFromPoint(28,40);\n" +
+            "if(t)return t.closest('button,[role=button],tp-yt-paper-icon-button,a')||t;\n" +
+            "}catch(z){}\n" +
+            "return null;\n" +
+            "}\n" +
+            "function minimize(){\n" +
+            "if(!isFullPlayer())return;\n" +
+            "var el=findMinBtn();\n" +
+            "if(!el)return;\n" +
+            "try{el.click();}catch(z){}\n" +
+            "try{\n" +
+            "if(window.RotaTap){\n" +
+            "var r=el.getBoundingClientRect();\n" +
+            "var x=(r.left+r.width/2)/window.innerWidth;\n" +
+            "var y=(r.top+r.height/2)/window.innerHeight;\n" +
+            "window.RotaTap.tap(x,y);\n" +
+            "setTimeout(function(){try{if(window.RotaTap&&RotaTap.reset)RotaTap.reset();unlock();}catch(q){}},450);\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "function unlock(){\n" +
+            "try{\n" +
+            "['html','body','ytmusic-app','ytmusic-app-layout','#layout','#content','#main-panel','#contents','ytmusic-browse-response','ytmusic-tabbed-search-results-renderer','ytmusic-section-list-renderer'].forEach(function(q){\n" +
+            "document.querySelectorAll(q).forEach(function(el){\n" +
+            "var st=el.style;if(!st)return;\n" +
+            "if(st.overflow==='hidden'||st.overflowY==='hidden'){st.removeProperty('overflow');st.removeProperty('overflow-y');}\n" +
+            "if(st.touchAction==='none'||st.touchAction==='pinch-zoom'){st.removeProperty('touch-action');}\n" +
+            "if(st.pointerEvents==='none'&&q!=='ytmusic-app-layout'){st.removeProperty('pointer-events');}\n" +
+            "if(el.hasAttribute&&el.hasAttribute('dragging'))el.removeAttribute('dragging');\n" +
+            "});\n" +
+            "});\n" +
+            "document.querySelectorAll('tp-yt-paper-slider,tp-yt-paper-progress,#progress-bar,#sliderBar').forEach(function(el){try{el.removeAttribute('dragging');el.removeAttribute('pressed');el.removeAttribute('immediate-value-changing');}catch(z){}});\n" +
+            "['pointerup','mouseup','touchend'].forEach(function(n){try{document.dispatchEvent(new Event(n,{bubbles:true}));}catch(z){}});\n" +
+            "var locked=false;\n" +
+            "[document.documentElement,document.body,document.querySelector('ytmusic-app-layout'),document.querySelector('ytmusic-app')].forEach(function(el){\n" +
+            "if(!el)return;var cs=getComputedStyle(el);\n" +
+            "if(cs.overflowY==='hidden'&&(el===document.documentElement||el===document.body)){el.style.setProperty('overflow-y','auto','important');locked=true;}\n" +
+            "if(cs.touchAction==='none'){el.style.setProperty('touch-action','auto','important');locked=true;}\n" +
+            "if(cs.position==='fixed'&&el===document.body){el.style.setProperty('position','static','important');locked=true;}\n" +
+            "});\n" +
+            "try{document.documentElement.classList.remove('no-scroll','scroll-lock','modal-open');document.body.classList.remove('no-scroll','scroll-lock','modal-open');}catch(z){}\n" +
+            "if(locked&&window.RotaTap&&RotaTap.reset)RotaTap.reset();\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "window.__rotaUnlock=unlock;\n" +
+            "setInterval(function(){if(!isFullPlayer())unlock();},500);\n" +
+            "document.addEventListener('touchend',function(){setTimeout(function(){if(!isFullPlayer())unlock();},150);setTimeout(function(){if(!isFullPlayer())unlock();},700);},{passive:true,capture:true});\n" +
+            "var sx=0,sy=0,tr=false;\n" +
+            "document.addEventListener('touchstart',function(e){\n" +
+            "tr=false;\n" +
+            "if(!e.touches||e.touches.length!==1)return;\n" +
+            "if(!isFullPlayer())return;\n" +
+            "try{if(e.target&&e.target.closest&&e.target.closest('tp-yt-paper-slider,#progress-bar,#sliderBar,.slider,#slider-container,ytmusic-player-bar,.time-info'))return;}catch(z){}\n" +
+            "sx=e.touches[0].clientX;\n" +
+            "sy=e.touches[0].clientY;\n" +
+            "tr=true;\n" +
+            "},{passive:true,capture:true});\n" +
+            "document.addEventListener('touchend',function(e){\n" +
+            "if(!tr)return;tr=false;\n" +
+            "if(!isFullPlayer())return;\n" +
+            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
+            "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
+            "if(dy<50||Math.abs(dx)>dy*1.1)return;\n" +
+            "minimize();\n" +
+            "},{passive:true,capture:true});\n" +
+            "document.addEventListener('touchcancel',function(){tr=false;},{passive:true,capture:true});\n" +
+            "}catch(e){}})();\n"
+
+        const val KEEP_PLAYING_JS =
+            "(function(){try{" +
+                "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
+                "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
+                "document.addEventListener('visibilitychange',function(e){" +
+                "document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.dataset.pusulaWasPlaying='1';});" +
+                "e.stopImmediatePropagation();},true);" +
+                // Kullanıcı durdurduysa arka planda tekrar başlatma
+                "document.addEventListener('pause',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
+                "if(window.__pipBlock&&!window.__userPause)return;" +
+                "m.dataset.pusulaWasPlaying='';}catch(z){}},true);" +
+                "document.addEventListener('play',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
+                "m.dataset.pusulaWasPlaying='1';window.__userPause=false;}catch(z){}},true);" +
+                "}catch(e){}})();"
+
+        // Reklam sırasında: siyah bekleme ekranı örtülür, ses tamamen kısılır, altyazı ve reklam arayüzü gizlenir,
+        // reklam 16 kat hızlandırılır ve "Atla" düğmesine basılır. Reklam bitince ekran varsayılan haline döner.
+
+        const val YT_PROMO_JS = """
+                  (function(){try{
+                  if(window.__rotaPromo)return;window.__rotaPromo=1;
+                  var re=/uygulama(y[ıi]|n[ıi]|s[ıi]nda)?\s*(dene|a[cç]|y[üu]kle|indir|edin|al\b|ile|izle|dinle)|uygulamada\s*(a[cç]|dinle|izle|devam)|en iyi deneyim|t[üu]m [öo]zellik|get\s*the\s*app|open\s*(in\s*)?(the\s*)?app|try\s*the\s*app|use\s*the\s*app|install\s*(the\s*)?app|download\s*the\s*app|listen\s*in\s*the\s*app|watch\s*in\s*(the\s*)?(youtube\s*)?app|continue\s*in\s*(the\s*)?app|better\s*on\s*the\s*app|youtube music uygulamas[ıi]nda/i;
+                  var no=/^(hay[ıi]r|şimdi de[gğ]il|simdi degil|belki sonra|not now|no,? thanks|continue in browser|taray[ıi]c[ıi]da devam|kapat|close|dismiss|vazge[cç]|×|✕)/i;
+                  function hide(e){if(!e||!e.style)return;try{e.style.setProperty('display','none','important');e.style.setProperty('visibility','hidden','important');e.style.setProperty('pointer-events','none','important');e.setAttribute('aria-hidden','true');}catch(x){}}
+                  function killBackdrop(){
+                  document.querySelectorAll('iron-overlay-backdrop,tp-yt-iron-overlay-backdrop,.dialog-backdrop,[class*="overlay-backdrop"]').forEach(hide);
+                  try{document.body.style.setProperty('overflow','auto','important');document.documentElement.style.setProperty('overflow','auto','important');}catch(x){}
+
         const val YT_EXTRACT_FORMATS_JS =
             "(function(){try{" +
             "function collect(p){if(!p||!p.streamingData)return[];var out=[];" +
