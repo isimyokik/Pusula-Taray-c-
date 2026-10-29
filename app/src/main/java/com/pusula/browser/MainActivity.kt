@@ -2759,7 +2759,10 @@ fun onMusicCatalog(raw: String?) {
             "adcolony.com", "taboola.com", "outbrain.com", "scorecardresearch.com",
             "amazon-adsystem.com", "criteo.com", "hotjar.com", "pagead2.googlesyndication.com",
             "googleads.g.doubleclick.net", "static.doubleclick.net", "ad.youtube.com",
-            "s0.2mdn.net", "s1.2mdn.net", "partnerad.l.doubleclick.net"
+            "s0.2mdn.net", "s1.2mdn.net", "partnerad.l.doubleclick.net",
+            "googleads4.g.doubleclick.net", "adclick.g.doubleclick.net",
+            "securepubads.g.doubleclick.net", "pagead.l.doubleclick.net",
+            "www.googleadservices.com", "ade.googlesyndication.com"
         )
         if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true
         // YouTube reklam uçları (video playback googlevideo'ya dokunma)
@@ -2785,11 +2788,35 @@ fun onMusicCatalog(raw: String?) {
             val uri = request?.url ?: return null
             // Reklam isteği: boş 204 — oynatıcı timeout (≈15sn) beklemesin
             if (prefs.adBlock && request?.isForMainFrame != true && shouldBlockAd(uri)) {
-                return WebResourceResponse(
-                    "text/plain", "utf-8", 204, "No Content",
-                    mapOf("Access-Control-Allow-Origin" to "*"),
-                    ByteArrayInputStream(ByteArray(0))
-                )
+                // 204 oynatıcıyı ~15sn bekletebiliyor; hemen boş 200 (premium)
+                val path = (uri.encodedPath ?: "").lowercase()
+                val isImg = path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".gif") ||
+                    path.endsWith(".webp") || path.endsWith(".ico") || path.contains("/pagead/adview")
+                return if (isImg) {
+                    val gif = byteArrayOf(
+                        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00,
+                        0x80.toByte(), 0x00, 0x00, 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
+                        0x00, 0x00, 0x00, 0x21, 0xf9.toByte(), 0x04, 0x01, 0x00, 0x00, 0x00, 0x00,
+                        0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02,
+                        0x44, 0x01, 0x00, 0x3b
+                    )
+                    WebResourceResponse(
+                        "image/gif", "utf-8", 200, "OK",
+                        mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "no-store"),
+                        ByteArrayInputStream(gif)
+                    )
+                } else {
+                    val empty = "{}".toByteArray(Charsets.UTF_8)
+                    WebResourceResponse(
+                        "application/json", "utf-8", 200, "OK",
+                        mapOf(
+                            "Access-Control-Allow-Origin" to "*",
+                            "Content-Type" to "application/json",
+                            "Cache-Control" to "no-store"
+                        ),
+                        ByteArrayInputStream(empty)
+                    )
+                }
             }
             return loader.shouldInterceptRequest(uri)
         }
@@ -7323,7 +7350,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val STABLE_AD_BLOCKER_JS =
             "(function(){" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
-            "if(window.__rotaAdStripV3)return;window.__rotaAdStripV3=1;" +
+            "if(window.__rotaAdStripV4)return;window.__rotaAdStripV4=1;" +
             "function cleanPlayer(pr){" +
             "if(!pr||typeof pr!=='object')return;" +
             "try{" +
@@ -7332,10 +7359,9 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(pr.adBreakHeartbeatParams)delete pr.adBreakHeartbeatParams;" +
             "if(pr.adBreaks)pr.adBreaks=[];" +
             "if(pr.adModuleParams)delete pr.adModuleParams;" +
-            "if(pr.playerConfig&&pr.playerConfig.daiConfig)delete pr.playerConfig.daiConfig;" +
-            "if(pr.auxiliaryUi&&pr.auxiliaryUi.messageRenderers){" +
-            "try{pr.auxiliaryUi.messageRenderers={};}catch(z){}" +
-            "}" +
+            "if(pr.playerConfig){try{if(pr.playerConfig.daiConfig)delete pr.playerConfig.daiConfig;if(pr.playerConfig.adsConfig)delete pr.playerConfig.adsConfig;}catch(z){}}" +
+            "if(pr.auxiliaryUi){try{pr.auxiliaryUi.messageRenderers={};}catch(z){}}" +
+            "if(pr.messages)pr.messages=[];" +
             "}catch(e){}" +
             "}" +
             "function cleanRoot(o){" +
@@ -7352,7 +7378,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}" +
             "function cleanText(s){" +
             "if(typeof s!=='string')return s;" +
-            "if(s.indexOf('adPlacements')<0&&s.indexOf('playerAds')<0)return s;" +
+            "if(s.indexOf('adPlacements')<0&&s.indexOf('playerAds')<0&&s.indexOf('adSlots')<0)return s;" +
             "try{var j=JSON.parse(s);cleanRoot(j);if(j.playerResponse)cleanPlayer(j.playerResponse);return JSON.stringify(j);}catch(e){return s;}" +
             "}" +
             "function scrub(){" +
@@ -7375,7 +7401,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var _jp=JSON.parse;" +
             "JSON.parse=function(text,rev){" +
             "var o=_jp.call(JSON,text,rev);" +
-            "if(typeof text==='string'&&text.length>200&&(text.indexOf('adPlacements')>=0||text.indexOf('\"playerAds\"')>=0||(text.indexOf('streamingData')>=0&&text.indexOf('videoDetails')>=0))){" +
+            "if(typeof text==='string'&&text.length>200&&(text.indexOf('adPlacements')>=0||text.indexOf('\"playerAds\"')>=0||text.indexOf('adSlots')>=0||(text.indexOf('streamingData')>=0&&text.indexOf('videoDetails')>=0))){" +
             "try{cleanRoot(o);if(o.playerResponse)cleanPlayer(o.playerResponse);}catch(x){}" +
             "}" +
             "return o;" +
@@ -7403,7 +7429,8 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "x.addEventListener('readystatechange',function(){" +
             "if(x.readyState===4&&(!x.responseType||x.responseType===''||x.responseType==='text')){" +
             "try{" +
-            "var t=x.responseText;if(!t||t.indexOf('adPlacements')<0)return;" +
+            "var t=x.responseText;if(!t)return;" +
+            "if(t.indexOf('adPlacements')<0&&t.indexOf('playerAds')<0)return;" +
             "var c=cleanText(t);" +
             "try{Object.defineProperty(x,'responseText',{get:function(){return c;}});}catch(e){}" +
             "try{Object.defineProperty(x,'response',{get:function(){return c;}});}catch(e){}" +
@@ -7414,45 +7441,25 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "return XS.apply(this,arguments);" +
             "};" +
             "}catch(e){}" +
+            "try{" +
+            "var st=document.createElement('style');st.id='__rotaNoAd';" +
+            "st.textContent='.ytp-ad-player-overlay,.ytp-ad-module,.video-ads,.ytp-ad-image-overlay,.ytp-ad-overlay-slot,.ytp-ad-message-container,.ytp-ad-text-overlay,.ytp-ad-progress,.ytp-ad-progress-list,.ytp-ad-message-text,.ytp-ad-feedback-dialog-container,.ytp-ad-action-interstitial{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}';" +
+            "document.documentElement.appendChild(st);" +
+            "}catch(e){}" +
             "scrub();" +
-            "var n=0;var iv=setInterval(function(){scrub();if(++n>10)clearInterval(iv);},250);" +
-            // Reklam oynuyorsa: sesi kes, sona atla, skip bas — asıl video hemen gelsin
-            "function killAd(){" +
+            "var n=0;var iv=setInterval(function(){scrub();if(++n>12)clearInterval(iv);},200);" +
+            "setInterval(function(){" +
             "try{" +
             "var pl=document.querySelector('.html5-video-player,#movie_player');" +
-            "var adOn=false;" +
-            "if(pl&&(pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting')))adOn=true;" +
-            "if(document.querySelector('.ytp-ad-player-overlay,.ytp-ad-module,.video-ads .ad-showing,.ytp-ad-text,.ytp-ad-preview-container'))adOn=true;" +
-            "if(!adOn){" +
-            // Reklam bitti: ana videonun sesini geri aç, gerekirse play
-            "var mv=document.querySelector('video.html5-main-video')||document.querySelector('#movie_player video')||document.querySelector('video');" +
-            "if(mv&&!window.__userPause){" +
-            "try{if(mv.muted)mv.muted=false;}catch(z){}" +
-            "try{if(mv.paused&&(mv.currentTime||0)<0.8){var p=mv.play();if(p&&p.catch)p.catch(function(){});}}catch(z){}" +
-            "}" +
-            "return;" +
-            "}" +
-            // Reklam videosunu sessize al + sona çek (bekleme yok)
-            "var v=(pl&&pl.querySelector('video'))||document.querySelector('video');" +
-            "if(v){" +
-            "try{v.muted=true;v.volume=0;}catch(z){}" +
-            "try{v.playbackRate=16;}catch(z){}" +
-            "try{if(isFinite(v.duration)&&v.duration>0&&v.currentTime<v.duration-0.1)v.currentTime=Math.max(0,v.duration-0.05);}catch(z){}" +
-            "}" +
-            // Skip düğmeleri
-            "var sels=['.ytp-skip-ad-button','.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-ad-skip-button-container button','.ytp-ad-overlay-close-button','[class*=\"skip-ad\"] button','[id^=\"skip-button\"]','.videoAdUiSkipButton'];" +
+            "if(!pl)return;" +
+            "if(!(pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting')))return;" +
+            "var sels=['.ytp-skip-ad-button','.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-ad-skip-button-container button','[id^=skip-button]','.videoAdUiSkipButton'];" +
             "for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){try{b.click();}catch(z){}}}" +
-            "try{var mp=document.getElementById('movie_player');" +
-            "if(mp){" +
-            "if(typeof mp.skipAd==='function')mp.skipAd();" +
-            "if(typeof mp.nextVideo==='function'&&false){}" +
-            "}" +
-            "}catch(z){}" +
+            "try{var mp=document.getElementById('movie_player');if(mp&&typeof mp.skipAd==='function')mp.skipAd();}catch(z){}" +
             "}catch(e){}" +
-            "}" +
-            "setInterval(killAd,200);" +
-            "setTimeout(killAd,50);setTimeout(killAd,150);setTimeout(killAd,400);" +
-            "})();"
+            "},300);" +
+            "})();
+"
 
 
         /** YouTube: kaldığın saniyeyi saklar, aynı videoya dönünce devam eder. */
