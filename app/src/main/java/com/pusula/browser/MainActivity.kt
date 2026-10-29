@@ -3913,28 +3913,21 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }
 
 
-        // 1) Açık sayfadan hızlı
-        val t = tabs.getOrNull(cur)
-        try {
-            t?.web?.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
-                val links = parseYtFormatLinks(raw)
-                if (links.isNotEmpty()) {
-                    pickAndStart(links)
-                    return@evaluateJavascript
-                }
-                // 2) InnerTube → 3) SaveFrom (sessiz)
-                fetchViaInnertube(watch) { itLinks ->
-                    if (itLinks.isNotEmpty()) pickAndStart(itLinks)
-                    else fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
-                }
-            } ?: fetchViaInnertube(watch) { itLinks ->
-                if (itLinks.isNotEmpty()) pickAndStart(itLinks)
-                else fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
+        // PipePipe/yt-dlp tarzı: önce Innertube (1080p adaptive), sayfa yedek, SaveFrom son
+        fetchViaInnertube(watch) { itLinks ->
+            if (itLinks.isNotEmpty()) {
+                pickAndStart(itLinks)
+                return@fetchViaInnertube
             }
-        } catch (_: Exception) {
-            fetchViaInnertube(watch) { itLinks ->
-                if (itLinks.isNotEmpty()) pickAndStart(itLinks)
-                else fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
+            val tab = tabs.getOrNull(cur)
+            try {
+                tab?.web?.evaluateJavascript(YT_EXTRACT_FORMATS_JS) { raw ->
+                    val links = parseYtFormatLinks(raw)
+                    if (links.isNotEmpty()) pickAndStart(links)
+                    else fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
+                } ?: fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
+            } catch (_: Exception) {
+                fetchLinksViaSavefromSilent(watch) { pickAndStart(it) }
             }
         }
     }
@@ -4818,7 +4811,20 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 val vFile = java.io.File(dir, "v_${System.currentTimeMillis()}.mp4")
                 val aFile = java.io.File(dir, "a_${System.currentTimeMillis()}.m4a")
                 val oFile = java.io.File(dir, outName)
-                if (!httpToFile(videoUrl, vFile) || !httpToFile(audioUrl, aFile)) {
+                // Video + ses paralel (PipePipe/yt-dlp gibi hız)
+                val vOk = java.util.concurrent.atomic.AtomicBoolean(false)
+                val aOk = java.util.concurrent.atomic.AtomicBoolean(false)
+                val latch = java.util.concurrent.CountDownLatch(2)
+                Thread {
+                    try { vOk.set(httpToFile(videoUrl, vFile)) } catch (_: Exception) { }
+                    latch.countDown()
+                }.start()
+                Thread {
+                    try { aOk.set(httpToFile(audioUrl, aFile)) } catch (_: Exception) { }
+                    latch.countDown()
+                }.start()
+                try { latch.await(4, java.util.concurrent.TimeUnit.MINUTES) } catch (_: Exception) { }
+                if (!vOk.get() || !aOk.get()) {
                     handler.post { toast("İndirme başarısız") }
                     return@Thread
                 }
