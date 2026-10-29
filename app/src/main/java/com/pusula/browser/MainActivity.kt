@@ -155,6 +155,21 @@ class MainActivity : AppCompatActivity() {
 
     private var hasMedia = false
     private var lastPlaying = false
+
+    /** Devam eden doğrudan indirmeler (YouTube stream) — liste + bildirim */
+    private data class ActiveDl(
+        val id: Long,
+        val name: String,
+        val url: String,
+        @Volatile var received: Long = 0L,
+        @Volatile var total: Long = -1L,
+        @Volatile var done: Boolean = false,
+        @Volatile var failed: Boolean = false
+    )
+    private val activeDls = java.util.concurrent.CopyOnWriteArrayList<ActiveDl>()
+    private var activeDlSeq = 1L
+    private var downloadsDialogRefresh: (() -> Unit)? = null
+
     private var hasAudioFocus = false
     private var pausedByAudioFocus = false
     private var ignoreFocusUntil = 0L
@@ -3144,16 +3159,37 @@ fun onMusicCatalog(raw: String?) {
             val isYt = url.contains("googlevideo.com") || url.contains("youtube.com") ||
                 url.contains("youtu.be") || url.contains("googleusercontent.com")
 
-            // YouTube stream: DownloadManager sık duraklatır / yavaşlar → doğrudan HTTP
+            // YouTube stream: doğrudan HTTP + ilerleme (liste + bildirim)
             if (isYt) {
-                toast("İndiriliyor…")
+                val kind = when {
+                    mime?.contains("audio") == true || finalName.endsWith(".mp3", true) || finalName.endsWith(".m4a", true) -> "MP3"
+                    else -> "MP4"
+                }
+                val dl = ActiveDl(id = activeDlSeq++, name = finalName, url = url)
+                activeDls.add(0, dl)
+                toast("$kind indiriliyor: $finalName")
+                notifyDlProgress(dl)
+                downloadsDialogRefresh?.invoke()
                 Thread {
                     try {
-                        val tmp = java.io.File(cacheDir, "dl_${System.currentTimeMillis()}_${finalName}")
-                        val ok = httpToFile(url, tmp)
+                        val tmp = java.io.File(cacheDir, "dl_${dl.id}_${finalName}")
+                        val ok = httpToFile(url, tmp) { recv, tot ->
+                            dl.received = recv
+                            dl.total = tot
+                            handler.post {
+                                notifyDlProgress(dl)
+                                downloadsDialogRefresh?.invoke()
+                            }
+                        }
                         if (!ok || tmp.length() < 2048) {
                             tmp.delete()
-                            handler.post { toast("İndirme başarısız") }
+                            dl.failed = true
+                            handler.post {
+                                notifyDlProgress(dl)
+                                activeDls.remove(dl)
+                                downloadsDialogRefresh?.invoke()
+                                toast("İndirme başarısız: $finalName")
+                            }
                             return@Thread
                         }
                         val destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + finalName
@@ -3183,13 +3219,26 @@ fun onMusicCatalog(raw: String?) {
                             )
                             tmp.copyTo(dest, true)
                         }
+                        val finalLen = tmp.length()
                         tmp.delete()
+                        dl.done = true
+                        dl.received = maxOf(dl.received, finalLen)
+                        if (dl.total < finalLen) dl.total = finalLen
                         handler.post {
                             prefs.addDownload(finalName, url, destPath, mime ?: "")
-                            toast("İndirildi: $finalName")
+                            notifyDlProgress(dl)
+                            activeDls.remove(dl)
+                            downloadsDialogRefresh?.invoke()
+                            toast("$kind indirildi: $finalName")
                         }
                     } catch (_: Exception) {
-                        handler.post { toast("İndirilemedi") }
+                        dl.failed = true
+                        handler.post {
+                            notifyDlProgress(dl)
+                            activeDls.remove(dl)
+                            downloadsDialogRefresh?.invoke()
+                            toast("İndirilemedi: $finalName")
+                        }
                     }
                 }.start()
                 return
@@ -5053,7 +5102,12 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }.start()
     }
 
-    private fun httpToFile(url: String, dest: java.io.File): Boolean {
+
+    private fun httpToFile(
+        url: String,
+        dest: java.io.File,
+        onProgress: ((received: Long, total: Long) -> Unit)? = null
+    ): Boolean {
         return try {
             var current = url
             var redirects = 0
@@ -5086,6 +5140,9 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     conn.disconnect()
                     return false
                 }
+                val total = conn.contentLengthLong.let { if (it > 0) it else conn.contentLength.toLong() }
+                var received = 0L
+                var lastCb = 0L
                 conn.inputStream.use { input ->
                     dest.outputStream().buffered(512 * 1024).use { output ->
                         val buf = ByteArray(256 * 1024)
@@ -5093,10 +5150,17 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                             val n = input.read(buf)
                             if (n < 0) break
                             output.write(buf, 0, n)
+                            received += n
+                            val now = android.os.SystemClock.uptimeMillis()
+                            if (onProgress != null && now - lastCb >= 250L) {
+                                lastCb = now
+                                onProgress(received, total)
+                            }
                         }
                         output.flush()
                     }
                 }
+                onProgress?.invoke(received, total)
                 conn.disconnect()
                 return dest.length() > 2048
             }
@@ -5104,6 +5168,67 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun ensureDlChannel() {
+        if (Build.VERSION.SDK_INT < 26) return
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel("rota_dl") == null) {
+                val ch = android.app.NotificationChannel(
+                    "rota_dl", "İndirmeler", android.app.NotificationManager.IMPORTANCE_LOW
+                )
+                ch.setSound(null, null)
+                nm.createNotificationChannel(ch)
+            }
+        } catch (_: Exception) { }
+    }
+
+    private fun notifyDlProgress(dl: ActiveDl) {
+        try {
+            ensureDlChannel()
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val pct = if (dl.total > 0) ((dl.received * 100) / dl.total).toInt().coerceIn(0, 100) else 0
+            val b = if (Build.VERSION.SDK_INT >= 26) {
+                android.app.Notification.Builder(this, "rota_dl")
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(this)
+            }
+            b.setContentTitle(dl.name)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setOnlyAlertOnce(true)
+                .setOngoing(!dl.done && !dl.failed)
+            when {
+                dl.failed -> {
+                    b.setContentText("İndirme başarısız")
+                        .setSmallIcon(android.R.drawable.stat_notify_error)
+                        .setProgress(0, 0, false)
+                        .setOngoing(false)
+                }
+                dl.done -> {
+                    b.setContentText("İndirme tamamlandı")
+                        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                        .setProgress(0, 0, false)
+                        .setOngoing(false)
+                }
+                dl.total > 0 -> {
+                    b.setContentText("%$pct")
+                        .setProgress(100, pct, false)
+                }
+                else -> {
+                    val mb = dl.received / (1024 * 1024)
+                    b.setContentText(if (mb > 0) "${mb} MB" else "İndiriliyor…")
+                        .setProgress(100, 0, true)
+                }
+            }
+            nm.notify(40000 + (dl.id % 1000).toInt(), b.build())
+            if (dl.done || dl.failed) {
+                handler.postDelayed({
+                    try { nm.cancel(40000 + (dl.id % 1000).toInt()) } catch (_: Exception) { }
+                }, 4000L)
+            }
+        } catch (_: Exception) { }
     }
 
     /**
@@ -5329,7 +5454,6 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         val items = ArrayList(prefs.downloads())
         val d = Dialog(this)
         pushUiOverlay()
-        d.setOnDismissListener { popUiOverlay() }
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
@@ -5354,7 +5478,65 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }
         rootV.addView(head)
 
-        if (items.isEmpty()) {
+        // Aktif indirmeler (ilerleme)
+        val activeBox = LinearLayout(this)
+        activeBox.orientation = LinearLayout.VERTICAL
+        rootV.addView(activeBox)
+
+        fun paintActive() {
+            activeBox.removeAllViews()
+            val live = activeDls.filter { !it.done && !it.failed }
+            if (live.isEmpty()) return
+            val lab = TextView(this)
+            lab.text = "İndiriliyor"
+            lab.textSize = 13f
+            lab.setTextColor(cSub)
+            lab.setPadding(0, dp(12), 0, dp(6))
+            activeBox.addView(lab)
+            for (dl in live) {
+                val row = LinearLayout(this)
+                row.orientation = LinearLayout.VERTICAL
+                row.setPadding(dp(12), dp(10), dp(12), dp(10))
+                row.background = shape(cSurface, 14)
+                val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = dp(8)
+                val title = TextView(this)
+                title.text = dl.name
+                title.textSize = 14f
+                title.setTextColor(cText)
+                title.maxLines = 2
+                row.addView(title)
+                val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+                bar.isIndeterminate = dl.total <= 0
+                if (dl.total > 0) {
+                    bar.max = 100
+                    bar.progress = ((dl.received * 100) / dl.total).toInt().coerceIn(0, 100)
+                }
+                val blp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8))
+                blp.topMargin = dp(8)
+                row.addView(bar, blp)
+                val sub = TextView(this)
+                sub.textSize = 12f
+                sub.setTextColor(cSub)
+                sub.text = when {
+                    dl.total > 0 -> "%${(dl.received * 100 / dl.total).toInt()} · ${dl.received / (1024 * 1024)} / ${dl.total / (1024 * 1024)} MB"
+                    dl.received > 0 -> "${dl.received / (1024 * 1024)} MB indirildi"
+                    else -> "Bağlanıyor…"
+                }
+                val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                slp.topMargin = dp(4)
+                row.addView(sub, slp)
+                activeBox.addView(row, lp)
+            }
+        }
+        paintActive()
+        downloadsDialogRefresh = { paintActive() }
+        d.setOnDismissListener {
+            downloadsDialogRefresh = null
+            popUiOverlay()
+        }
+
+        if (items.isEmpty() && activeDls.none { !it.done && !it.failed }) {
             val empty = TextView(this)
             empty.text = "Henüz indirilen dosya yok.\nİndirdiğin dosyalar burada görünür."
             empty.textSize = 15f
