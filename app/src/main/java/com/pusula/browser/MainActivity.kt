@@ -332,36 +332,22 @@ class MainActivity : AppCompatActivity() {
                 if (!usageCounts(u)) continue
                 var clientUid = -1
                 try {
-                    if (Build.VERSION.SDK_INT >= 31) {
-                        clientUid = c.clientUid
-                    } else {
-                        val m = c.javaClass.methods.firstOrNull {
-                            it.name == "getClientUid" && it.parameterTypes.isEmpty()
-                        }
-                        if (m != null) clientUid = m.invoke(c) as Int
+                    val m = c.javaClass.methods.firstOrNull {
+                        it.name == "getClientUid" && it.parameterTypes.isEmpty()
+                    }
+                    if (m != null) {
+                        clientUid = (m.invoke(c) as? Int) ?: -1
                     }
                 } catch (_: Exception) { }
-                // UID okunabildi ve bizimse sayma
+                // Bizim uygulama (WebView) — sayma
                 if (clientUid == myUid) continue
-                // UID okunamadıysa (eski API): yine de say — WhatsApp kaçmasın
-                // Ama iki sekmeli kendi medyada false positive olmaması için:
-                // UID yoksa sadece usage VOICE veya bizden farklı content ile... riskli.
-                // UID yoksa atla (in-app çift sekme korunur; WhatsApp çoğu cihazda UID verir)
-                if (clientUid < 0) {
-                    // API < 31 reflection başarısız: USAGE_VOICE_COMMUNICATION / unknown app medya
-                    // WhatsApp sesi genelde VOICE_COMMUNICATION veya MEDIA
-                    // Kendi WebView de MEDIA — ayırt edilemez. peak mantığı yerine:
-                    // clientUid < 0 iken say (eski davranış) ama only if not both from us...
-                    // Güvenli: UID yoksa SAY (WhatsApp çalışsın); çift sekme API31+ düzelir
-                    n++
-                    continue
-                }
+                // UID alınamadıysa (çok eski): sayma (çift sekme false-positive olmasın)
+                if (clientUid < 0) continue
                 n++
             }
         } catch (_: Exception) { }
         return n
     }
-
 
     private fun registerExternalAudioWatch() {
         if (Build.VERSION.SDK_INT < 26 || playbackCb != null) return
