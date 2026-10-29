@@ -3878,8 +3878,14 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
         }
         fun pickAndStart(links: List<Pair<String, String>>) {
+            fun isAudioLab(label: String, url: String): Boolean {
+                if (label.startsWith("A:")) return true
+                val x = "$label $url".lowercase()
+                return x.contains("mp3") || x.contains("audio") || x.contains("m4a") ||
+                    x.contains("mime=audio") || x.contains("itag=140") || x.contains("itag=251")
+            }
             fun bestAudio(): String? {
-                val a = links.filter { isAudio(it.first, it.second) }
+                val a = links.filter { isAudioLab(it.first, it.second) }
                 return a.firstOrNull { it.first == "A:M4A" }?.second
                     ?: a.firstOrNull { it.first.startsWith("A:") }?.second
                     ?: a.maxByOrNull { it.second.length }?.second
@@ -3895,81 +3901,64 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     it.first == "V:$h" ||
                         (it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h)
                 }
-                // Yalnızca AVC/MP4 — VP9/WebM birleştirmede ses kaybı
                 return cands.firstOrNull { isAvcUrl(it.second) }?.second
             }
-            fun bestAac(): String? {
-                val a = links.filter { isAudio(it.first, it.second) }
-                // Yalnızca M4A/AAC (itag 140) — Opus mux'ta sessiz kalır
-                return a.firstOrNull { it.first == "A:M4A" }?.second
-                    ?: a.firstOrNull { u ->
-                        val x = u.second.lowercase()
-                        "itag=140" in x || "itag=141" in x || "mp4a" in x ||
-                            ("mime=audio%2fmp4" in x) || ("mime=audio/mp4" in x)
-                    }?.second
+            fun looksProgressive(url: String): Boolean {
+                val u = url.lowercase()
+                return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
+                    u.contains("itag=37") ||
+                    (u.contains("mime=video") && u.contains("audio")) ||
+                    (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
             }
-            val audio = bestAac() ?: bestAudio()
-            when {
-                audioOnly && audio != null -> {
-                    toast("Ses indiriliyor")
-                    startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+            fun progScore(label: String, url: String): Int {
+                val x = "$label $url".lowercase()
+                return when {
+                    "1080" in x || "itag=37" in x -> 1080
+                    "720" in x || "itag=22" in x -> 720
+                    "480" in x -> 480
+                    "360" in x || "itag=18" in x -> 360
+                    else -> 100
                 }
-                !audioOnly -> {
-                    // En yüksek adaptive yükseklik (1440/1080/720…) — düşük progressive'e düşme
-                    val heights = links.mapNotNull {
-                        if (it.first.startsWith("V:")) it.first.removePrefix("V:").toIntOrNull()
-                        else null
-                    }.filter { it >= 240 }.distinct().sortedDescending()
-                    val bestH = heights.firstOrNull()
-                    val vBest = bestH?.let { adaptive(it) }
-                    val progList = links.filter {
-                        !isAudio(it.first, it.second) && (
-                            it.first.startsWith("MP4") || looksProgressive(it.second)
-                        )
-                    }
-                    fun progScore(lab: String, url: String): Int {
-                        val t = "$lab $url".lowercase()
-                        return when {
-                            "1080" in t || "itag=37" in t || "itag=38" in t -> 1080
-                            "720" in t || "itag=22" in t -> 720
-                            "480" in t -> 480
-                            "360" in t || "itag=18" in t -> 360
-                            else -> 100
-                        }
-                    }
-                    val prog = progList.maxByOrNull { progScore(it.first, it.second) }?.second
-val aacOk = audio != null && run {
-                        val x = audio!!.lowercase()
-                        "itag=140" in x || "itag=141" in x || "mp4a" in x ||
-                            "mime=audio%2fmp4" in x || "mime=audio/mp4" in x ||
-                            links.any { it.second == audio && it.first == "A:M4A" }
-                    }
-                    // Varsayılan: sesli 720p progressive (hızlı, birleştirme yok)
-                    val prog720 = prog != null && progScore("", prog!!) >= 720
-                    when {
-                        prog720 -> {
-                            toast("İndiriliyor…")
-                            startDownload(prog!!, null, null, "video/mp4", "$base.mp4")
-                        }
-                        prog != null -> {
-                            toast("İndiriliyor…")
-                            startDownload(prog, null, null, "video/mp4", "$base.mp4")
-                        }
-                        vBest != null && aacOk -> {
-                            toast("İndiriliyor…")
-                            downloadAndMerge(vBest!!, audio!!, "$base.mp4", null)
-                        }
-                        audio != null -> startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
-                        else -> toast("İndirme linki alınamadı")
-                    }
-                    }
-                }
-                audio != null ->
-                    startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
-                else -> toast("İndirme linki alınamadı")
             }
+            val audio = bestAudio()
+            if (audioOnly && audio != null) {
+                toast("İndiriliyor…")
+                startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+                return
+            }
+            val prog = links.filter {
+                !isAudioLab(it.first, it.second) && (
+                    it.first.startsWith("MP4") || looksProgressive(it.second)
+                )
+            }.maxByOrNull { progScore(it.first, it.second) }?.second
+            // Varsayılan: sesli 720p (veya en iyi progressive)
+            if (prog != null) {
+                toast("İndiriliyor…")
+                startDownload(prog, null, null, "video/mp4", "$base.mp4")
+                return
+            }
+            val heights = links.mapNotNull {
+                if (it.first.startsWith("V:")) it.first.removePrefix("V:").toIntOrNull() else null
+            }.filter { it >= 240 }.distinct().sortedDescending()
+            val bestH = heights.firstOrNull()
+            val vBest = bestH?.let { adaptive(it) }
+            val aacOk = audio != null && run {
+                val x = audio!!.lowercase()
+                "itag=140" in x || "itag=141" in x || "mp4a" in x ||
+                    "mime=audio%2fmp4" in x || "mime=audio/mp4" in x ||
+                    links.any { it.second == audio && it.first == "A:M4A" }
+            }
+            if (vBest != null && aacOk) {
+                toast("İndiriliyor…")
+                downloadAndMerge(vBest, audio!!, "$base.mp4", null)
+                return
+            }
+            if (audio != null) {
+                startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+                return
+            }
+            toast("İndirme linki alınamadı")
         }
-
 
         // PipePipe/yt-dlp tarzı: önce Innertube (1080p adaptive), sayfa yedek, SaveFrom son
         fetchViaInnertube(watch) { itLinks ->
