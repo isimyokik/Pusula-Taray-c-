@@ -250,10 +250,9 @@ class MainActivity : AppCompatActivity() {
     private val focusNotifKeepAlive = object : Runnable {
         override fun run() {
             if (!pausedByAudioFocus) return
-            // Duck: müzik çalıyor (ses 0) — bildirim playing kalsın
             try {
                 PlaybackService.update(
-                    this@MainActivity, true,
+                    this@MainActivity, false,
                     lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                     isInPictureInPictureMode, -1L, -2L, lastArtUrl
                 )
@@ -318,10 +317,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Sadece BAŞKA uygulamaların medya sayacı.
-     * Kendi WebView (YT + YTM iki sekme) "dış ses" sayılmaz → sekme geçince sessiz kalma olmaz.
-     */
+
     private fun playbackClientUid(c: android.media.AudioPlaybackConfiguration): Int {
         try {
             val m = c.javaClass.methods.firstOrNull {
@@ -334,9 +330,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Başka uygulama medya sayısı.
-     * UID okunabiliyorsa kendi WebView (YT+YTM) hariç.
-     * UID yoksa -1 döner → çağıran eski baseline kullanır (WhatsApp kaçmasın).
+     * Başka uygulama medya sayısı. UID yoksa -1 (baseline kullanılır).
+     * Kendi WebView UID'si sayılmaz → YT↔YTM sekme geçişi sessiz kalmaz.
      */
     private fun countExternalMediaConfigs(): Int {
         if (Build.VERSION.SDK_INT < 26) return -1
@@ -350,8 +345,6 @@ class MainActivity : AppCompatActivity() {
                 if (uid >= 0) {
                     sawUid = true
                     if (uid != myUid) n++
-                } else {
-                    // UID yok: bu kaydı şimdilik atla; aşağıda sawUid yoksa -1
                 }
             }
         } catch (_: Exception) {
@@ -359,6 +352,7 @@ class MainActivity : AppCompatActivity() {
         }
         return if (sawUid) n else -1
     }
+
 
     private fun registerExternalAudioWatch() {
         if (Build.VERSION.SDK_INT < 26 || playbackCb != null) return
@@ -474,7 +468,6 @@ private fun evalExternalAudio() {
         }
 
         if (useUid) {
-            // WhatsApp vb. (UID farklı) → duck; kendi sekmeler nExt=0
             if (nExt >= 1) {
                 if (extSeenSince == 0L) {
                     extSeenSince = now
@@ -487,7 +480,6 @@ private fun evalExternalAudio() {
                 extSeenSince = 0L
             }
         } else {
-            // UID yok: eski total-count baseline (WhatsApp)
             if (nAll >= 1 && (extBaseline < 0 || nAll < extBaseline)) {
                 extBaseline = nAll
                 extBaseTuples = tupleCounts()
@@ -820,9 +812,7 @@ private fun pollMedia() {
             }
         } catch (_: Exception) { return }
         title = cleanMeta(title); artist = cleanMeta(artist)
-        // Duck = volume 0, müzik çalmaya devam — poll "paused" dese de bildirim playing
-        if (pausedByAudioFocus) playing = true
-        else if (focusFadeRunnable != null) playing = false
+        if (pausedByAudioFocus && focusFadeRunnable != null) playing = false
         // Devam sonrası poll gecikmeli false dönebilir; bildirim çalıyor kalsın
         if (!pausedByAudioFocus && android.os.SystemClock.elapsedRealtime() < focusResumePlayUntil) {
             if (!playing) playing = true
@@ -832,8 +822,7 @@ private fun pollMedia() {
             val now0 = android.os.SystemClock.elapsedRealtime()
             // Focus / devam penceresinde servisi ASLA durdurma
             if (pausedByAudioFocus || now0 < focusNotifHoldUntil || now0 < focusResumePlayUntil) {
-                // Duck sırasında da playing: sadece ses kısık
-                val showPlay = pausedByAudioFocus || now0 < focusResumePlayUntil || lastPlaying
+                val showPlay = (!pausedByAudioFocus) && (now0 < focusResumePlayUntil || lastPlaying)
                 try {
                     PlaybackService.update(
                         this, showPlay,
@@ -1190,14 +1179,8 @@ fun onMusicCatalog(raw: String?) {
             try { shown?.onResume() } catch (_: Exception) { }
             try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
             if (pausedByAudioFocus) {
-                // Duck: idle stop olmasın, bildirim playing (müzik durmadı)
-                try {
-                    PlaybackService.update(
-                        this@MainActivity, true,
-                        lastTitle.ifBlank { "YouTube Music" }, lastArtist,
-                        false, -1L, -2L, lastArtUrl
-                    )
-                } catch (_: Exception) { }
+                // Bildirim ayakta kalsın, idle stop tetiklenmesin
+                try { PlaybackService.update(this@MainActivity, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
                 handler.postDelayed(this, 2000L)
                 return
             }
