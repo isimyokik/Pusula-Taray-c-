@@ -322,31 +322,42 @@ class MainActivity : AppCompatActivity() {
      * Sadece BAŞKA uygulamaların medya sayacı.
      * Kendi WebView (YT + YTM iki sekme) "dış ses" sayılmaz → sekme geçince sessiz kalma olmaz.
      */
+    private fun playbackClientUid(c: android.media.AudioPlaybackConfiguration): Int {
+        try {
+            val m = c.javaClass.methods.firstOrNull {
+                it.name == "getClientUid" && it.parameterTypes.isEmpty()
+            } ?: return -1
+            return (m.invoke(c) as? Int) ?: -1
+        } catch (_: Exception) {
+            return -1
+        }
+    }
+
+    /**
+     * Başka uygulama medya sayısı.
+     * UID okunabiliyorsa kendi WebView (YT+YTM) hariç.
+     * UID yoksa -1 döner → çağıran eski baseline kullanır (WhatsApp kaçmasın).
+     */
     private fun countExternalMediaConfigs(): Int {
-        if (Build.VERSION.SDK_INT < 26) return 0
+        if (Build.VERSION.SDK_INT < 26) return -1
         val myUid = android.os.Process.myUid()
         var n = 0
+        var sawUid = false
         try {
             for (c in audioManager.activePlaybackConfigurations) {
-                val u = c.audioAttributes.usage
-                if (!usageCounts(u)) continue
-                var clientUid = -1
-                try {
-                    val m = c.javaClass.methods.firstOrNull {
-                        it.name == "getClientUid" && it.parameterTypes.isEmpty()
-                    }
-                    if (m != null) {
-                        clientUid = (m.invoke(c) as? Int) ?: -1
-                    }
-                } catch (_: Exception) { }
-                // Bizim uygulama (WebView) — sayma
-                if (clientUid == myUid) continue
-                // UID alınamadıysa (çok eski): sayma (çift sekme false-positive olmasın)
-                if (clientUid < 0) continue
-                n++
+                if (!usageCounts(c.audioAttributes.usage)) continue
+                val uid = playbackClientUid(c)
+                if (uid >= 0) {
+                    sawUid = true
+                    if (uid != myUid) n++
+                } else {
+                    // UID yok: bu kaydı şimdilik atla; aşağıda sawUid yoksa -1
+                }
             }
-        } catch (_: Exception) { }
-        return n
+        } catch (_: Exception) {
+            return -1
+        }
+        return if (sawUid) n else -1
     }
 
     private fun registerExternalAudioWatch() {
@@ -410,7 +421,8 @@ class MainActivity : AppCompatActivity() {
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
         focusPermanentLoss = false
         extQuietSince = 0L
-        externalPeakConfigs = countExternalMediaConfigs().coerceAtLeast(1)
+        val _pe = countExternalMediaConfigs()
+        externalPeakConfigs = if (_pe >= 0) _pe.coerceAtLeast(1) else countMediaConfigs().coerceAtLeast(1)
         // Sadece ses seviyesi: yavaşça sıfıra iner ve sayfanın kendi volume yazmaları engellenir.
         // Bildirim/hasMedia/lastPlaying/pause/mute YOK.
         duckBaseline = extBaseline
@@ -425,13 +437,20 @@ class MainActivity : AppCompatActivity() {
 private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
         val nExt = countExternalMediaConfigs()
+        val nAll = countMediaConfigs()
+        val useUid = nExt >= 0
+
         if (pausedByAudioFocus) {
-            // Dış ses yoksa geri aç (kendi sekmelerimiz sayılmaz)
             if (now - focusPauseSince < 800L) {
                 handler.postDelayed(extCheck, 400L)
                 return
             }
-            if (nExt == 0) {
+            val stillExternal = if (useUid) {
+                nExt >= 1
+            } else {
+                nAll >= externalPeakConfigs.coerceAtLeast(1)
+            }
+            if (!stillExternal) {
                 if (extQuietSince == 0L) {
                     extQuietSince = now
                     handler.postDelayed(extCheck, 400L)
@@ -441,26 +460,49 @@ private fun evalExternalAudio() {
                 } else handler.postDelayed(extCheck, 300L)
             } else {
                 extQuietSince = 0L
+                if (!useUid && nAll > externalPeakConfigs) externalPeakConfigs = nAll
                 handler.postDelayed(extCheck, 450L)
             }
             return
         }
+
         val ourPlaying = hasMedia && lastPlaying
         if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null) {
+            extBaseline = -1
             extSeenSince = 0L
             return
         }
-        // Başka uygulama sesi var mı?
-        if (nExt >= 1) {
-            if (extSeenSince == 0L) {
-                extSeenSince = now
-                handler.postDelayed(extCheck, 200L)
-            } else if (now - extSeenSince >= 200L) {
+
+        if (useUid) {
+            // WhatsApp vb. (UID farklı) → duck; kendi sekmeler nExt=0
+            if (nExt >= 1) {
+                if (extSeenSince == 0L) {
+                    extSeenSince = now
+                    handler.postDelayed(extCheck, 200L)
+                } else if (now - extSeenSince >= 200L) {
+                    extSeenSince = 0L
+                    beginExternalPause()
+                }
+            } else {
                 extSeenSince = 0L
-                beginExternalPause()
             }
         } else {
-            extSeenSince = 0L
+            // UID yok: eski total-count baseline (WhatsApp)
+            if (nAll >= 1 && (extBaseline < 0 || nAll < extBaseline)) {
+                extBaseline = nAll
+                extBaseTuples = tupleCounts()
+            }
+            if (extBaseline >= 1 && nAll > extBaseline) {
+                if (extSeenSince == 0L) {
+                    extSeenSince = now
+                    handler.postDelayed(extCheck, 250L)
+                } else if (now - extSeenSince >= 250L) {
+                    extSeenSince = 0L
+                    beginExternalPause()
+                }
+            } else {
+                extSeenSince = 0L
+            }
         }
     }
 
