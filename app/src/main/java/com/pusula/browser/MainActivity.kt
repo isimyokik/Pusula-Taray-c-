@@ -3898,19 +3898,51 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             }
             val audio = bestAudio()
             when {
-                audioOnly && audio != null ->
+                audioOnly && audio != null -> {
+                    toast("Ses indiriliyor")
                     startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+                }
                 !audioOnly -> {
-                    val v1080 = adaptive(1080)
-                    val v720 = adaptive(720)
-                    val v480 = adaptive(480)
-                    val prog = links.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
-                        ?: links.firstOrNull { it.first.startsWith("MP4") }?.second
+                    // En yüksek adaptive yükseklik (1440/1080/720…) — düşük progressive'e düşme
+                    val heights = links.mapNotNull {
+                        if (it.first.startsWith("V:")) it.first.removePrefix("V:").toIntOrNull()
+                        else null
+                    }.filter { it >= 240 }.distinct().sortedDescending()
+                    val bestH = heights.firstOrNull()
+                    val vBest = bestH?.let { adaptive(it) }
+                    val progList = links.filter {
+                        !isAudio(it.first, it.second) && (
+                            it.first.startsWith("MP4") || looksProgressive(it.second)
+                        )
+                    }
+                    fun progScore(lab: String, url: String): Int {
+                        val t = "$lab $url".lowercase()
+                        return when {
+                            "1080" in t || "itag=37" in t || "itag=38" in t -> 1080
+                            "720" in t || "itag=22" in t -> 720
+                            "480" in t -> 480
+                            "360" in t || "itag=18" in t -> 360
+                            else -> 100
+                        }
+                    }
+                    val prog = progList.maxByOrNull { progScore(it.first, it.second) }?.second
                     when {
-                        v1080 != null && audio != null -> downloadAndMerge(v1080, audio, "$base.mp4")
-                        v720 != null && audio != null -> downloadAndMerge(v720, audio, "$base.mp4")
-                        v480 != null && audio != null -> downloadAndMerge(v480, audio, "$base.mp4")
-                        prog != null -> startDownload(prog, null, null, "video/mp4", "$base.mp4")
+                        vBest != null && audio != null && (bestH ?: 0) >= 480 -> {
+                            toast("${bestH}p birleştiriliyor…")
+                            downloadAndMerge(vBest, audio, "$base.mp4")
+                        }
+                        prog != null && progScore("", prog) >= 720 -> {
+                            toast("MP4 indiriliyor")
+                            startDownload(prog, null, null, "video/mp4", "$base.mp4")
+                        }
+                        vBest != null && audio != null -> {
+                            toast("${bestH ?: 0}p birleştiriliyor…")
+                            downloadAndMerge(vBest, audio, "$base.mp4")
+                        }
+                        prog != null -> {
+                            toast("MP4 indiriliyor")
+                            startDownload(prog, null, null, "video/mp4", "$base.mp4")
+                        }
                         audio != null -> startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
                         else -> toast("İndirme linki alınamadı")
                     }
@@ -4565,8 +4597,23 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     if (arr == null) return
                     for (i in 0 until arr.length()) {
                         val f = arr.optJSONObject(i) ?: continue
-                        val u = f.optString("url")
+                        var u = f.optString("url")
+                        if (!u.startsWith("http")) {
+                            val sc = f.optString("signatureCipher").ifEmpty { f.optString("cipher") }
+                            if (sc.isNotEmpty()) {
+                                val m = Regex("url=([^&]+)").find(sc)
+                                if (m != null) {
+                                    u = try {
+                                        java.net.URLDecoder.decode(m.groupValues[1], "UTF-8")
+                                    } catch (_: Exception) { "" }
+                                }
+                            }
+                        }
                         if (!u.startsWith("http")) continue
+                        // İmzasız URL'ler indirmede 403 verir; n parametresi yoksa atla
+                        if ((f.optString("signatureCipher").isNotEmpty() || f.optString("cipher").isNotEmpty())
+                            && !u.contains("signature=") && !u.contains("&sig=") && !u.contains("?sig=")
+                        ) continue
                         val mime = f.optString("mimeType").lowercase()
                         val itag = f.optInt("itag")
                         val isAudio = mime.contains("audio") || itag in listOf(139, 140, 141, 249, 250, 251, 256, 258)
@@ -4604,7 +4651,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 eatFormats(sd.optJSONArray("adaptiveFormats"))
             }
             for (cli in clients) {
-                if (links.any { it.first == "V:1080" } && links.any { it.first.startsWith("A:") }) break
+                // Tüm istemcilerden format topla; 1080 yoksa diğerleri denensin
                 try {
                     val clientObj = JSONObject()
                         .put("clientName", cli.name)
@@ -4645,10 +4692,20 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     }
                 } catch (_: Exception) { }
             }
+            fun isAvc(u: String): Boolean {
+                val x = u.lowercase()
+                return "avc1" in x || "mime=video%2fmp4" in x || "mime=video/mp4" in x ||
+                    "itag=137" in x || "itag=136" in x || "itag=135" in x || "itag=298" in x || "itag=399" in x
+            }
             val best = LinkedHashMap<String, String>()
             for ((lab, u) in links) {
                 val prev = best[lab]
-                if (prev == null || u.length > prev.length) best[lab] = u
+                when {
+                    prev == null -> best[lab] = u
+                    isAvc(u) && !isAvc(prev) -> best[lab] = u
+                    !isAvc(u) && isAvc(prev) -> { /* tut */ }
+                    u.length > prev.length -> best[lab] = u
+                }
             }
             handler.post { onDone(best.map { it.key to it.value }) }
         }.start()
