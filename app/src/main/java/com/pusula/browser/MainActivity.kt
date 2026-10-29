@@ -312,18 +312,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun beginExternalPause() {
         if (pausedByAudioFocus) return
-        // Sadece devamın hemen ardından (4 sn) kendi sesimizi kesme
         if (android.os.SystemClock.elapsedRealtime() < focusIgnoreExtUntil) return
-        val curT = tupleCounts()
-        pauseExtKeys = curT.keys.filter { (curT[it] ?: 0) > (extBaseTuples[it] ?: 0) }.toSet()
-        // Başlayan ses bizimkinden farklı türdeyse (WhatsApp sesli mesajı gibi) bittiğini türünden hemen anlarız.
-        // Aynı türdeyse (başka müzik uygulaması) bizim WebView'ın ses akışı da ~5 sn açık kalabildiği için tam sessizliği bekleriz.
-        pauseFast = pauseExtKeys.isNotEmpty() && pauseExtKeys.none { extBaseTuples.containsKey(it) }
+        if (!hasMedia && !lastPlaying) return
         pausedByAudioFocus = true
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
         focusNotifHoldUntil = Long.MAX_VALUE / 4
         focusPermanentLoss = false
+        focusResumePlayUntil = 0L
         extQuietSince = 0L
+        pauseExtKeys = emptySet()
+        // Bildirim: duraklatılmış göster
+        try {
+            PlaybackService.update(this, false, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
+        } catch (_: Exception) { }
         injectAllMedia(AUDIO_FOCUS_PREP_JS.replace("__FRESH__", if (focusLevel >= 0.999) "1" else "0"))
         runFocusFade(0.0, focusFadeOutMs, false) {
             injectAllMedia(AUDIO_FOCUS_PAUSE_JS)
@@ -331,36 +332,34 @@ class MainActivity : AppCompatActivity() {
         }
         lastPlaying = false
         updateFocusNotification(false)
+        // WhatsApp bitince yakala
+        handler.removeCallbacks(extCheck)
+        handler.postDelayed(extCheck, 500L)
     }
 
     private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
+            // Sadece: başka ses var mı? Yoksa devam et. (tuple/keys yok — takılı kalıyordu)
             if (focusFadeRunnable != null) {
-                handler.postDelayed(extCheck, 200L)
+                handler.postDelayed(extCheck, 250L)
                 return
             }
-            // isMusicActive: WhatsApp / başka ses bitince false olur. Config sayısı YTM'de yanıltıcı olabiliyor.
             val musicActive = try { audioManager.isMusicActive } catch (_: Exception) { true }
-            val ct = tupleCounts()
-            val extStill = pauseExtKeys.isNotEmpty() && pauseExtKeys.sumOf { ct[it] ?: 0 } > 0
-            // WhatsApp bitince config hemen düşer; isMusicActive bazen takılı kalır → süre yedeği
-            val quiet = (!musicActive && !extStill) ||
-                (!extStill && now - focusPauseSince > 2500L)
-            if (quiet) {
+            if (!musicActive) {
                 if (extQuietSince == 0L) {
                     extQuietSince = now
-                    handler.postDelayed(extCheck, 300L)
-                } else if (now - extQuietSince >= 350L && now - focusPauseSince > 600L) {
+                    handler.postDelayed(extCheck, 400L)
+                } else if (now - extQuietSince >= 500L && now - focusPauseSince > 800L) {
                     extQuietSince = 0L
                     resumeFromFocus(false)
                 } else {
-                    handler.postDelayed(extCheck, 200L)
+                    handler.postDelayed(extCheck, 300L)
                 }
             } else {
                 extQuietSince = 0L
-                handler.postDelayed(extCheck, 350L)
+                handler.postDelayed(extCheck, 400L)
             }
             return
         }
@@ -468,43 +467,56 @@ class MainActivity : AppCompatActivity() {
         lastPlaying = true
         hasMedia = true
         mediaChangedAt = now
-        // Bildirim uzun süre ayakta; dış ses engeli kısa (ikinci WhatsApp çalışsın)
-        focusNotifHoldUntil = now + 120_000L
-        focusIgnoreExtUntil = now + 4_000L
-        focusResumePlayUntil = now + 20_000L
+        focusNotifHoldUntil = now + 60_000L
+        focusIgnoreExtUntil = now + 3_000L
+        focusResumePlayUntil = now + 30_000L
+        focusLevel = 1.0
+        cancelFocusFade()
         stopFocusResumeWatch()
-        extBaseline = 1
-        extSeenSince = 0L
         extQuietSince = 0L
         pauseExtKeys = emptySet()
         if (reacquire) {
             hasAudioFocus = false
             requestMediaAudioFocus()
         }
-        // Bildirim hemen "çalıyor" olsun
-        try {
-            PlaybackService.update(this, true, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
-        } catch (_: Exception) { }
-        injectAllMedia(AUDIO_FOCUS_RESUME_START_JS.replace("__F__", "0.15"))
-        injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
-        runFocusFade(1.0, focusFadeInMs.coerceAtLeast(500L), true) {
-            injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
-            mediaChangedAt = android.os.SystemClock.elapsedRealtime()
-            focusResumePlayUntil = android.os.SystemClock.elapsedRealtime() + 15_000L
+        // 1) Bildirim hemen çalıyor
+        fun notifPlay() {
             try {
-                PlaybackService.update(this@MainActivity, true, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
+                PlaybackService.update(
+                    this@MainActivity, true, lastTitle.ifBlank { "YouTube Music" }, lastArtist,
+                    isInPictureInPictureMode, -1L, -2L, lastArtUrl
+                )
             } catch (_: Exception) { }
-            try { extBaseline = countMediaConfigs().coerceAtLeast(1) } catch (_: Exception) { }
         }
+        notifPlay()
+        // 2) WebView uyan + oynat (hedef sekme)
+        val playJs = AUDIO_FOCUS_RESUME_START_JS.replace("__F__", "1.000")
+        val targets = linkedSetOf<BTab>()
+        mediaSrc?.let { targets.add(it) }
+        mediaTarget()?.let { targets.add(it) }
+        miniTab?.let { targets.add(it) }
+        tabs.getOrNull(cur)?.let { targets.add(it) }
+        tabs.filter { it.url.contains("music.youtube", true) || it.url.contains("youtube.com", true) }
+            .forEach { targets.add(it) }
+        for (tab in targets) {
+            try { tab.web.onResume() } catch (_: Exception) { }
+            try { tab.web.evaluateJavascript(playJs, null) } catch (_: Exception) { }
+            try { tab.web.evaluateJavascript(AUDIO_FOCUS_YTM_PLAY_JS, null) } catch (_: Exception) { }
+        }
+        // 3) Tekrar dene (YTM geç açılır) + bildirim
         handler.postDelayed({
-            if (!pausedByAudioFocus) {
-                injectAllMedia(AUDIO_FOCUS_YTM_PLAY_JS)
-                injectAllMedia(AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"))
+            notifPlay()
+            for (tab in targets) {
+                try { tab.web.evaluateJavascript(AUDIO_FOCUS_YTM_PLAY_JS, null) } catch (_: Exception) { }
                 try {
-                    PlaybackService.update(this@MainActivity, true, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl)
+                    tab.web.evaluateJavascript(
+                        AUDIO_FOCUS_VOL_JS.replace("__F__", "1.000").replace("__PLAY__", "1"), null
+                    )
                 } catch (_: Exception) { }
             }
-        }, 800L)
+        }, 600L)
+        handler.postDelayed({ notifPlay() }, 1200L)
+        handler.postDelayed({ notifPlay() }, 2500L)
     }
 
     private fun abortFocusPause() {
