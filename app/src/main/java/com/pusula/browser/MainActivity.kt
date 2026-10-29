@@ -7325,7 +7325,8 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;\n" +
             "if(window.__rotaAdStripV3)return;window.__rotaAdStripV3=1;\n" +
             "var DBG=true;\n" +
-            "var T0=Date.now(),ev=[],slow=[],box=null,adCnt=0;\n" +
+            "var T0=Date.now(),ev=[],slow=[],box=null,adCnt=0,pend={},pidc=0,lt=0,ltn=0;\n" +
+            "function shortU(u){return String(u).replace(/^https?:\\/\\//,'').split('?')[0].slice(0,55);}\n" +
             "function log(){try{console.log('[rota-yt] '+[].slice.call(arguments).join(' '));}catch(e){}}\n" +
             "function draw(){\n" +
             "if(!DBG)return;\n" +
@@ -7336,11 +7337,19 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "box.style.cssText='position:fixed;left:4px;bottom:70px;z-index:2147483647;max-width:94vw;background:rgba(0,0,0,.75);color:#7CFC00;font:10px/1.3 monospace;padding:4px 6px;border-radius:4px;pointer-events:none;white-space:pre-wrap;word-break:break-all';\n" +
             "par.appendChild(box);\n" +
             "}\n" +
-            "box.textContent=ev.concat(slow).join('\\n');\n" +
+            "var ex=[];\n" +
+            "var now=Date.now(),pl=[];\n" +
+            "for(var k in pend){var a=now-pend[k].t;if(a>1000)pl.push([a,pend[k].u]);}\n" +
+            "pl.sort(function(x,y){return y[0]-x[0];});\n" +
+            "pl.slice(0,3).forEach(function(x){ex.push('BEKLIYOR '+(x[0]/1000).toFixed(1)+'s '+shortU(x[1]));});\n" +
+            "ex.push('ana iplik: '+Math.round(lt)+'ms / '+ltn+' uzun is');\n" +
+            "var vv=document.querySelector('video');\n" +
+            "if(vv)ex.push('video rs='+vv.readyState+' ns='+vv.networkState+(vv.error?' ERR'+vv.error.code:''));\n" +
+            "box.textContent=ev.concat(slow,ex).join('\\n');\n" +
             "}catch(e){}\n" +
             "}\n" +
-            "function mark(s){ev.push(((Date.now()-T0)/1000).toFixed(1)+'s '+s);if(ev.length>14)ev.shift();log(s);draw();}\n" +
-            "function resetDbg(id){T0=Date.now();ev=[];slow=[];adCnt=0;mark('video '+id);}\n" +
+            "function mark(s){ev.push(((Date.now()-T0)/1000).toFixed(1)+'s '+s);if(ev.length>10)ev.shift();log(s);draw();}\n" +
+            "function resetDbg(id){T0=Date.now();ev=[];slow=[];adCnt=0;lt=0;ltn=0;mark('video '+id);}\n" +
             "try{\n" +
             "new PerformanceObserver(function(l){\n" +
             "l.getEntries().forEach(function(e){\n" +
@@ -7352,6 +7361,8 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "});\n" +
             "}).observe({type:'resource',buffered:false});\n" +
             "}catch(e){}\n" +
+            "try{new PerformanceObserver(function(l){l.getEntries().forEach(function(e){lt+=e.duration;ltn++;});}).observe({entryTypes:['longtask']});}catch(e){}\n" +
+            "setInterval(draw,500);\n" +
             "['loadstart','loadedmetadata','canplay','playing','waiting','stalled','error'].forEach(function(t){\n" +
             "document.addEventListener(t,function(e){\n" +
             "try{if(e.target&&e.target.tagName==='VIDEO'&&(t!=='waiting'||Math.random()<1))mark('video:'+t);}catch(x){}\n" +
@@ -7442,6 +7453,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "window.fetch=function(input,init){\n" +
             "var u='';try{u=typeof input==='string'?input:(input&&(input.url||input.href))||'';}catch(x){}\n" +
             "var p=_fetch.apply(this,arguments);\n" +
+            "try{var pid=++pidc;pend[pid]={u:u,t:Date.now()};var dn=function(){delete pend[pid];};p.then(dn,dn);}catch(x){}\n" +
             "if(/youtubei\\/v1\\/(next|get_watch)/.test(u))resetDbg('gezinme basladi');\n" +
             "if(!RE.test(u))return p;\n" +
             "return p.then(function(res){\n" +
@@ -7462,6 +7474,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "XMLHttpRequest.prototype.open=function(m,u){this.__ru=u||'';return XO.apply(this,arguments);};\n" +
             "XMLHttpRequest.prototype.send=function(){\n" +
             "var x=this,u=String(x.__ru||'');\n" +
+            "try{var xid=++pidc;pend[xid]={u:u,t:Date.now()};x.addEventListener('loadend',function(){delete pend[xid];});}catch(e){}\n" +
             "if(RE.test(u)){\n" +
             "x.addEventListener('readystatechange',function(){\n" +
             "if(x.readyState===4&&(!x.responseType||x.responseType==='text')){\n" +
