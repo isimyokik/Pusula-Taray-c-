@@ -3268,6 +3268,13 @@ fun onMusicCatalog(raw: String?) {
                         dl.running = false
                         handler.post {
                             prefs.addDownload(dl.name, dl.url, destPath, mime ?: "")
+                            cacheDownloadThumb(dl.name, videoIdOf(dl.url), lastArtUrl.ifBlank { null })
+                            // stream URL'de id yoksa lastArtUrl / mqdefault
+                            if (!thumbFileForTitle(dl.name).exists()) {
+                                val id = Regex("""[?&]v=([\w-]{11})""").find(dl.url)?.groupValues?.getOrNull(1)
+                                    ?: Regex("""/vi/([\w-]{11})/""").find(lastArtUrl)?.groupValues?.getOrNull(1)
+                                cacheDownloadThumb(dl.name, id, lastArtUrl.ifBlank { null })
+                            }
                             notifyDlProgress(dl)
                             activeDls.remove(dl)
                             toast("${dl.kind} indirildi: ${dl.name}")
@@ -4120,6 +4127,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     when {
                         prog != null -> {
                             toast("İndiriliyor…")
+                            cacheDownloadThumb("$base.mp4", id, lastArtUrl.ifBlank { null })
                             startDownload(prog, null, null, "video/mp4", "$base.mp4")
                         }
                         // Yedek: birleştirme (11'deki sıra)
@@ -5581,6 +5589,73 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
     /** Uygulama içi İndirilenler listesi. */
 
     /** İndirilenler açıksa listeyi baştan çiz (biten dosya görünsün). */
+
+    private fun thumbsDir(): java.io.File {
+        val d = java.io.File(cacheDir, "thumbs")
+        if (!d.exists()) d.mkdirs()
+        return d
+    }
+
+    private fun thumbFileForTitle(title: String): java.io.File {
+        val safe = title.replace(Regex("[\\\\/:*?\"<>|]+"), "_").take(80)
+        return java.io.File(thumbsDir(), "$safe.jpg")
+    }
+
+    /** YouTube kapak / art URL → indirme listesi önizlemesi */
+    private fun cacheDownloadThumb(title: String, videoId: String?, artUrl: String?) {
+        Thread {
+            try {
+                val dest = thumbFileForTitle(title)
+                if (dest.exists() && dest.length() > 1000) return@Thread
+                val url = when {
+                    !artUrl.isNullOrBlank() && artUrl.startsWith("http") -> artUrl
+                    !videoId.isNullOrBlank() && videoId.length >= 8 ->
+                        "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+                    else -> null
+                } ?: return@Thread
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 12000
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                if (conn.responseCode in 200..299) {
+                    conn.inputStream.use { input ->
+                        dest.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+                conn.disconnect()
+            } catch (_: Exception) { }
+        }.start()
+    }
+
+    private fun loadDownloadThumb(title: String, path: String): android.graphics.Bitmap? {
+        try {
+            val f = thumbFileForTitle(title)
+            if (f.exists() && f.length() > 500) {
+                return android.graphics.BitmapFactory.decodeFile(f.absolutePath)
+            }
+        } catch (_: Exception) { }
+        // Yerel videodan kare
+        try {
+            val vf = java.io.File(path)
+            if (vf.exists() && (title.endsWith(".mp4", true) || path.endsWith(".mp4", true))) {
+                val r = android.media.MediaMetadataRetriever()
+                r.setDataSource(vf.absolutePath)
+                val bmp = r.getFrameAtTime(1_000_000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    ?: r.getFrameAtTime(0)
+                r.release()
+                if (bmp != null) {
+                    try {
+                        val out = thumbFileForTitle(title)
+                        out.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, it) }
+                    } catch (_: Exception) { }
+                    return bmp
+                }
+            }
+        } catch (_: Exception) { }
+        return null
+    }
+
     private fun refreshDownloadsDialogFull() {
         handler.post {
             if (!downloadsShowing) return@post
@@ -5796,20 +5871,50 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 row.setPadding(dp(12), dp(12), dp(12), dp(12))
                 row.background = ripple(shape(cSurface, 16))
                 val iconWrap = FrameLayout(this)
-                val iconBg = shape(cField, 12)
-                iconWrap.background = iconBg
-                val icon = TextView(this)
-                icon.text = when {
+                iconWrap.background = shape(cField, 12)
+                val iv = ImageView(this)
+                iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                iv.setBackgroundColor(0x22000000)
+                iconWrap.addView(iv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                val fallback = TextView(this)
+                fallback.text = when {
                     e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
                     e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") || e.title.lowercase().endsWith(".m4a") -> "🎵"
                     e.mime.startsWith("image") -> "🖼️"
                     e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
                     else -> "📁"
                 }
-                icon.textSize = 20f
-                icon.gravity = Gravity.CENTER
-                iconWrap.addView(icon, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                row.addView(iconWrap, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(12) })
+                fallback.textSize = 20f
+                fallback.gravity = Gravity.CENTER
+                iconWrap.addView(fallback, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                // Kapak yükle (YouTube mqdefault / kayıtlı thumb / video karesi)
+                Thread {
+                    val bmp = loadDownloadThumb(e.title, e.path)
+                    if (bmp != null) {
+                        handler.post {
+                            try {
+                                iv.setImageBitmap(bmp)
+                                fallback.visibility = View.GONE
+                            } catch (_: Exception) { }
+                        }
+                    } else {
+                        // URL'den video id dene
+                        val vid = videoIdOf(e.url)
+                        if (vid != null) {
+                            cacheDownloadThumb(e.title, vid, null)
+                            handler.postDelayed({
+                                val b2 = loadDownloadThumb(e.title, e.path)
+                                if (b2 != null) {
+                                    try {
+                                        iv.setImageBitmap(b2)
+                                        fallback.visibility = View.GONE
+                                    } catch (_: Exception) { }
+                                }
+                            }, 800L)
+                        }
+                    }
+                }.start()
+                row.addView(iconWrap, LinearLayout.LayoutParams(dp(52), dp(52)).apply { marginEnd = dp(12) })
 
                 val texts = LinearLayout(this)
                 texts.orientation = LinearLayout.VERTICAL
@@ -7289,17 +7394,25 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(tick%5===1)hideAdUi(true);" +
             "if(vd){" +
             "if(!fast){fast=true;vd.dataset.pv=String(vd.volume>0?vd.volume:1);}" +
-            "try{vd.volume=0;}catch(x){}" +
+            "try{vd.volume=0;vd.muted=true;}catch(x){}" +
             "vd.style.visibility='hidden';" +
-            "if(vd.playbackRate<8)vd.playbackRate=16;" +
+            "try{if(vd.playbackRate<16)vd.playbackRate=16;}catch(x){}" +
+            // Reklam süresinin sonuna at — beklemeden bitsin
+            "try{if(isFinite(vd.duration)&&vd.duration>0&&vd.duration<180){vd.currentTime=Math.max(0,vd.duration-0.15);}}catch(x){}" +
             "}" +
             "trySkip(pl);" +
-            "if(adSince&&(Date.now()-adSince)>12000){forceUnstick(pl,vd,cv);}" +
+            // Player API skip
+            "try{var mp=document.getElementById('movie_player');" +
+            "if(mp){if(typeof mp.skipAd==='function')mp.skipAd();" +
+            "if(typeof mp.cancelPlayback==='function'&&pl.classList.contains('ad-showing')){/*no*/}}" +
+            "}catch(x){}" +
+            // 2.5 sn'den uzun sürerse zorla çık
+            "if(adSince&&(Date.now()-adSince)>2500){forceUnstick(pl,vd,cv);}" +
             "}else if(fast||cv.style.display!=='none'){" +
             "adSince=0;" +
             "if(vd&&vd.playbackRate>1)vd.playbackRate=1;" +
             "gap++;" +
-            "if(gap>=6){" +
+            "if(gap>=2){" +
             "gap=0;" +
             "cv.style.display='none';" +
             "endAd(vd);" +
