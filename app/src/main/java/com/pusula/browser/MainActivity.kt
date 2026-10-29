@@ -236,23 +236,6 @@ class MainActivity : AppCompatActivity() {
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
-    /** WhatsApp sırasında volume=0'ı koru (başka script açmasın) */
-    private val duckHoldRunnable = object : Runnable {
-        override fun run() {
-            if (!pausedByAudioFocus) return
-            injectAllMedia(
-                "(function(){try{" +
-                "if(!window.__rotaFocusPaused)return;" +
-                "document.querySelectorAll('video,audio').forEach(function(m){try{" +
-                "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0.05)?m.volume:1;m.dataset._afv=String(f);}" +
-                "if(m.volume>0.001)m.volume=0;" +
-                "}catch(x){}});" +
-                "}catch(e){}})();"
-            )
-            handler.postDelayed(this, 250L)
-        }
-    }
-
 
     /** Pause süresince bildirimi ayakta tut (idle stop olmasın) */
     private val focusNotifKeepAlive = object : Runnable {
@@ -354,53 +337,47 @@ class MainActivity : AppCompatActivity() {
         focusPermanentLoss = false
         extQuietSince = 0L
         externalPeakConfigs = countMediaConfigs().coerceAtLeast(1)
-        handler.postDelayed({
-            if (pausedByAudioFocus) {
-                externalPeakConfigs = maxOf(externalPeakConfigs, countMediaConfigs())
-            }
-        }, 400L)
-        // volume=0, pause/mute/bildirim yok — sonra 250ms'de bir 0 tut
+        // Sadece volume=0. Bildirim/hasMedia/lastPlaying/pause/mute YOK.
         injectAllMedia(
             "(function(){try{" +
-            "window.__rotaFocusPaused=true;" +
             "window.__rotaDuck=true;" +
-            "var list=Array.from(document.querySelectorAll('video,audio'));" +
-            "list.forEach(function(m){try{" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "if(m.ended)return;" +
-            "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0.05)?m.volume:1;m.dataset._afv=String(f);}" +
+            "var f=(typeof m.volume==='number'&&m.volume>0.05)?m.volume:parseFloat(m.dataset._afv||'1');" +
+            "if(!(f>0))f=1;m.dataset._afv=String(f);" +
             "m.volume=0;" +
             "}catch(x){}});" +
             "}catch(e){}})();"
         )
         focusLevel = 0.0
-        handler.removeCallbacks(duckHoldRunnable)
-        handler.post(duckHoldRunnable)
         handler.removeCallbacks(extCheck)
-        handler.postDelayed(extCheck, 500L)
+        handler.postDelayed(extCheck, 600L)
     }
 
 private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
-            if (now - focusPauseSince < 1500L) {
-                handler.postDelayed(extCheck, 400L)
+            // Erken açılma = sızıntı. En az 2 sn bekle, config net düşünce aç.
+            if (now - focusPauseSince < 2000L) {
+                handler.postDelayed(extCheck, 500L)
                 return
             }
             val peak = externalPeakConfigs.coerceAtLeast(1)
-            val externalGone = n == 0 || n < peak
-            if (externalGone) {
-                if (extQuietSince == 0L) {
-                    extQuietSince = now
-                    handler.postDelayed(extCheck, 450L)
-                } else if (now - extQuietSince >= 500L) {
-                    extQuietSince = 0L
-                    resumeFromFocus(false)
-                } else handler.postDelayed(extCheck, 300L)
-            } else {
-                if (n > externalPeakConfigs) externalPeakConfigs = n
+            if (n >= peak) {
                 extQuietSince = 0L
-                handler.postDelayed(extCheck, 450L)
+                handler.postDelayed(extCheck, 500L)
+                return
+            }
+            // Config düştü
+            if (extQuietSince == 0L) {
+                extQuietSince = now
+                handler.postDelayed(extCheck, 600L)
+            } else if (now - extQuietSince >= 700L) {
+                extQuietSince = 0L
+                resumeFromFocus(false)
+            } else {
+                handler.postDelayed(extCheck, 400L)
             }
             return
         }
@@ -416,15 +393,15 @@ private fun evalExternalAudio() {
         if (extBaseline >= 1 && n > extBaseline) {
             if (extSeenSince == 0L) {
                 extSeenSince = now
-                handler.postDelayed(extCheck, 230L)
-            } else if (now - extSeenSince >= 200L) {
+                handler.postDelayed(extCheck, 250L)
+            } else if (now - extSeenSince >= 250L) {
                 extSeenSince = 0L
                 beginExternalPause()
             }
         } else extSeenSince = 0L
     }
 
-    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
+private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
         if (android.os.SystemClock.elapsedRealtime() < ignoreFocusUntil) return@OnAudioFocusChangeListener
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS,
@@ -492,30 +469,25 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
     /** Odak geri geldi (veya sessizlik algılandı): yavaşça aç ve kaldığı yerden devam et. */
     private fun resumeFromFocus(reacquire: Boolean) {
         if (!pausedByAudioFocus) return
-        val now = android.os.SystemClock.elapsedRealtime()
         pausedByAudioFocus = false
-        focusIgnoreExtUntil = now + 2_500L
+        focusIgnoreExtUntil = android.os.SystemClock.elapsedRealtime() + 3_000L
         extQuietSince = 0L
         externalPeakConfigs = 0
-        handler.removeCallbacks(duckHoldRunnable)
-        handler.removeCallbacks(focusNotifKeepAlive)
         cancelFocusFade()
         stopFocusResumeWatch()
+        // Sadece volume geri — servis/bildirim/play'e dokunma
         injectAllMedia(
             "(function(){try{" +
-            "window.__rotaFocusPaused=false;" +
             "window.__rotaDuck=false;" +
-            "var list=Array.from(document.querySelectorAll('video,audio'));" +
-            "list.forEach(function(m){try{" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
-            "m.muted=false;" +
             "var from=(typeof m.volume==='number'?m.volume:0);" +
-            "var steps=12,i=0;" +
+            "var steps=15,i=0;" +
             "var iv=setInterval(function(){try{" +
-            "if(window.__rotaDuck){clearInterval(iv);return;}" +
+            "if(window.__rotaDuck){clearInterval(iv);m.volume=0;return;}" +
             "i++;m.volume=Math.min(to,from+(to-from)*(i/steps));" +
             "if(i>=steps){clearInterval(iv);m.volume=to;}" +
-            "}catch(x){try{clearInterval(iv);}catch(y){}}},40);" +
+            "}catch(x){try{clearInterval(iv);}catch(y){}}},50);" +
             "}catch(x){}});" +
             "}catch(e){}})();"
         )
@@ -6707,7 +6679,8 @@ if(isYt){
 
         const val BACKGROUND_MEDIA_JS =
             "(function(){try{" +
-                "if(window.__userPause||window.__rotaFocusPaused||window.__rotaDuck)return;" +
+                "if(window.__rotaDuck){document.querySelectorAll('video,audio').forEach(function(m){try{m.volume=0;}catch(x){}});return;}" +
+                "if(window.__userPause||window.__rotaFocusPaused)return;" +
                 "document.querySelectorAll('video,audio').forEach(function(m){" +
                 "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                 "});" +
@@ -7104,7 +7077,8 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "}catch(e){return '';}})();"
         const val KEEP_MEDIA_PLAYING_JS =
             "(function(){try{" +
-            "if(window.__userPause||window.__rotaFocusPaused||window.__rotaDuck)return;" +
+            "if(window.__rotaDuck){document.querySelectorAll('video,audio').forEach(function(m){try{m.volume=0;}catch(x){}});return;}" +
+            "if(window.__userPause||window.__rotaFocusPaused)return;" +
             "document.querySelectorAll('video,audio').forEach(function(m){" +
             "try{" +
             "if(m.ended)return;" +
