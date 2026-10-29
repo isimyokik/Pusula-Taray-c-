@@ -250,9 +250,10 @@ class MainActivity : AppCompatActivity() {
     private val focusNotifKeepAlive = object : Runnable {
         override fun run() {
             if (!pausedByAudioFocus) return
+            // Duck: müzik çalıyor (ses 0) — bildirim playing kalsın
             try {
                 PlaybackService.update(
-                    this@MainActivity, false,
+                    this@MainActivity, true,
                     lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                     isInPictureInPictureMode, -1L, -2L, lastArtUrl
                 )
@@ -751,7 +752,9 @@ private fun pollMedia() {
             }
         } catch (_: Exception) { return }
         title = cleanMeta(title); artist = cleanMeta(artist)
-        if (pausedByAudioFocus && focusFadeRunnable != null) playing = false
+        // Duck = volume 0, müzik çalmaya devam — poll "paused" dese de bildirim playing
+        if (pausedByAudioFocus) playing = true
+        else if (focusFadeRunnable != null) playing = false
         // Devam sonrası poll gecikmeli false dönebilir; bildirim çalıyor kalsın
         if (!pausedByAudioFocus && android.os.SystemClock.elapsedRealtime() < focusResumePlayUntil) {
             if (!playing) playing = true
@@ -761,7 +764,8 @@ private fun pollMedia() {
             val now0 = android.os.SystemClock.elapsedRealtime()
             // Focus / devam penceresinde servisi ASLA durdurma
             if (pausedByAudioFocus || now0 < focusNotifHoldUntil || now0 < focusResumePlayUntil) {
-                val showPlay = (!pausedByAudioFocus) && (now0 < focusResumePlayUntil || lastPlaying)
+                // Duck sırasında da playing: sadece ses kısık
+                val showPlay = pausedByAudioFocus || now0 < focusResumePlayUntil || lastPlaying
                 try {
                     PlaybackService.update(
                         this, showPlay,
@@ -1118,8 +1122,14 @@ fun onMusicCatalog(raw: String?) {
             try { shown?.onResume() } catch (_: Exception) { }
             try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
             if (pausedByAudioFocus) {
-                // Bildirim ayakta kalsın, idle stop tetiklenmesin
-                try { PlaybackService.update(this@MainActivity, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
+                // Duck: idle stop olmasın, bildirim playing (müzik durmadı)
+                try {
+                    PlaybackService.update(
+                        this@MainActivity, true,
+                        lastTitle.ifBlank { "YouTube Music" }, lastArtist,
+                        false, -1L, -2L, lastArtUrl
+                    )
+                } catch (_: Exception) { }
                 handler.postDelayed(this, 2000L)
                 return
             }
