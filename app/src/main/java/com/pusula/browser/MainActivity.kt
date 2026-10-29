@@ -174,6 +174,8 @@ class MainActivity : AppCompatActivity() {
     private val activeDls = java.util.concurrent.CopyOnWriteArrayList<ActiveDl>()
     private var activeDlSeq = 1L
     private var downloadsDialogRefresh: (() -> Unit)? = null
+    private var downloadsDialog: Dialog? = null
+    private var downloadsShowing = false
 
     private var hasAudioFocus = false
     private var pausedByAudioFocus = false
@@ -3198,8 +3200,8 @@ fun onMusicCatalog(raw: String?) {
                         handler.post {
                             notifyDlProgress(dl)
                             activeDls.remove(dl)
-                            downloadsDialogRefresh?.invoke()
                             toast("İptal: ${dl.name}")
+                            refreshDownloadsDialogFull()
                         }
                     }
                     "OK" -> {
@@ -3240,8 +3242,8 @@ fun onMusicCatalog(raw: String?) {
                             prefs.addDownload(dl.name, dl.url, destPath, mime ?: "")
                             notifyDlProgress(dl)
                             activeDls.remove(dl)
-                            downloadsDialogRefresh?.invoke()
                             toast("${dl.kind} indirildi: ${dl.name}")
+                            refreshDownloadsDialogFull()
                         }
                     }
                     else -> {
@@ -4069,10 +4071,16 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             }
             fun looksProgressive(url: String): Boolean {
                 val u = url.lowercase()
-                return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
-                    u.contains("itag=37") ||
-                    (u.contains("mime=video") && u.contains("audio")) ||
-                    (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
+                // Adaptive sadece video (mime=video, audio yok) → sesiz dosya; alma
+                if (u.contains("mime=video") && !u.contains("audio")) return false
+                if (u.contains("itag=137") || u.contains("itag=136") || u.contains("itag=135") ||
+                    u.contains("itag=298") || u.contains("itag=299") || u.contains("itag=248") ||
+                    u.contains("itag=247") || u.contains("itag=399") || u.contains("itag=398")) return false
+                // Sesli progressive: 22=720p, 18=360p, 37=1080p
+                return u.contains("itag=22") || u.contains("itag=18") || u.contains("itag=37") ||
+                    u.contains("itag=38") ||
+                    (u.contains("ratebypass") && (u.contains("mime=video") && u.contains("audio"))) ||
+                    (u.contains("mime=video") && u.contains("audio"))
             }
             fun progScore(label: String, url: String): Int {
                 val x = "$label $url".lowercase()
@@ -4090,12 +4098,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
                 return
             }
-            val prog = links.filter {
-                !isAudioLab(it.first, it.second) && (
-                    it.first.startsWith("MP4") || looksProgressive(it.second)
-                )
+            // Önce kesin sesli progressive (itag 22 = 720p)
+            val prog22 = links.firstOrNull { looksProgressive(it.second) && it.second.lowercase().contains("itag=22") }?.second
+            val prog = prog22 ?: links.filter {
+                !isAudioLab(it.first, it.second) && looksProgressive(it.second)
             }.maxByOrNull { progScore(it.first, it.second) }?.second
-            // Varsayılan: sesli 720p (veya en iyi progressive)
             if (prog != null) {
                 toast("İndiriliyor…")
                 startDownload(prog, null, null, "video/mp4", "$base.mp4")
@@ -5567,9 +5574,25 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
     }
 
     /** Uygulama içi İndirilenler listesi. */
+
+    /** İndirilenler açıksa listeyi baştan çiz (biten dosya görünsün). */
+    private fun refreshDownloadsDialogFull() {
+        handler.post {
+            if (!downloadsShowing) return@post
+            try {
+                downloadsDialog?.setOnDismissListener(null)
+                downloadsDialog?.dismiss()
+            } catch (_: Exception) { }
+            downloadsDialog = null
+            showDownloads()
+        }
+    }
+
     private fun showDownloads() {
         val items = ArrayList(prefs.downloads())
         val d = Dialog(this)
+        downloadsDialog = d
+        downloadsShowing = true
         pushUiOverlay()
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
@@ -5680,8 +5703,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     try { dl.tmpFile?.delete() } catch (_: Exception) {}
                     activeDls.remove(dl)
                     notifyDlProgress(dl)
-                    paintActive()
                     toast("İptal: ${dl.name}")
+                    refreshDownloadsDialogFull()
                 })
                 row.addView(actions, alp)
                 activeBox.addView(row, lp)
@@ -5691,6 +5714,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         downloadsDialogRefresh = { paintActive() }
         d.setOnDismissListener {
             downloadsDialogRefresh = null
+            downloadsShowing = false
+            if (downloadsDialog === d) downloadsDialog = null
             popUiOverlay()
         }
 
