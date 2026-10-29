@@ -3122,13 +3122,13 @@ fun onMusicCatalog(raw: String?) {
         return title
     }
 
+
     private fun startDownload(url: String, ua: String?, cd: String?, mime: String?, forcedName: String? = null) {
         if (!url.startsWith("http")) return
         try {
             var name = forcedName
             if (name.isNullOrBlank()) {
                 val guessed = URLUtil.guessFileName(url, cd, mime)
-                // videoplayback / generik isimleri başlıkla değiştir
                 val base = mediaFileBase()
                 val ext = when {
                     mime?.contains("audio") == true || guessed.endsWith(".mp3", true) || guessed.endsWith(".m4a", true) ->
@@ -3138,47 +3138,96 @@ fun onMusicCatalog(raw: String?) {
                     guessed.contains(".") -> guessed.substringAfterLast('.')
                     else -> "bin"
                 }
-                name = if (guessed.startsWith("videoplayback", true) || guessed.startsWith("audio", true) ||
-                    guessed.length < 8 || guessed.matches(Regex("(?i)download|file|media.*"))) {
-                    "$base.$ext"
-                } else {
-                    // Yine de başlığı tercih et
-                    "$base.$ext"
-                }
+                name = "$base.$ext"
             }
+            val finalName = name!!
+            val isYt = url.contains("googlevideo.com") || url.contains("youtube.com") ||
+                url.contains("youtu.be") || url.contains("googleusercontent.com")
+
+            // YouTube stream: DownloadManager sık duraklatır / yavaşlar → doğrudan HTTP
+            if (isYt) {
+                toast("İndiriliyor…")
+                Thread {
+                    try {
+                        val tmp = java.io.File(cacheDir, "dl_${System.currentTimeMillis()}_${finalName}")
+                        val ok = httpToFile(url, tmp)
+                        if (!ok || tmp.length() < 2048) {
+                            tmp.delete()
+                            handler.post { toast("İndirme başarısız") }
+                            return@Thread
+                        }
+                        val destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + finalName
+                        val resolver = contentResolver
+                        if (Build.VERSION.SDK_INT >= 29) {
+                            val values = android.content.ContentValues().apply {
+                                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, finalName)
+                                put(android.provider.MediaStore.Downloads.MIME_TYPE, mime ?: "application/octet-stream")
+                                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                                put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                            }
+                            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                            if (uri != null) {
+                                resolver.openOutputStream(uri)?.use { out ->
+                                    tmp.inputStream().use { it.copyTo(out) }
+                                }
+                                values.clear()
+                                values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                                resolver.update(uri, values, null, null)
+                            } else {
+                                tmp.copyTo(java.io.File(destPath), true)
+                            }
+                        } else {
+                            val dest = java.io.File(
+                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                                finalName
+                            )
+                            tmp.copyTo(dest, true)
+                        }
+                        tmp.delete()
+                        handler.post {
+                            prefs.addDownload(finalName, url, destPath, mime ?: "")
+                            toast("İndirildi: $finalName")
+                        }
+                    } catch (_: Exception) {
+                        handler.post { toast("İndirilemedi") }
+                    }
+                }.start()
+                return
+            }
+
             val req = DownloadManager.Request(Uri.parse(url))
             if (mime != null) req.setMimeType(mime)
             val cookie = CookieManager.getInstance().getCookie(url)
                 ?: CookieManager.getInstance().getCookie("https://www.youtube.com")
             if (!cookie.isNullOrBlank()) req.addRequestHeader("Cookie", cookie)
-            req.addRequestHeader("User-Agent", ua ?: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-            if (url.contains("googlevideo.com") || url.contains("youtube.com") || url.contains("youtu.be")) {
-                req.addRequestHeader("Referer", "https://www.youtube.com/")
-                req.addRequestHeader("Origin", "https://www.youtube.com")
-            }
-            req.setTitle(name)
-            // Sistem bildirimi kapalı; ilerleme ve bitiş bildirimini DownloadNotifier kendisi gösterir
-            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            req.addRequestHeader(
+                "User-Agent",
+                ua ?: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            )
+            req.setTitle(finalName)
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             req.setAllowedOverMetered(true)
             req.setAllowedOverRoaming(true)
+            req.setAllowedNetworkTypes(
+                DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE
+            )
             val destPath: String
             if (Build.VERSION.SDK_INT >= 29) {
-                req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-                destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + name
+                req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, finalName)
+                destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + finalName
             } else {
-                req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name)
-                destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + name
+                req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, finalName)
+                destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + finalName
             }
             val dlId = (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
-            DownloadNotifier.track(this, dlId, name.orEmpty())
-            prefs.addDownload(name, url, destPath, mime ?: "")
-            val kind = when {
-                mime?.contains("audio") == true || name.endsWith(".mp3", true) -> "MP3 indiriliyor"
-                else -> "MP4 indiriliyor"
-            }
-            toast("$kind: $name")
-        } catch (_: Exception) { toast("İndirilemedi") }
+            try { DownloadNotifier.track(this, dlId, finalName) } catch (_: Exception) { }
+            prefs.addDownload(finalName, url, destPath, mime ?: "")
+            toast("İndiriliyor…")
+        } catch (_: Exception) {
+            toast("İndirilemedi")
+        }
     }
+
 
     private fun toast(msg: String) { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
     private fun hideKeyboard() {
