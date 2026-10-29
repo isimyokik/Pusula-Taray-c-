@@ -6224,109 +6224,6 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
                   """
 
         // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
-        val YT_MUSIC_UX_JS =
-            "(function(){try{\n" +
-            "if((location.hostname||'').indexOf('music.youtube')<0)return;\n" +
-            "if(window.__rotaYtmTimer){try{clearInterval(window.__rotaYtmTimer);}catch(z){}}\n" +
-            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
-            "window.__rotaYtmCtl=null;\n" +
-            // Sadece mavi kare tap-highlight'ı kapat; orijinal ileri/geri/oynat ripple kalsın
-            "if(!document.getElementById('__rota_ytm_fb')){\n" +
-            "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
-            "st.textContent=\n" +
-            "'ytmusic-player-page,ytmusic-player-page *{-webkit-tap-highlight-color:transparent!important;}'+\n" +
-            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-page .play-pause-button{'+\n" +
-            "'-webkit-tap-highlight-color:transparent!important;outline:none!important;'+\n" +
-            "'}';\n" +
-            "(document.documentElement||document).appendChild(st);\n" +
-            "}\n" +
-            "function isFullPlayer(){\n" +
-            "try{\n" +
-            "var p=document.querySelector('ytmusic-player-page');\n" +
-            "if(!p)return false;\n" +
-            "var layout=document.querySelector('ytmusic-app-layout');\n" +
-            "if(layout){\n" +
-            "var st=layout.getAttribute('player-ui-state_')||'';\n" +
-            "if(st==='PLAYER_BAR_ONLY'||st==='MINIPLAYER')return false;\n" +
-            "}\n" +
-            "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
-            "var cs=getComputedStyle(p);\n" +
-            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
-            "return r.height>H*0.5&&r.top<H*0.25&&r.width>0;\n" +
-            "}catch(z){return false;}\n" +
-            "}\n" +
-            "function isOnSlider(e){\n" +
-            "try{\n" +
-            "var path=e.composedPath?e.composedPath():[e.target];\n" +
-            "for(var i=0;i<path.length;i++){\n" +
-            "var n=path[i];if(!n||!n.tagName)continue;\n" +
-            "var t=n.tagName.toLowerCase();\n" +
-            "if(t.indexOf('slider')>=0||t.indexOf('progress')>=0)return true;\n" +
-            "if((n.id||'')==='progress-bar'||(n.id||'')==='sliderBar')return true;\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "return false;\n" +
-            "}\n" +
-            "function pressMinimize(){\n" +
-            "if(!isFullPlayer())return;\n" +
-            "try{\n" +
-            "if(window.RotaTap){\n" +
-            "var w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);\n" +
-            "window.RotaTap.tap(36/w,48/h);\n" +
-            "setTimeout(function(){try{if(window.RotaTap&&window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},280);\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "try{\n" +
-            "var pts=[[36,48],[48,56],[28,40],[56,64]];\n" +
-            "for(var i=0;i<pts.length;i++){\n" +
-            "var t=document.elementFromPoint(pts[i][0],pts[i][1]);\n" +
-            "if(!t)continue;\n" +
-            "var b=t.closest('button,[role=button],tp-yt-paper-icon-button,yt-icon-button')||t;\n" +
-            "try{b.click();}catch(z){}\n" +
-            "}\n" +
-            "}catch(z){}\n" +
-            "unbindGesture();\n" +
-            "}\n" +
-            "function unbindGesture(){\n" +
-            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
-            "window.__rotaYtmCtl=null;\n" +
-            "}\n" +
-            "function bindGesture(){\n" +
-            "if(window.__rotaYtmCtl)return;\n" +
-            "window.__rotaYtmCtl=new AbortController();\n" +
-            "var sig=window.__rotaYtmCtl.signal;\n" +
-            "var sx=0,sy=0,active=false;\n" +
-            "document.addEventListener('touchstart',function(e){\n" +
-            "active=false;\n" +
-            "if(!e.touches||e.touches.length!==1)return;\n" +
-            "if(!isFullPlayer())return;\n" +
-            "if(isOnSlider(e))return;\n" +
-            "sx=e.touches[0].clientX;sy=e.touches[0].clientY;active=true;\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchmove',function(e){\n" +
-            "if(!active||!e.touches||!e.touches[0])return;\n" +
-            "var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;\n" +
-            "if(Math.abs(dx)>Math.abs(dy)*1.1)active=false;\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchend',function(e){\n" +
-            "if(!active)return;active=false;\n" +
-            "if(!isFullPlayer())return;\n" +
-            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
-            "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<40)return;\n" +
-            "if(Math.abs(dx)>dy*0.9)return;\n" +
-            "pressMinimize();\n" +
-            "},{passive:true,capture:true,signal:sig});\n" +
-            "document.addEventListener('touchcancel',function(){active=false;},{passive:true,capture:true,signal:sig});\n" +
-            "}\n" +
-            "window.__rotaYtmTimer=setInterval(function(){\n" +
-            "try{\n" +
-            "if(isFullPlayer())bindGesture();\n" +
-            "else unbindGesture();\n" +
-            "}catch(z){}\n" +
-            "},200);\n" +
-            "try{if(isFullPlayer())bindGesture();else unbindGesture();}catch(z){}\n" +
-            "}catch(e){}})();\n"
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
                 "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
@@ -6850,11 +6747,10 @@ if(isYt){
         const val MEDIA_HOOK_JS =
             "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
 
-        const val YT_MUSIC_UX_JS =
+                const val YT_MUSIC_UX_JS =
             "(function(){try{\n" +
             "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
             "if(window.__rotaYtmSwipe)return;window.__rotaYtmSwipe=1;\n" +
-            // Eski bozuk stilleri bir kez temizle (siyah perde)
             "try{\n" +
             "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
             "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
