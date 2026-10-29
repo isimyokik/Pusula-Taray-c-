@@ -275,13 +275,8 @@ class MainActivity : AppCompatActivity() {
     private fun tupleCounts(): Map<String, Int> {
         val m = HashMap<String, Int>()
         if (Build.VERSION.SDK_INT < 26) return m
-        val myUid = android.os.Process.myUid()
         try {
             for (c in audioManager.activePlaybackConfigurations) {
-                if (Build.VERSION.SDK_INT >= 28) {
-                    val uid = playbackClientUid(c)
-                    if (uid < 0 || uid == myUid) continue
-                }
                 val a = c.audioAttributes
                 if (!usageCounts(a.usage)) continue
                 val k = a.usage.toString() + "/" + a.contentType
@@ -326,25 +321,20 @@ class MainActivity : AppCompatActivity() {
         return -1
     }
 
-    /**
-     * Başka uygulamanın medya seslerini sayar. Kendi WebView sekmelerimiz (aynı UID)
-     * dış ses SANILMAZ — aksi halde sekme değiştirince müzik sessize iniyordu.
-     */
-    private fun countMediaConfigs(): Int {
-        if (Build.VERSION.SDK_INT < 26) return 0
-        val myUid = android.os.Process.myUid()
-        return try {
-            audioManager.activePlaybackConfigurations.count { c ->
-                // Kendi uygulamamızın (tüm sekmeler) sesini dış ses sayma
-                if (Build.VERSION.SDK_INT >= 28) {
-                    val uid = playbackClientUid(c)
-                    // uid okunamadıysa bu config'i dış ses sayma (sekme yanlış pozitifini önler)
-                    if (uid < 0 || uid == myUid) return@count false
-                }
-                usageCounts(c.audioAttributes.usage)
-            }
-        } catch (_: Exception) {
-            0
+    private fun countMediaConfigs(): Int = activeUsages().count { u ->
+        when (u) {
+            AudioAttributes.USAGE_ALARM,
+            AudioAttributes.USAGE_NOTIFICATION,
+            AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
+            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
+            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT,
+            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
+            AudioAttributes.USAGE_NOTIFICATION_EVENT,
+            AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY,
+            AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE,
+            AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
+            AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING -> false
+            else -> true
         }
     }
 
@@ -416,8 +406,6 @@ class MainActivity : AppCompatActivity() {
         injectAllMedia(AUDIO_DUCK_BEGIN_JS)
         runDuckFade(0.0, duckFadeOutMs) {
             injectAllMedia(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"))
-            // YouTube Music bazen volume yazmayı yutuyor: ek sert sıfır (pause yok)
-            injectAllMedia(AUDIO_DUCK_HARD_ZERO_JS)
         }
         handler.removeCallbacks(extCheck)
         handler.postDelayed(extCheck, 600L)
@@ -451,7 +439,7 @@ private fun evalExternalAudio() {
             return
         }
         val ourPlaying = hasMedia && lastPlaying
-        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null || now - mediaChangedAt < 5000L) {
+        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null || now - mediaChangedAt < 8000L) {
             extBaseline = -1; extSeenSince = 0L
             return
         }
@@ -758,6 +746,7 @@ private fun pollMedia() {
             ?: idxs.firstOrNull { has(res[it]) }
         if (pick == null) { onMediaState(""); return }
         mediaSrc = cands[pick]
+        mediaChangedAt = android.os.SystemClock.elapsedRealtime()
         onMediaState(res[pick])
     }
 
@@ -821,6 +810,9 @@ private fun pollMedia() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         if (changed) mediaChangedAt = now
+        if (playing != lastPlaying || title != lastTitle) {
+            mediaChangedAt = android.os.SystemClock.elapsedRealtime()
+        }
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         if (playing || pausedByAudioFocus) acquireMediaLocks()
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
