@@ -3884,19 +3884,31 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     ?: a.firstOrNull { it.first.startsWith("A:") }?.second
                     ?: a.maxByOrNull { it.second.length }?.second
             }
+            fun isAvcUrl(url: String): Boolean {
+                val x = url.lowercase()
+                if ("vp9" in x || "vp09" in x || "webm" in x) return false
+                return "avc1" in x || "mime=video%2fmp4" in x || "mime=video/mp4" in x ||
+                    Regex("itag=(137|136|135|134|133|160|298|299|264|266|399|398|397)").containsMatchIn(x)
+            }
             fun adaptive(h: Int): String? {
                 val cands = links.filter {
                     it.first == "V:$h" ||
                         (it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h)
                 }
-                // mp4/avc (itag 137/136…) birleştirmede webm'den daha stabil
-                return cands.firstOrNull { u ->
-                    val x = u.second.lowercase()
-                    "mime=video%2fmp4" in x || "avc1" in x || "itag=137" in x || "itag=136" in x ||
-                        "itag=135" in x || "itag=399" in x || "itag=298" in x
-                }?.second ?: cands.firstOrNull()?.second
+                // Yalnızca AVC/MP4 — VP9/WebM birleştirmede ses kaybı
+                return cands.firstOrNull { isAvcUrl(it.second) }?.second
             }
-            val audio = bestAudio()
+            fun bestAac(): String? {
+                val a = links.filter { isAudio(it.first, it.second) }
+                // Yalnızca M4A/AAC (itag 140) — Opus mux'ta sessiz kalır
+                return a.firstOrNull { it.first == "A:M4A" }?.second
+                    ?: a.firstOrNull { u ->
+                        val x = u.second.lowercase()
+                        "itag=140" in x || "itag=141" in x || "mp4a" in x ||
+                            ("mime=audio%2fmp4" in x) || ("mime=audio/mp4" in x)
+                    }?.second
+            }
+            val audio = bestAac() ?: bestAudio()
             when {
                 audioOnly && audio != null -> {
                     toast("Ses indiriliyor")
@@ -3926,18 +3938,26 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                         }
                     }
                     val prog = progList.maxByOrNull { progScore(it.first, it.second) }?.second
+                    val aacOk = audio != null && run {
+                        val x = audio!!.lowercase()
+                        "itag=140" in x || "itag=141" in x || "mp4a" in x ||
+                            "mime=audio%2fmp4" in x || "mime=audio/mp4" in x ||
+                            links.any { it.second == audio && it.first == "A:M4A" }
+                    }
                     when {
-                        vBest != null && audio != null && (bestH ?: 0) >= 480 -> {
-                            toast("${bestH}p birleştiriliyor…")
-                            downloadAndMerge(vBest, audio, "$base.mp4")
+                        // yt-dlp/PipePipe: AVC video + AAC ses birleştir
+                        vBest != null && aacOk && (bestH ?: 0) >= 480 -> {
+                            toast("${bestH}p (AVC+AAC) birleştiriliyor…")
+                            downloadAndMerge(vBest!!, audio!!, "$base.mp4")
                         }
+                        // Sesli progressive 720 (tek dosya, birleştirme yok) — sessiz 1080'dan iyi
                         prog != null && progScore("", prog) >= 720 -> {
-                            toast("MP4 indiriliyor")
+                            toast("720p MP4 indiriliyor")
                             startDownload(prog, null, null, "video/mp4", "$base.mp4")
                         }
-                        vBest != null && audio != null -> {
+                        vBest != null && aacOk -> {
                             toast("${bestH ?: 0}p birleştiriliyor…")
-                            downloadAndMerge(vBest, audio, "$base.mp4")
+                            downloadAndMerge(vBest!!, audio!!, "$base.mp4")
                         }
                         prog != null -> {
                             toast("MP4 indiriliyor")
@@ -5005,57 +5025,131 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         } catch (_: Exception) { false }
     }
 
+
+    /**
+     * PipePipe/NewPipe tarzı: yalnızca MP4 (AVC) + M4A (AAC) birleştirilir.
+     * WebM/VP9/Opus MediaMuxer MPEG-4 ile güvenilir değil — çağıran taraf filtrelemeli.
+     */
     private fun muxAv(videoPath: String, audioPath: String, outPath: String): Boolean {
+        var vExt: android.media.MediaExtractor? = null
+        var aExt: android.media.MediaExtractor? = null
+        var muxer: android.media.MediaMuxer? = null
         return try {
-            val vExt = android.media.MediaExtractor()
-            vExt.setDataSource(videoPath)
-            val aExt = android.media.MediaExtractor()
-            aExt.setDataSource(audioPath)
-            val muxer = android.media.MediaMuxer(outPath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            var vTrack = -1
-            var aTrack = -1
+            vExt = android.media.MediaExtractor().also { it.setDataSource(videoPath) }
+            aExt = android.media.MediaExtractor().also { it.setDataSource(audioPath) }
             var vIdx = -1
             var aIdx = -1
-            for (i in 0 until vExt.trackCount) {
-                val fmt = vExt.getTrackFormat(i)
+            var vFmt: android.media.MediaFormat? = null
+            var aFmt: android.media.MediaFormat? = null
+            for (i in 0 until vExt!!.trackCount) {
+                val fmt = vExt!!.getTrackFormat(i)
                 val mime = fmt.getString(android.media.MediaFormat.KEY_MIME) ?: ""
-                if (mime.startsWith("video/")) { vIdx = i; vTrack = muxer.addTrack(fmt); break }
+                if (mime.equals("video/avc", true) || mime.startsWith("video/mp4") || mime == "video/hevc") {
+                    vIdx = i; vFmt = fmt; break
+                }
             }
-            for (i in 0 until aExt.trackCount) {
-                val fmt = aExt.getTrackFormat(i)
+            // AVC yoksa ilk video (son çare)
+            if (vIdx < 0) {
+                for (i in 0 until vExt!!.trackCount) {
+                    val fmt = vExt!!.getTrackFormat(i)
+                    val mime = fmt.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                    if (mime.startsWith("video/")) { vIdx = i; vFmt = fmt; break }
+                }
+            }
+            for (i in 0 until aExt!!.trackCount) {
+                val fmt = aExt!!.getTrackFormat(i)
                 val mime = fmt.getString(android.media.MediaFormat.KEY_MIME) ?: ""
-                if (mime.startsWith("audio/")) { aIdx = i; aTrack = muxer.addTrack(fmt); break }
+                if (mime.equals("audio/mp4a-latm", true) || mime.contains("aac") || mime == "audio/mp4") {
+                    aIdx = i; aFmt = fmt; break
+                }
             }
-            if (vTrack < 0 || aTrack < 0) {
-                vExt.release(); aExt.release(); muxer.release(); return false
+            if (aIdx < 0) {
+                for (i in 0 until aExt!!.trackCount) {
+                    val fmt = aExt!!.getTrackFormat(i)
+                    val mime = fmt.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                    if (mime.startsWith("audio/")) { aIdx = i; aFmt = fmt; break }
+                }
             }
-            vExt.selectTrack(vIdx)
-            aExt.selectTrack(aIdx)
-            muxer.start()
-            val buf = java.nio.ByteBuffer.allocate(1024 * 1024)
-            val info = android.media.MediaCodec.BufferInfo()
-            while (true) {
-                val size = vExt.readSampleData(buf, 0)
-                if (size < 0) break
-                info.offset = 0; info.size = size
-                info.presentationTimeUs = vExt.sampleTime
-                info.flags = vExt.sampleFlags
-                muxer.writeSampleData(vTrack, buf, info)
-                vExt.advance()
+            if (vIdx < 0 || aIdx < 0 || vFmt == null || aFmt == null) return false
+            val vMime = vFmt!!.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+            val aMime = aFmt!!.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+            // VP9/WebM veya Opus → MediaMuxer MPEG-4 genelde sessiz/bozuk dosya üretir
+            if (vMime.contains("vp9") || vMime.contains("vp8") || vMime.contains("webm")) return false
+            if (aMime.contains("opus") || aMime.contains("vorbis")) return false
+
+            muxer = android.media.MediaMuxer(outPath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            vExt!!.selectTrack(vIdx)
+            aExt!!.selectTrack(aIdx)
+            val vTrack = muxer!!.addTrack(vFmt!!)
+            val aTrack = muxer!!.addTrack(aFmt!!)
+            muxer!!.start()
+
+            val vBuf = java.nio.ByteBuffer.allocate(2 * 1024 * 1024)
+            val aBuf = java.nio.ByteBuffer.allocate(256 * 1024)
+            val vInfo = android.media.MediaCodec.BufferInfo()
+            val aInfo = android.media.MediaCodec.BufferInfo()
+            var vDone = false
+            var aDone = false
+            var vTime = 0L
+            var aTime = 0L
+
+            fun readV(): Boolean {
+                if (vDone) return false
+                vBuf.clear()
+                val size = vExt!!.readSampleData(vBuf, 0)
+                if (size < 0) { vDone = true; return false }
+                vInfo.offset = 0
+                vInfo.size = size
+                vInfo.presentationTimeUs = vExt!!.sampleTime.coerceAtLeast(0L)
+                vTime = vInfo.presentationTimeUs
+                var flags = 0
+                val sf = vExt!!.sampleFlags
+                if (sf and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+                    flags = flags or android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME
+                }
+                vInfo.flags = flags
+                return true
             }
-            while (true) {
-                val size = aExt.readSampleData(buf, 0)
-                if (size < 0) break
-                info.offset = 0; info.size = size
-                info.presentationTimeUs = aExt.sampleTime
-                info.flags = aExt.sampleFlags
-                muxer.writeSampleData(aTrack, buf, info)
-                aExt.advance()
+            fun readA(): Boolean {
+                if (aDone) return false
+                aBuf.clear()
+                val size = aExt!!.readSampleData(aBuf, 0)
+                if (size < 0) { aDone = true; return false }
+                aInfo.offset = 0
+                aInfo.size = size
+                aInfo.presentationTimeUs = aExt!!.sampleTime.coerceAtLeast(0L)
+                aTime = aInfo.presentationTimeUs
+                aInfo.flags = 0
+                return true
             }
-            muxer.stop(); muxer.release()
-            vExt.release(); aExt.release()
-            true
-        } catch (_: Exception) { false }
+            var hasV = readV()
+            var hasA = readA()
+            while (hasV || hasA) {
+                val writeVideo = when {
+                    hasV && hasA -> vTime <= aTime
+                    hasV -> true
+                    else -> false
+                }
+                if (writeVideo && hasV) {
+                    muxer!!.writeSampleData(vTrack, vBuf, vInfo)
+                    vExt!!.advance()
+                    hasV = readV()
+                } else if (hasA) {
+                    muxer!!.writeSampleData(aTrack, aBuf, aInfo)
+                    aExt!!.advance()
+                    hasA = readA()
+                } else break
+            }
+            muxer!!.stop()
+            val out = java.io.File(outPath)
+            out.exists() && out.length() > 1024
+        } catch (_: Exception) {
+            false
+        } finally {
+            try { muxer?.release() } catch (_: Exception) {}
+            try { vExt?.release() } catch (_: Exception) {}
+            try { aExt?.release() } catch (_: Exception) {}
+        }
     }
 
     private fun mediaKindOf(name: String, mime: String): String? {
