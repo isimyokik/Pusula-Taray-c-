@@ -236,6 +236,24 @@ class MainActivity : AppCompatActivity() {
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
+    /** WhatsApp sırasında volume=0'ı koru (başka script açmasın) */
+    private val duckHoldRunnable = object : Runnable {
+        override fun run() {
+            if (!pausedByAudioFocus) return
+            injectAllMedia(
+                "(function(){try{" +
+                "if(!window.__rotaFocusPaused)return;" +
+                "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+                "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0.05)?m.volume:1;m.dataset._afv=String(f);}" +
+                "if(m.volume>0.001)m.volume=0;" +
+                "}catch(x){}});" +
+                "}catch(e){}})();"
+            )
+            handler.postDelayed(this, 250L)
+        }
+    }
+
+
     /** Pause süresince bildirimi ayakta tut (idle stop olmasın) */
     private val focusNotifKeepAlive = object : Runnable {
         override fun run() {
@@ -341,14 +359,12 @@ class MainActivity : AppCompatActivity() {
                 externalPeakConfigs = maxOf(externalPeakConfigs, countMediaConfigs())
             }
         }, 400L)
-        // Sadece volume=0 — pause yok, mute yok, bildirim yok
+        // volume=0, pause/mute/bildirim yok — sonra 250ms'de bir 0 tut
         injectAllMedia(
             "(function(){try{" +
             "window.__rotaFocusPaused=true;" +
-            "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
-            "var list=[];" +
-            "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
-            "else list=Array.from(document.querySelectorAll('video,audio'));" +
+            "window.__rotaDuck=true;" +
+            "var list=Array.from(document.querySelectorAll('video,audio'));" +
             "list.forEach(function(m){try{" +
             "if(m.ended)return;" +
             "if(!m.dataset._afv){var f=(typeof m.volume==='number'&&m.volume>0.05)?m.volume:1;m.dataset._afv=String(f);}" +
@@ -357,11 +373,13 @@ class MainActivity : AppCompatActivity() {
             "}catch(e){}})();"
         )
         focusLevel = 0.0
+        handler.removeCallbacks(duckHoldRunnable)
+        handler.post(duckHoldRunnable)
         handler.removeCallbacks(extCheck)
         handler.postDelayed(extCheck, 500L)
     }
 
-    private fun evalExternalAudio() {
+private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
@@ -479,23 +497,22 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
         focusIgnoreExtUntil = now + 2_500L
         extQuietSince = 0L
         externalPeakConfigs = 0
+        handler.removeCallbacks(duckHoldRunnable)
         handler.removeCallbacks(focusNotifKeepAlive)
         cancelFocusFade()
         stopFocusResumeWatch()
-        // Volume 0 → eski seviye, yavaşça (~0.5 sn). pause/play yok.
         injectAllMedia(
             "(function(){try{" +
             "window.__rotaFocusPaused=false;" +
-            "var ytm=/music\\.youtube\\.com/i.test(location.hostname);" +
-            "var list=[];" +
-            "if(ytm){var m=document.querySelector('ytmusic-player-page video,ytmusic-player video,#song-video video,ytmusic-player-bar video')||document.querySelector('video');if(m)list=[m];}" +
-            "else list=Array.from(document.querySelectorAll('video,audio'));" +
+            "window.__rotaDuck=false;" +
+            "var list=Array.from(document.querySelectorAll('video,audio'));" +
             "list.forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "m.muted=false;" +
             "var from=(typeof m.volume==='number'?m.volume:0);" +
             "var steps=12,i=0;" +
             "var iv=setInterval(function(){try{" +
+            "if(window.__rotaDuck){clearInterval(iv);return;}" +
             "i++;m.volume=Math.min(to,from+(to-from)*(i/steps));" +
             "if(i>=steps){clearInterval(iv);m.volume=to;}" +
             "}catch(x){try{clearInterval(iv);}catch(y){}}},40);" +
@@ -509,7 +526,7 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
         }
     }
 
-    private fun abortFocusPause() {
+private fun abortFocusPause() {
         val was = pausedByAudioFocus || focusFadeRunnable != null || focusLevel < 0.999
         cancelFocusFade()
         stopFocusResumeWatch()
@@ -6197,6 +6214,110 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
                   """
 
         // YouTube Music: play/pause = gri şeffaf daire geri bildirimi; ekranın her yerinden esnek aşağı çek = küçült
+        const val YT_MUSIC_UX_JS =
+            "(function(){try{\n" +
+            "if((location.hostname||'').indexOf('music.youtube')<0)return;\n" +
+            "if(window.__rotaYtmTimer){try{clearInterval(window.__rotaYtmTimer);}catch(z){}}\n" +
+            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
+            "window.__rotaYtmCtl=null;\n" +
+            // Sadece mavi kare tap-highlight'ı kapat; orijinal ileri/geri/oynat ripple kalsın
+            "if(!document.getElementById('__rota_ytm_fb')){\n" +
+            "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
+            "st.textContent=\n" +
+            "'ytmusic-player-page,ytmusic-player-page *{-webkit-tap-highlight-color:transparent!important;}'+\n" +
+            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-page .play-pause-button{'+\n" +
+            "'-webkit-tap-highlight-color:transparent!important;outline:none!important;'+\n" +
+            "'}';\n" +
+            "(document.documentElement||document).appendChild(st);\n" +
+            "}\n" +
+            "function isFullPlayer(){\n" +
+            "try{\n" +
+            "var p=document.querySelector('ytmusic-player-page');\n" +
+            "if(!p)return false;\n" +
+            "var layout=document.querySelector('ytmusic-app-layout');\n" +
+            "if(layout){\n" +
+            "var st=layout.getAttribute('player-ui-state_')||'';\n" +
+            "if(st==='PLAYER_BAR_ONLY'||st==='MINIPLAYER')return false;\n" +
+            "}\n" +
+            "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
+            "var cs=getComputedStyle(p);\n" +
+            "if(cs.display==='none'||cs.visibility==='hidden')return false;\n" +
+            "return r.height>H*0.5&&r.top<H*0.25&&r.width>0;\n" +
+            "}catch(z){return false;}\n" +
+            "}\n" +
+            "function isOnSlider(e){\n" +
+            "try{\n" +
+            "var path=e.composedPath?e.composedPath():[e.target];\n" +
+            "for(var i=0;i<path.length;i++){\n" +
+            "var n=path[i];if(!n||!n.tagName)continue;\n" +
+            "var t=n.tagName.toLowerCase();\n" +
+            "if(t.indexOf('slider')>=0||t.indexOf('progress')>=0)return true;\n" +
+            "if((n.id||'')==='progress-bar'||(n.id||'')==='sliderBar')return true;\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "return false;\n" +
+            "}\n" +
+            "function pressMinimize(){\n" +
+            "if(!isFullPlayer())return;\n" +
+            "try{\n" +
+            "if(window.RotaTap){\n" +
+            "var w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);\n" +
+            "window.RotaTap.tap(36/w,48/h);\n" +
+            "setTimeout(function(){try{if(window.RotaTap&&window.RotaTap.reset)window.RotaTap.reset();}catch(q){}},280);\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "try{\n" +
+            "var pts=[[36,48],[48,56],[28,40],[56,64]];\n" +
+            "for(var i=0;i<pts.length;i++){\n" +
+            "var t=document.elementFromPoint(pts[i][0],pts[i][1]);\n" +
+            "if(!t)continue;\n" +
+            "var b=t.closest('button,[role=button],tp-yt-paper-icon-button,yt-icon-button')||t;\n" +
+            "try{b.click();}catch(z){}\n" +
+            "}\n" +
+            "}catch(z){}\n" +
+            "unbindGesture();\n" +
+            "}\n" +
+            "function unbindGesture(){\n" +
+            "if(window.__rotaYtmCtl){try{window.__rotaYtmCtl.abort();}catch(z){}}\n" +
+            "window.__rotaYtmCtl=null;\n" +
+            "}\n" +
+            "function bindGesture(){\n" +
+            "if(window.__rotaYtmCtl)return;\n" +
+            "window.__rotaYtmCtl=new AbortController();\n" +
+            "var sig=window.__rotaYtmCtl.signal;\n" +
+            "var sx=0,sy=0,active=false;\n" +
+            "document.addEventListener('touchstart',function(e){\n" +
+            "active=false;\n" +
+            "if(!e.touches||e.touches.length!==1)return;\n" +
+            "if(!isFullPlayer())return;\n" +
+            "if(isOnSlider(e))return;\n" +
+            "sx=e.touches[0].clientX;sy=e.touches[0].clientY;active=true;\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('touchmove',function(e){\n" +
+            "if(!active||!e.touches||!e.touches[0])return;\n" +
+            "var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;\n" +
+            "if(Math.abs(dx)>Math.abs(dy)*1.1)active=false;\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('touchend',function(e){\n" +
+            "if(!active)return;active=false;\n" +
+            "if(!isFullPlayer())return;\n" +
+            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
+            "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
+            "if(dy<40)return;\n" +
+            "if(Math.abs(dx)>dy*0.9)return;\n" +
+            "pressMinimize();\n" +
+            "},{passive:true,capture:true,signal:sig});\n" +
+            "document.addEventListener('touchcancel',function(){active=false;},{passive:true,capture:true,signal:sig});\n" +
+            "}\n" +
+            "window.__rotaYtmTimer=setInterval(function(){\n" +
+            "try{\n" +
+            "if(isFullPlayer())bindGesture();\n" +
+            "else unbindGesture();\n" +
+            "}catch(z){}\n" +
+            "},200);\n" +
+            "try{if(isFullPlayer())bindGesture();else unbindGesture();}catch(z){}\n" +
+            "}catch(e){}})();\n"
+
         const val KEEP_PLAYING_JS =
             "(function(){try{" +
                 "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
@@ -6586,7 +6707,7 @@ if(isYt){
 
         const val BACKGROUND_MEDIA_JS =
             "(function(){try{" +
-                "if(window.__userPause||window.__rotaFocusPaused)return;" +
+                "if(window.__userPause||window.__rotaFocusPaused||window.__rotaDuck)return;" +
                 "document.querySelectorAll('video,audio').forEach(function(m){" +
                 "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
                 "});" +
@@ -6720,64 +6841,7 @@ if(isYt){
         const val MEDIA_HOOK_JS =
             "(function(){try{var ms=navigator.mediaSession;if(!ms||!ms.setActionHandler)return;var o=ms.setActionHandler.bind(ms);window.__msh={};ms.setActionHandler=function(a,f){window.__msh[a]=f;return o(a,f);};}catch(e){}})();"
 
-                const val YT_MUSIC_UX_JS =
-            "(function(){try{\n" +
-            "if(location.hostname.indexOf('music.youtube.com')<0)return;\n" +
-            "if(window.__rotaYtmSwipe)return;window.__rotaYtmSwipe=1;\n" +
-            "try{\n" +
-            "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
-            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
-            "var _p=document.querySelector('ytmusic-player-page');\n" +
-            "if(_p){['transform','transition','opacity','border-radius','will-change','pointer-events','filter'].forEach(function(k){try{_p.style.removeProperty(k);}catch(z){}});}\n" +
-            "}catch(z){}\n" +
-            "function isOpen(){\n" +
-            "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
-            "if(!p)return false;\n" +
-            "var r=p.getBoundingClientRect(),H=window.innerHeight||1;\n" +
-            "return r.width>40&&r.height>H*0.45&&r.top<H*0.3&&r.bottom>H*0.55;\n" +
-            "}\n" +
-            "function isSeek(el){\n" +
-            "return !!(el&&el.closest&&el.closest('tp-yt-paper-slider,yt-slider,[role=slider],#progress-bar,.progress-bar,.progress-container'));\n" +
-            "}\n" +
-            "function minBtn(){\n" +
-            "var p=document.querySelector('ytmusic-player-page');\n" +
-            "if(!p)return null;\n" +
-            "var list=p.querySelectorAll('button,tp-yt-paper-icon-button,[role=button]');\n" +
-            "for(var i=0;i<list.length;i++){\n" +
-            "var el=list[i],r=el.getBoundingClientRect();\n" +
-            "if(r.width>=20&&r.height>=20&&r.top>=0&&r.top<110&&r.left>=0&&r.left<110)return el;\n" +
-            "}\n" +
-            "try{var t=document.elementFromPoint(36,40);if(t){var b=t.closest('button,tp-yt-paper-icon-button,[role=button]');if(b&&p.contains(b))return b;}}catch(z){}\n" +
-            "return null;\n" +
-            "}\n" +
-            "function pressMin(){\n" +
-            "if(!isOpen())return;\n" +
-            "var el=minBtn();if(!el)return;\n" +
-            "try{el.click();}catch(z){}\n" +
-            "}\n" +
-            "var sx=0,sy=0,on=0;\n" +
-            "document.addEventListener('touchstart',function(e){\n" +
-            "on=0;\n" +
-            "if(!e.touches||e.touches.length!==1)return;\n" +
-            "if(!isOpen())return;\n" +
-            "var t=e.touches[0],el=null;\n" +
-            "try{el=document.elementFromPoint(t.clientX,t.clientY);}catch(z){}\n" +
-            "if(isSeek(el))return;\n" +
-            "sx=t.clientX;sy=t.clientY;on=1;\n" +
-            "},{passive:true,capture:true});\n" +
-            "document.addEventListener('touchend',function(e){\n" +
-            "if(!on)return;on=0;\n" +
-            "if(!isOpen())return;\n" +
-            "var t=e.changedTouches&&e.changedTouches[0];if(!t)return;\n" +
-            "var dy=t.clientY-sy,dx=t.clientX-sx;\n" +
-            "if(dy<44||Math.abs(dx)>dy)return;\n" +
-            "pressMin();\n" +
-            "},{passive:true,capture:true});\n" +
-            "document.addEventListener('touchcancel',function(){on=0;},{passive:true,capture:true});\n" +
-            "}catch(e){}})();\n"
-
-
-        const val YT_MUSIC_CATALOG_JS =
+                        const val YT_MUSIC_CATALOG_JS =
         "(function(){try{" +
         "if(!/music\\.youtube\\.com/i.test(location.hostname||''))return JSON.stringify({playlists:[],songs:[],page:location.href});" +
         "var playlists=[],songs=[],seen={};" +
@@ -7040,7 +7104,7 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "}catch(e){return '';}})();"
         const val KEEP_MEDIA_PLAYING_JS =
             "(function(){try{" +
-            "if(window.__userPause||window.__rotaFocusPaused)return;" +
+            "if(window.__userPause||window.__rotaFocusPaused||window.__rotaDuck)return;" +
             "document.querySelectorAll('video,audio').forEach(function(m){" +
             "try{" +
             "if(m.ended)return;" +
