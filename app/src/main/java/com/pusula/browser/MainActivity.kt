@@ -2721,22 +2721,40 @@ fun onMusicCatalog(raw: String?) {
     private fun shouldBlockAd(uri: Uri): Boolean {
         val host = (uri.host ?: "").lowercase()
         val path = (uri.encodedPath ?: "").lowercase()
+        val q = (uri.encodedQuery ?: "").lowercase()
+        val full = uri.toString().lowercase()
         val blockedHosts = listOf(
             "doubleclick.net", "googlesyndication.com", "googleadservices.com",
             "adservice.google.com", "adnxs.com", "adsrvr.org", "adform.net",
             "adcolony.com", "taboola.com", "outbrain.com", "scorecardresearch.com",
-            "amazon-adsystem.com", "criteo.com", "hotjar.com", "pagead2.googlesyndication.com"
+            "amazon-adsystem.com", "criteo.com", "hotjar.com", "pagead2.googlesyndication.com",
+            "googleads.g.doubleclick.net", "static.doubleclick.net", "ad.youtube.com",
+            "s0.2mdn.net", "s1.2mdn.net", "partnerad.l.doubleclick.net"
         )
         if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true
+        // YouTube reklam uçları (video playback googlevideo'ya dokunma)
+        if (host.endsWith("youtube.com") || host.endsWith("youtu.be") || host.endsWith("youtube-nocookie.com")) {
+            if (path.contains("/pagead") || path.contains("/ptracking") ||
+                path.contains("/api/stats/ads") || path.contains("/pcs/") ||
+                path.contains("/ad_unit") || path.contains("/get_midroll") ||
+                path.contains("/youtubei/v1/player/ad") || path.contains("/youtubei/v1/browse/ad") ||
+                path.contains("/youtubei/v1/log_event") && full.contains("ad") ||
+                path.contains("/activelive") ||
+                q.contains("adformat=") || q.contains("adunit") ||
+                q.contains("client_side_ad") || q.contains("break_type")
+            ) return true
+        }
         return path.contains("/ads/") || path.contains("/adserver/") ||
             path.contains("/pagead/") || path.contains("/advertisement/") ||
-            path.contains("/api/stats/ads")
+            path.contains("/api/stats/ads") || path.contains("/pagead/adview") ||
+            path.contains("/pagead/conversion")
     }
 
     private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
             val uri = request?.url ?: return null
-            if (prefs.adBlock && request?.isForMainFrame != true && !tab.url.contains("youtube.com") && !tab.url.contains("youtu.be") && shouldBlockAd(uri)) {
+            // YouTube dahil tüm sekmelerde reklam isteklerini kes
+            if (prefs.adBlock && request?.isForMainFrame != true && shouldBlockAd(uri)) {
                 return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
             return loader.shouldInterceptRequest(uri)
@@ -2805,6 +2823,9 @@ fun onMusicCatalog(raw: String?) {
             // YouTube kendi koyu/açık temasıyla açılsın: çerez uygulama temasına uymuyorsa düzeltip bir kez yenile
             if (isYt(u)) {
                 if (syncYoutubeCookie()) { try { view?.reload() } catch (_: Exception) { } }
+                if (prefs.adBlock) {
+                    try { view?.evaluateJavascript(STABLE_AD_BLOCKER_JS, null) } catch (_: Exception) { }
+                }
             }
             // Videoların kaldığı yeri hatırla (gizli sekme ve YT Music hariç)
             if (u.startsWith("http") && !tab.incognito && !u.contains("music.youtube.com")) {
@@ -7087,6 +7108,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val STABLE_AD_BLOCKER_JS =
             "(function(){" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
+            "if(window.__rotaAdBlockV2)return;window.__rotaAdBlockV2=1;" +
             "var fast=false,gap=0,cover=null,obs=null,obsPl=null,tick=0,adSince=0;" +
             "var sels=['.ytp-ad-player-overlay','.ytp-ad-player-overlay-layout','.ytp-ad-player-overlay-instream-info','.ytp-ad-text','.ytp-ad-text-overlay','.ytp-ad-preview-container','.ytp-ad-preview-text','.ytp-ad-message-container','.ytp-ad-info-dialog-container','.ytp-ad-overlay-container','.ytp-ad-overlay-slot','.ytp-ad-image-overlay','.ytp-ad-progress','.ytp-ad-progress-list','.ytp-ad-feedback-dialog-container','.caption-window','.ytp-caption-window-container','.ytp-caption-segment','.ytp-ad-module','.video-ads','.ytp-ad-action-interstitial','ytd-ad-slot-renderer','ytd-banner-promo-renderer','ytd-player-legacy-desktop-watch-ads-renderer','.ytp-paid-content-overlay','.ytp-ad-simple-ad-badge','.ytp-ad-button-container'];" +
             "function hideAdUi(on){" +
@@ -7101,11 +7123,14 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}" +
             "function trySkip(pl){" +
             "try{" +
-            "var qs=['.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-skip-ad-button','.ytp-ad-skip-button-container button','.ytp-ad-skip-button-slot button','button.ytp-ad-skip-button-modern','[class*=\"ad-skip\"] button','[class*=\"skip-button\"]','button[aria-label*=\"Skip\"]','button[aria-label*=\"Atla\"]','button[aria-label*=\"skip\"]'];" +
+            "var qs=['.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-skip-ad-button','.ytp-ad-skip-button-container button','.ytp-ad-skip-button-slot button','button.ytp-ad-skip-button-modern','[class*=\"ad-skip\"] button','[class*=\"skip-button\"]','button[aria-label*=\"Skip\"]','button[aria-label*=\"Atla\"]','button[aria-label*=\"skip\"]','.ytp-ad-overlay-close-button','button.ytp-ad-overlay-close-button','.ytp-ad-overlay-close-container button'];" +
             "for(var i=0;i<qs.length;i++){" +
-            "var list=pl.querySelectorAll(qs[i]);" +
+            "var list=(pl||document).querySelectorAll(qs[i]);" +
             "for(var j=0;j<list.length;j++){try{list[j].click();}catch(z){}}" +
             "}" +
+            "document.querySelectorAll('button,.ytp-button').forEach(function(b){" +
+            "try{var t=((b.textContent||'')+' '+(b.getAttribute('aria-label')||'')).toLowerCase();" +
+            "if(/skip|atla|reklam[ıi] atla/.test(t))b.click();}catch(z){}});" +
             "}catch(e){}" +
             "}" +
             "function ensureCover(pl){" +
