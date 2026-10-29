@@ -301,26 +301,6 @@ class MainActivity : AppCompatActivity() {
         else -> true
     }
 
-
-    /** API 28+ getClientUid(); property yoksa method/field reflection. */
-    private fun playbackClientUid(c: android.media.AudioPlaybackConfiguration): Int {
-        if (Build.VERSION.SDK_INT < 28) return -1
-        try {
-            val m = android.media.AudioPlaybackConfiguration::class.java.getMethod("getClientUid")
-            return m.invoke(c) as Int
-        } catch (_: Exception) { }
-        try {
-            val m = c.javaClass.methods.firstOrNull { it.name == "getClientUid" && it.parameterTypes.isEmpty() }
-            if (m != null) return m.invoke(c) as Int
-        } catch (_: Exception) { }
-        try {
-            val f = c.javaClass.getDeclaredField("mClientUid")
-            f.isAccessible = true
-            return f.getInt(c)
-        } catch (_: Exception) { }
-        return -1
-    }
-
     private fun countMediaConfigs(): Int = activeUsages().count { u ->
         when (u) {
             AudioAttributes.USAGE_ALARM,
@@ -406,6 +386,7 @@ class MainActivity : AppCompatActivity() {
         injectAllMedia(AUDIO_DUCK_BEGIN_JS)
         runDuckFade(0.0, duckFadeOutMs) {
             injectAllMedia(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"))
+            try { mediaTarget()?.web?.evaluateJavascript(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"), null) } catch (_: Exception) { }
         }
         handler.removeCallbacks(extCheck)
         handler.postDelayed(extCheck, 600L)
@@ -439,7 +420,7 @@ private fun evalExternalAudio() {
             return
         }
         val ourPlaying = hasMedia && lastPlaying
-        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null || now - mediaChangedAt < 8000L) {
+        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null || now - mediaChangedAt < 5000L) {
             extBaseline = -1; extSeenSince = 0L
             return
         }
@@ -536,13 +517,12 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
         injectAllMedia(AUDIO_DUCK_PREP_RESUME_JS)
         runDuckFade(1.0, duckFadeInMs) {
             injectAllMedia(AUDIO_DUCK_END_JS)
-            // WhatsApp sonrası sekmeler "dış ses" sanılmasın: tabanı temizle, kısa süre yok say
-            duckBaseline = -1
-            extBaseline = -1
+            // Geçiş sırasında taban çizgisi sıfırlanıyordu; yeni dış ses (örn. ardışık sesli mesaj) bu sırada başladıysa
+            // taban olarak dış sesli sayıyı almamak için ses başlamadan önceki sayıya dön ve hemen kontrol et
+            extBaseline = if (duckBaseline >= 1) duckBaseline else countMediaConfigs().coerceAtLeast(1)
             extSeenSince = 0L
-            focusIgnoreExtUntil = android.os.SystemClock.elapsedRealtime() + 4_000L
             handler.removeCallbacks(extCheck)
-            handler.postDelayed(extCheck, 500L)
+            handler.postDelayed(extCheck, 100L)
         }
         if (reacquire) {
             hasAudioFocus = false
@@ -746,7 +726,6 @@ private fun pollMedia() {
             ?: idxs.firstOrNull { has(res[it]) }
         if (pick == null) { onMediaState(""); return }
         mediaSrc = cands[pick]
-        mediaChangedAt = android.os.SystemClock.elapsedRealtime()
         onMediaState(res[pick])
     }
 
@@ -810,9 +789,6 @@ private fun pollMedia() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         if (changed) mediaChangedAt = now
-        if (playing != lastPlaying || title != lastTitle) {
-            mediaChangedAt = android.os.SystemClock.elapsedRealtime()
-        }
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         if (playing || pausedByAudioFocus) acquireMediaLocks()
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
@@ -7063,13 +7039,6 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "}" +
             "window.__rotaDuck=true;" +
             "}catch(e){}})();"
-
-        // Duck bittiğinde ek garantili sıfır (özellikle YouTube Music) — pause yok
-        const val AUDIO_DUCK_HARD_ZERO_JS =
-            "(function(){try{var g=window.__rotaVolGuard;" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
-            "if(g)g.set.call(m,0);else m.volume=0;" +
-            "}catch(x){}});}catch(e){}})();"
 
         // Fade adımı: gerçek ses = kayıtlı seviye x __F__ (0..1)
         const val AUDIO_DUCK_VOL_JS =
