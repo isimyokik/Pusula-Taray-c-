@@ -3938,33 +3938,30 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                         }
                     }
                     val prog = progList.maxByOrNull { progScore(it.first, it.second) }?.second
-                    val aacOk = audio != null && run {
+val aacOk = audio != null && run {
                         val x = audio!!.lowercase()
                         "itag=140" in x || "itag=141" in x || "mp4a" in x ||
                             "mime=audio%2fmp4" in x || "mime=audio/mp4" in x ||
                             links.any { it.second == audio && it.first == "A:M4A" }
                     }
+                    // Varsayılan: sesli 720p progressive (hızlı, birleştirme yok)
+                    val prog720 = prog != null && progScore("", prog!!) >= 720
                     when {
-                        // yt-dlp/PipePipe: AVC video + AAC ses birleştir
-                        vBest != null && aacOk && (bestH ?: 0) >= 480 -> {
-                            toast("${bestH}p (AVC+AAC) birleştiriliyor…")
-                            downloadAndMerge(vBest!!, audio!!, "$base.mp4")
+                        prog720 -> {
+                            toast("İndiriliyor…")
+                            startDownload(prog!!, null, null, "video/mp4", "$base.mp4")
                         }
-                        // Sesli progressive 720 (tek dosya, birleştirme yok) — sessiz 1080'dan iyi
-                        prog != null && progScore("", prog) >= 720 -> {
-                            toast("720p MP4 indiriliyor")
+                        prog != null -> {
+                            toast("İndiriliyor…")
                             startDownload(prog, null, null, "video/mp4", "$base.mp4")
                         }
                         vBest != null && aacOk -> {
-                            toast("${bestH ?: 0}p birleştiriliyor…")
-                            downloadAndMerge(vBest!!, audio!!, "$base.mp4")
-                        }
-                        prog != null -> {
-                            toast("MP4 indiriliyor")
-                            startDownload(prog, null, null, "video/mp4", "$base.mp4")
+                            toast("İndiriliyor…")
+                            downloadAndMerge(vBest!!, audio!!, "$base.mp4", null)
                         }
                         audio != null -> startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
                         else -> toast("İndirme linki alınamadı")
+                    }
                     }
                 }
                 audio != null ->
@@ -4916,15 +4913,19 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         d.show()
     }
 
-    private fun downloadAndMerge(videoUrl: String, audioUrl: String, outName: String) {
-        toast("MP4 indiriliyor: $outName")
+    private fun downloadAndMerge(
+        videoUrl: String,
+        audioUrl: String,
+        outName: String,
+        progressiveFallback: String? = null
+    ) {
+        toast("Birleştirerek indiriliyor…")
         Thread {
             try {
                 val dir = cacheDir
                 val vFile = java.io.File(dir, "v_${System.currentTimeMillis()}.mp4")
                 val aFile = java.io.File(dir, "a_${System.currentTimeMillis()}.m4a")
-                val oFile = java.io.File(dir, outName)
-                // Video + ses paralel (PipePipe/yt-dlp gibi hız)
+                val oFile = java.io.File(dir, "m_${System.currentTimeMillis()}.mp4")
                 val vOk = java.util.concurrent.atomic.AtomicBoolean(false)
                 val aOk = java.util.concurrent.atomic.AtomicBoolean(false)
                 val latch = java.util.concurrent.CountDownLatch(2)
@@ -4937,23 +4938,40 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     latch.countDown()
                 }.start()
                 try { latch.await(4, java.util.concurrent.TimeUnit.MINUTES) } catch (_: Exception) { }
-                if (!vOk.get() || !aOk.get()) {
-                    handler.post { toast("İndirme başarısız") }
+                if (!vOk.get() || !aOk.get() || vFile.length() < 2048 || aFile.length() < 1024) {
+                    vFile.delete(); aFile.delete()
+                    handler.post {
+                        if (!progressiveFallback.isNullOrBlank()) {
+                            toast("Birleştirme iptal, sesli MP4 deneniyor")
+                            startDownload(progressiveFallback, null, null, "video/mp4", outName)
+                        } else toast("İndirme başarısız")
+                    }
                     return@Thread
                 }
                 val ok = muxAv(vFile.absolutePath, aFile.absolutePath, oFile.absolutePath)
                 vFile.delete(); aFile.delete()
-                if (!ok || !oFile.exists()) {
-                    // Birleştirme olmadı: en azından progressive dene; tek başına adaptive video sesiz kalır
+                var hasAud = false
+                if (ok && oFile.exists() && oFile.length() > 4096) {
+                    try {
+                        val ex = android.media.MediaExtractor()
+                        ex.setDataSource(oFile.absolutePath)
+                        for (ti in 0 until ex.trackCount) {
+                            val mime = ex.getTrackFormat(ti).getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                            if (mime.startsWith("audio/")) { hasAud = true; break }
+                        }
+                        ex.release()
+                    } catch (_: Exception) { hasAud = false }
+                }
+                if (!ok || !hasAud) {
+                    oFile.delete()
                     handler.post {
-                        toast("1080 birleştirilemedi, alternatif deneniyor")
-                        // Ses+video ayrı indirme yerine kullanıcıya düşük progressive yoksa video stream
-                        startDownload(videoUrl, null, null, "video/mp4", outName.replace(".mp4", "_video.mp4"))
-                        startDownload(audioUrl, null, null, "audio/mp4", outName.replace(".mp4", "_audio.m4a"))
+                        if (!progressiveFallback.isNullOrBlank()) {
+                            toast("Ses birleşmedi, sesli MP4 indiriliyor")
+                            startDownload(progressiveFallback, null, null, "video/mp4", outName)
+                        } else toast("Birleştirme başarısız (ses yok)")
                     }
                     return@Thread
                 }
-                // Public Downloads'a kopyala
                 val resolver = contentResolver
                 val values = android.content.ContentValues().apply {
                     put(android.provider.MediaStore.Downloads.DISPLAY_NAME, outName)
@@ -4966,7 +4984,10 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 val uri = if (Build.VERSION.SDK_INT >= 29) {
                     resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 } else {
-                    val dest = java.io.File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), outName)
+                    val dest = java.io.File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                        outName
+                    )
                     oFile.copyTo(dest, true)
                     android.net.Uri.fromFile(dest)
                 }
@@ -4986,7 +5007,9 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
             } catch (_: Exception) {
                 handler.post {
-                    startDownload(videoUrl, null, null, "video/mp4", outName)
+                    if (!progressiveFallback.isNullOrBlank()) {
+                        startDownload(progressiveFallback, null, null, "video/mp4", outName)
+                    } else toast("İndirme hatası")
                 }
             }
         }.start()
@@ -4994,37 +5017,56 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
 
     private fun httpToFile(url: String, dest: java.io.File): Boolean {
         return try {
-            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            conn.instanceFollowRedirects = true
-            conn.connectTimeout = 15000
-            conn.readTimeout = 180000
-            // googlevideo: mobil YT istemcisi daha stabil
-            conn.setRequestProperty(
-                "User-Agent",
-                "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip"
-            )
-            conn.setRequestProperty("Referer", "https://www.youtube.com/")
-            conn.setRequestProperty("Origin", "https://www.youtube.com")
-            val cookie = try {
-                CookieManager.getInstance().getCookie("https://www.youtube.com")
-                    ?: CookieManager.getInstance().getCookie(url)
-            } catch (_: Exception) { null }
-            if (!cookie.isNullOrEmpty()) conn.setRequestProperty("Cookie", cookie)
-            conn.inputStream.use { input ->
-                dest.outputStream().buffered(256 * 1024).use { output ->
-                    val buf = ByteArray(256 * 1024)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n <= 0) break
-                        output.write(buf, 0, n)
-                    }
-                    output.flush()
+            var current = url
+            var redirects = 0
+            while (redirects < 5) {
+                val conn = java.net.URL(current).openConnection() as java.net.HttpURLConnection
+                conn.instanceFollowRedirects = false
+                conn.connectTimeout = 15000
+                conn.readTimeout = 180000
+                conn.setRequestProperty(
+                    "User-Agent",
+                    "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip"
+                )
+                conn.setRequestProperty("Referer", "https://www.youtube.com/")
+                conn.setRequestProperty("Origin", "https://www.youtube.com")
+                conn.setRequestProperty("Accept-Encoding", "identity")
+                try {
+                    val cookie = CookieManager.getInstance().getCookie("https://www.youtube.com")
+                        ?: CookieManager.getInstance().getCookie(current)
+                    if (!cookie.isNullOrEmpty()) conn.setRequestProperty("Cookie", cookie)
+                } catch (_: Exception) { }
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    val loc = conn.getHeaderField("Location") ?: break
+                    current = if (loc.startsWith("http")) loc else java.net.URL(java.net.URL(current), loc).toString()
+                    conn.disconnect()
+                    redirects++
+                    continue
                 }
+                if (code !in 200..299) {
+                    conn.disconnect()
+                    return false
+                }
+                conn.inputStream.use { input ->
+                    dest.outputStream().buffered(512 * 1024).use { output ->
+                        val buf = ByteArray(256 * 1024)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            output.write(buf, 0, n)
+                        }
+                        output.flush()
+                    }
+                }
+                conn.disconnect()
+                return dest.length() > 2048
             }
-            dest.length() > 0
-        } catch (_: Exception) { false }
+            false
+        } catch (_: Exception) {
+            false
+        }
     }
-
 
     /**
      * PipePipe/NewPipe tarzı: yalnızca MP4 (AVC) + M4A (AAC) birleştirilir.
