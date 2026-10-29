@@ -176,6 +176,15 @@ class MainActivity : AppCompatActivity() {
     private val webAudioFocusEnabled = false
     private var focusLevel = 1.0
     private var focusFadeRunnable: Runnable? = null
+    // --- Dış ses gelince sesi yavaşça sıfıra indirip tutma / yavaşça geri açma (WebView, duraklatma yok) ---
+    /** Başka uygulamanın sesi başlayınca müzik bu sürede yavaşça sıfıra iner. */
+    private val duckFadeOutMs = 1000L
+    /** Ses bitince müzik bu sürede yavaşça eski seviyesine döner. */
+    private val duckFadeInMs = 1500L
+    private val duckFadeStepMs = 50L
+    private var duckFadeRunnable: Runnable? = null
+    /** Dış ses başlamadan önceki "sadece bizim ses" sayısı. Geri açılınca taban çizgisi buna döner. */
+    private var duckBaseline = -1
     private var focusPauseSince = 0L
     /** Bildirim/meta silinmesin (uzun) */
     private var focusNotifHoldUntil = 0L
@@ -326,6 +335,39 @@ class MainActivity : AppCompatActivity() {
         try { playbackCb?.let { audioManager.unregisterAudioPlaybackCallback(it) } } catch (_: Exception) { }
         playbackCb = null
         handler.removeCallbacks(extCheck)
+        cancelDuckFade()
+    }
+
+    private fun cancelDuckFade() {
+        duckFadeRunnable?.let { handler.removeCallbacks(it) }
+        duckFadeRunnable = null
+    }
+
+    /**
+     * Sesi focusLevel'dan [target]'a yumuşak eğriyle götürür. Adımlar native Handler'dan gelir:
+     * uygulama arka plandayken sayfa içi zamanlayıcılar yavaşlayıp geçişi bozduğu için JS'e bırakılmaz.
+     */
+    private fun runDuckFade(target: Double, durationMs: Long, onDone: () -> Unit) {
+        cancelDuckFade()
+        val startLevel = focusLevel
+        val t0 = android.os.SystemClock.uptimeMillis()
+        val r = object : Runnable {
+            override fun run() {
+                val t = ((android.os.SystemClock.uptimeMillis() - t0).toDouble() / durationMs.toDouble()).coerceIn(0.0, 1.0)
+                val e = 0.5 - 0.5 * Math.cos(Math.PI * t)
+                focusLevel = (startLevel + (target - startLevel) * e).coerceIn(0.0, 1.0)
+                injectAllMedia(AUDIO_DUCK_VOL_JS.replace("__F__", fmtLevel(focusLevel)))
+                if (t >= 1.0) {
+                    duckFadeRunnable = null
+                    focusLevel = target
+                    onDone()
+                } else {
+                    handler.postDelayed(this, duckFadeStepMs)
+                }
+            }
+        }
+        duckFadeRunnable = r
+        handler.post(r)
     }
 
     private fun beginExternalPause() {
@@ -337,19 +379,13 @@ class MainActivity : AppCompatActivity() {
         focusPermanentLoss = false
         extQuietSince = 0L
         externalPeakConfigs = countMediaConfigs().coerceAtLeast(1)
-        // Sadece volume=0. Bildirim/hasMedia/lastPlaying/pause/mute YOK.
-        injectAllMedia(
-            "(function(){try{" +
-            "window.__rotaDuck=true;" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
-            "if(m.ended)return;" +
-            "var f=(typeof m.volume==='number'&&m.volume>0.05)?m.volume:parseFloat(m.dataset._afv||'1');" +
-            "if(!(f>0))f=1;m.dataset._afv=String(f);" +
-            "m.volume=0;" +
-            "}catch(x){}});" +
-            "}catch(e){}})();"
-        )
-        focusLevel = 0.0
+        // Sadece ses seviyesi: yavaşça sıfıra iner ve sayfanın kendi volume yazmaları engellenir.
+        // Bildirim/hasMedia/lastPlaying/pause/mute YOK.
+        duckBaseline = extBaseline
+        injectAllMedia(AUDIO_DUCK_BEGIN_JS)
+        runDuckFade(0.0, duckFadeOutMs) {
+            injectAllMedia(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"))
+        }
         handler.removeCallbacks(extCheck)
         handler.postDelayed(extCheck, 600L)
     }
@@ -382,7 +418,7 @@ private fun evalExternalAudio() {
             return
         }
         val ourPlaying = hasMedia && lastPlaying
-        if (!ourPlaying || focusFadeRunnable != null || now - mediaChangedAt < 5000L) {
+        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null || now - mediaChangedAt < 5000L) {
             extBaseline = -1; extSeenSince = 0L
             return
         }
@@ -470,28 +506,22 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
     private fun resumeFromFocus(reacquire: Boolean) {
         if (!pausedByAudioFocus) return
         pausedByAudioFocus = false
-        focusIgnoreExtUntil = android.os.SystemClock.elapsedRealtime() + 3_000L
+        focusIgnoreExtUntil = android.os.SystemClock.elapsedRealtime() + 1_000L
         extQuietSince = 0L
         externalPeakConfigs = 0
         cancelFocusFade()
         stopFocusResumeWatch()
-        // Sadece volume geri — servis/bildirim/play'e dokunma
-        injectAllMedia(
-            "(function(){try{" +
-            "window.__rotaDuck=false;" +
-            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
-            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
-            "var from=(typeof m.volume==='number'?m.volume:0);" +
-            "var steps=15,i=0;" +
-            "var iv=setInterval(function(){try{" +
-            "if(window.__rotaDuck){clearInterval(iv);m.volume=0;return;}" +
-            "i++;m.volume=Math.min(to,from+(to-from)*(i/steps));" +
-            "if(i>=steps){clearInterval(iv);m.volume=to;}" +
-            "}catch(x){try{clearInterval(iv);}catch(y){}}},50);" +
-            "}catch(x){}});" +
-            "}catch(e){}})();"
-        )
-        focusLevel = 1.0
+        // Sadece volume geri (yavaşça) — servis/bildirim/play'e dokunma
+        injectAllMedia(AUDIO_DUCK_PREP_RESUME_JS)
+        runDuckFade(1.0, duckFadeInMs) {
+            injectAllMedia(AUDIO_DUCK_END_JS)
+            // Geçiş sırasında taban çizgisi sıfırlanıyordu; yeni dış ses (örn. ardışık sesli mesaj) bu sırada başladıysa
+            // taban olarak dış sesli sayıyı almamak için ses başlamadan önceki sayıya dön ve hemen kontrol et
+            extBaseline = if (duckBaseline >= 1) duckBaseline else countMediaConfigs().coerceAtLeast(1)
+            extSeenSince = 0L
+            handler.removeCallbacks(extCheck)
+            handler.postDelayed(extCheck, 100L)
+        }
         if (reacquire) {
             hasAudioFocus = false
             requestMediaAudioFocus()
@@ -499,8 +529,12 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
     }
 
 private fun abortFocusPause() {
-        val was = pausedByAudioFocus || focusFadeRunnable != null || focusLevel < 0.999
+        val was = pausedByAudioFocus || focusFadeRunnable != null || duckFadeRunnable != null || focusLevel < 0.999
         cancelFocusFade()
+        cancelDuckFade()
+        // Kullanıcı kendisi müdahale etti: şu an çalan dış sesi "normal" kabul et, hemen tekrar kısma
+        extBaseline = countMediaConfigs().coerceAtLeast(1)
+        extSeenSince = 0L
         stopFocusResumeWatch()
         pausedByAudioFocus = false
         focusResumePlayUntil = 0L
@@ -721,12 +755,6 @@ private fun pollMedia() {
         // Devam sonrası poll gecikmeli false dönebilir; bildirim çalıyor kalsın
         if (!pausedByAudioFocus && android.os.SystemClock.elapsedRealtime() < focusResumePlayUntil) {
             if (!playing) playing = true
-        }
-        // Odak duraklatması takıldıysa (GAIN gelmedi) ve kullanıcı videoyu kendisi başlattıysa:
-        // bayrakları temizle, susturulmuş sesi geri aç
-        if (has && playing && pausedByAudioFocus && focusFadeRunnable == null &&
-            android.os.SystemClock.elapsedRealtime() - focusPauseSince > 2500L) {
-            abortFocusPause()
         }
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
@@ -6965,6 +6993,7 @@ const val AUDIO_FOCUS_RESUME_START_JS =
 
 const val AUDIO_FOCUS_CLEAR_JS =
             "(function(){try{" +
+            "window.__rotaDuck=false;" +
             "window.__rotaFocusPaused=false;" +
             "window.__userPause=false;" +
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
@@ -6972,6 +7001,59 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "m.muted=false;m.volume=to;" +
             "}catch(x){}});" +
             "}catch(e){}})();"
+
+        // ---- Dış ses (WhatsApp vb.) sırasında sesi sıfırda tutma ----
+        // Sayfadaki HTMLMediaElement.volume yazmaları duck süresince yakalanır; YouTube / reklam / "takılı sesi düzelt"
+        // kodları sesi geri açamaz. Okuyanlar tam seviyeyi görür. Gerçek seviye sadece bizim fade adımlarıyla değişir.
+        const val AUDIO_DUCK_BEGIN_JS =
+            "(function(){try{" +
+            "if(!window.__rotaVolGuard){" +
+            "var P=HTMLMediaElement.prototype,d=Object.getOwnPropertyDescriptor(P,'volume');" +
+            "if(d&&d.get&&d.set){" +
+            "window.__rotaVolGuard={get:d.get,set:d.set};" +
+            "Object.defineProperty(P,'volume',{configurable:true,enumerable:d.enumerable," +
+            "get:function(){if(window.__rotaDuck&&typeof this.__rotaWant==='number')return this.__rotaWant;return d.get.call(this);}," +
+            "set:function(v){if(window.__rotaDuck){this.__rotaWant=Number(v);return;}d.set.call(this,v);}});" +
+            "}}" +
+            "var g=window.__rotaVolGuard;" +
+            "if(!window.__rotaDuck){" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "if(m.ended)return;" +
+            "var cur=g?g.get.call(m):m.volume;" +
+            "var f=(typeof cur==='number'&&cur>0.05)?cur:parseFloat(m.dataset._afv||'1');" +
+            "if(!(f>0))f=1;" +
+            "m.dataset._afv=String(f);" +
+            "m.__rotaWant=f;" +
+            "}catch(x){}});" +
+            "}" +
+            "window.__rotaDuck=true;" +
+            "}catch(e){}})();"
+
+        // Fade adımı: gerçek ses = kayıtlı seviye x __F__ (0..1)
+        const val AUDIO_DUCK_VOL_JS =
+            "(function(){try{var g=window.__rotaVolGuard;" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
+            "var v=Math.max(0,Math.min(1,to*__F__));" +
+            "if(g)g.set.call(m,v);else m.volume=v;" +
+            "}catch(x){}});}catch(e){}})();"
+
+        // Geri açmadan önce: duck sırasında kullanıcı sesi kendisi değiştirdiyse (>0.05) onu hedef al
+        const val AUDIO_DUCK_PREP_RESUME_JS =
+            "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var w=m.__rotaWant;" +
+            "if(typeof w==='number'&&w>0.05&&w<=1)m.dataset._afv=String(w);" +
+            "m.__rotaWant=parseFloat(m.dataset._afv||'1');" +
+            "}catch(x){}});}catch(e){}})();"
+
+        // Geri açma bitti: kilidi kaldır, tam seviyeyi yaz
+        const val AUDIO_DUCK_END_JS =
+            "(function(){try{var g=window.__rotaVolGuard;window.__rotaDuck=false;" +
+            "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+            "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
+            "try{delete m.__rotaWant;}catch(z){}" +
+            "if(g)g.set.call(m,to);else m.volume=to;" +
+            "}catch(x){}});}catch(e){}})();"
 
         const val AUDIO_FORCE_MUTE_JS =
             "(function(){try{" +
