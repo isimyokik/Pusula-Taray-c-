@@ -182,6 +182,8 @@ class MainActivity : AppCompatActivity() {
     private var focusPermanentLoss = false
     private var focusQuietCount = 0
     private var mediaDismissedUntil = 0L
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var lastTitle = ""
     private var lastArtist = ""
     private var lastArtUrl = ""
@@ -339,20 +341,22 @@ class MainActivity : AppCompatActivity() {
             val musicActive = try { audioManager.isMusicActive } catch (_: Exception) { true }
             val ct = tupleCounts()
             val extStill = pauseExtKeys.isNotEmpty() && pauseExtKeys.sumOf { ct[it] ?: 0 } > 0
-            val quiet = !musicActive && !extStill
+            // WhatsApp bitince config hemen düşer; isMusicActive bazen takılı kalır → süre yedeği
+            val quiet = (!musicActive && !extStill) ||
+                (!extStill && now - focusPauseSince > 2500L)
             if (quiet) {
                 if (extQuietSince == 0L) {
                     extQuietSince = now
-                    handler.postDelayed(extCheck, 350L)
-                } else if (now - extQuietSince >= 400L && now - focusPauseSince > 700L) {
+                    handler.postDelayed(extCheck, 300L)
+                } else if (now - extQuietSince >= 350L && now - focusPauseSince > 600L) {
                     extQuietSince = 0L
                     resumeFromFocus(false)
                 } else {
-                    handler.postDelayed(extCheck, 250L)
+                    handler.postDelayed(extCheck, 200L)
                 }
             } else {
                 extQuietSince = 0L
-                handler.postDelayed(extCheck, 400L)
+                handler.postDelayed(extCheck, 350L)
             }
             return
         }
@@ -596,7 +600,37 @@ class MainActivity : AppCompatActivity() {
 
     private var catalogPollTick = 0
 
-    private fun pollMedia() {
+    
+    private fun acquireMediaLocks() {
+        try {
+            if (wakeLock?.isHeld != true) {
+                val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "rota:media").also {
+                    it.setReferenceCounted(false)
+                    it.acquire(60 * 60 * 1000L) // 1 saat, medya bitince bırakılır
+                }
+            }
+        } catch (_: Exception) { }
+        try {
+            if (wifiLock?.isHeld != true) {
+                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+                @Suppress("DEPRECATION")
+                wifiLock = wm.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "rota:media").also {
+                    it.setReferenceCounted(false)
+                    it.acquire()
+                }
+            }
+        } catch (_: Exception) { }
+    }
+
+    private fun releaseMediaLocks() {
+        try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) { }
+        wakeLock = null
+        try { if (wifiLock?.isHeld == true) wifiLock?.release() } catch (_: Exception) { }
+        wifiLock = null
+    }
+
+private fun pollMedia() {
         // Tüm medya sekmeleri sorgulanır; çalan sekme kaynak seçilir (YouTube / YT Music çakışması olmasın)
         fun isMediaUrl(u: String): Boolean {
             val x = u.lowercase()
@@ -687,9 +721,20 @@ class MainActivity : AppCompatActivity() {
         }
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
         if (!has) {
-            if (pausedByAudioFocus) return
-            if (android.os.SystemClock.elapsedRealtime() < focusHoldUntil) return
-            if (hasMedia) { hasMedia = false; lastPlaying = false; PlaybackService.stop(this); abandonMediaAudioFocus() }
+            if (pausedByAudioFocus) {
+                // JS boş dönse bile bildirim/meta kalsın
+                try { PlaybackService.update(this, false, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
+                return
+            }
+            if (android.os.SystemClock.elapsedRealtime() < focusHoldUntil) {
+                try { PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, isInPictureInPictureMode, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
+                return
+            }
+            if (hasMedia) {
+                hasMedia = false; lastPlaying = false
+                PlaybackService.stop(this); abandonMediaAudioFocus()
+                releaseMediaLocks()
+            }
             return
         }
         val now = android.os.SystemClock.elapsedRealtime()
@@ -699,6 +744,7 @@ class MainActivity : AppCompatActivity() {
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         if (changed) mediaChangedAt = now
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
+        if (playing || pausedByAudioFocus) acquireMediaLocks()
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
         if (playing && !pausedByAudioFocus) {
             if (android.os.SystemClock.elapsedRealtime() < focusHoldUntil + 1) {
@@ -1031,14 +1077,25 @@ fun onMusicCatalog(raw: String?) {
     private val backgroundMediaPump = object : Runnable {
         override fun run() {
             if (!appInBackground || !prefs.bgPlay) return
-            // Focus kaybındayken arka plan "zorla oynat" yapmasın
+            try { shown?.onResume() } catch (_: Exception) { }
+            try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
             if (pausedByAudioFocus) {
-                handler.postDelayed(this, 1200L)
+                // Bildirim ayakta kalsın, idle stop tetiklenmesin
+                try { PlaybackService.update(this@MainActivity, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
+                handler.postDelayed(this, 2000L)
                 return
             }
-            val t = tabs.getOrNull(cur)
+            if (hasMedia) acquireMediaLocks()
+            val t = mediaTarget() ?: tabs.getOrNull(cur)
             try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
-            handler.postDelayed(this, 1200L)
+            // hafif ağ canlı tutucu (Doze/offline)
+            try {
+                t?.web?.evaluateJavascript(
+                    "(function(){try{fetch('https://www.google.com/generate_204',{mode:'no-cors',cache:'no-store'}).catch(function(){});}catch(e){}})();",
+                    null
+                )
+            } catch (_: Exception) { }
+            handler.postDelayed(this, 1500L)
         }
     }
 
@@ -1280,6 +1337,7 @@ fun onMusicCatalog(raw: String?) {
     }
 
     override fun onDestroy() {
+        try { releaseMediaLocks() } catch (_: Exception) { }
         try { unregisterExternalAudioWatch() } catch (_: Exception) { }
         try { abandonMediaAudioFocus() } catch (_: Exception) { }
         try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
