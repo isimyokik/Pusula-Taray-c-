@@ -275,10 +275,15 @@ class MainActivity : AppCompatActivity() {
     private fun tupleCounts(): Map<String, Int> {
         val m = HashMap<String, Int>()
         if (Build.VERSION.SDK_INT < 26) return m
+        val myUid = android.os.Process.myUid()
         try {
             for (c in audioManager.activePlaybackConfigurations) {
                 val a = c.audioAttributes
                 if (!usageCounts(a.usage)) continue
+                if (Build.VERSION.SDK_INT >= 28) {
+                    val uid = playbackClientUid(c)
+                    if (uid == myUid) continue
+                }
                 val k = a.usage.toString() + "/" + a.contentType
                 m[k] = (m[k] ?: 0) + 1
             }
@@ -301,20 +306,35 @@ class MainActivity : AppCompatActivity() {
         else -> true
     }
 
-    private fun countMediaConfigs(): Int = activeUsages().count { u ->
-        when (u) {
-            AudioAttributes.USAGE_ALARM,
-            AudioAttributes.USAGE_NOTIFICATION,
-            AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
-            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
-            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT,
-            AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
-            AudioAttributes.USAGE_NOTIFICATION_EVENT,
-            AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY,
-            AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE,
-            AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
-            AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING -> false
-            else -> true
+
+    /** API 28+: getClientUid. Sadece "bizim uygulama" kesin biliniyorsa sekmeyi dış ses sayma. */
+    private fun playbackClientUid(c: android.media.AudioPlaybackConfiguration): Int {
+        if (Build.VERSION.SDK_INT < 28) return -1
+        return try {
+            android.media.AudioPlaybackConfiguration::class.java
+                .getMethod("getClientUid")
+                .invoke(c) as Int
+        } catch (_: Exception) {
+            -1
+        }
+    }
+
+    private fun countMediaConfigs(): Int {
+        if (Build.VERSION.SDK_INT < 26) return 0
+        val myUid = android.os.Process.myUid()
+        return try {
+            audioManager.activePlaybackConfigurations.count { c ->
+                if (!usageCounts(c.audioAttributes.usage)) return@count false
+                // UID okunup bizimse → sekme sesi, dış sayma
+                // UID okunamadıysa → say (WhatsApp kaçmasın)
+                if (Build.VERSION.SDK_INT >= 28) {
+                    val uid = playbackClientUid(c)
+                    if (uid == myUid) return@count false
+                }
+                true
+            }
+        } catch (_: Exception) {
+            0
         }
     }
 
@@ -386,7 +406,6 @@ class MainActivity : AppCompatActivity() {
         injectAllMedia(AUDIO_DUCK_BEGIN_JS)
         runDuckFade(0.0, duckFadeOutMs) {
             injectAllMedia(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"))
-            try { mediaTarget()?.web?.evaluateJavascript(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"), null) } catch (_: Exception) { }
         }
         handler.removeCallbacks(extCheck)
         handler.postDelayed(extCheck, 600L)
