@@ -318,6 +318,51 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Sadece BAŞKA uygulamaların medya sayacı.
+     * Kendi WebView (YT + YTM iki sekme) "dış ses" sayılmaz → sekme geçince sessiz kalma olmaz.
+     */
+    private fun countExternalMediaConfigs(): Int {
+        if (Build.VERSION.SDK_INT < 26) return 0
+        val myUid = android.os.Process.myUid()
+        var n = 0
+        try {
+            for (c in audioManager.activePlaybackConfigurations) {
+                val u = c.audioAttributes.usage
+                if (!usageCounts(u)) continue
+                var clientUid = -1
+                try {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        clientUid = c.clientUid
+                    } else {
+                        val m = c.javaClass.methods.firstOrNull {
+                            it.name == "getClientUid" && it.parameterTypes.isEmpty()
+                        }
+                        if (m != null) clientUid = m.invoke(c) as Int
+                    }
+                } catch (_: Exception) { }
+                // UID okunabildi ve bizimse sayma
+                if (clientUid == myUid) continue
+                // UID okunamadıysa (eski API): yine de say — WhatsApp kaçmasın
+                // Ama iki sekmeli kendi medyada false positive olmaması için:
+                // UID yoksa sadece usage VOICE veya bizden farklı content ile... riskli.
+                // UID yoksa atla (in-app çift sekme korunur; WhatsApp çoğu cihazda UID verir)
+                if (clientUid < 0) {
+                    // API < 31 reflection başarısız: USAGE_VOICE_COMMUNICATION / unknown app medya
+                    // WhatsApp sesi genelde VOICE_COMMUNICATION veya MEDIA
+                    // Kendi WebView de MEDIA — ayırt edilemez. peak mantığı yerine:
+                    // clientUid < 0 iken say (eski davranış) ama only if not both from us...
+                    // Güvenli: UID yoksa SAY (WhatsApp çalışsın); çift sekme API31+ düzelir
+                    n++
+                    continue
+                }
+                n++
+            }
+        } catch (_: Exception) { }
+        return n
+    }
+
+
     private fun registerExternalAudioWatch() {
         if (Build.VERSION.SDK_INT < 26 || playbackCb != null) return
         try {
@@ -379,7 +424,7 @@ class MainActivity : AppCompatActivity() {
         focusPauseSince = android.os.SystemClock.elapsedRealtime()
         focusPermanentLoss = false
         extQuietSince = 0L
-        externalPeakConfigs = countMediaConfigs().coerceAtLeast(1)
+        externalPeakConfigs = countExternalMediaConfigs().coerceAtLeast(1)
         // Sadece ses seviyesi: yavaşça sıfıra iner ve sayfanın kendi volume yazmaları engellenir.
         // Bildirim/hasMedia/lastPlaying/pause/mute YOK.
         duckBaseline = extBaseline
@@ -393,49 +438,44 @@ class MainActivity : AppCompatActivity() {
 
 private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
-        val n = countMediaConfigs()
+        val nExt = countExternalMediaConfigs()
         if (pausedByAudioFocus) {
-            // Erken açılma = sızıntı. En az 2 sn bekle, config net düşünce aç.
-            if (now - focusPauseSince < 2000L) {
-                handler.postDelayed(extCheck, 500L)
-                return
-            }
-            val peak = externalPeakConfigs.coerceAtLeast(1)
-            if (n >= peak) {
-                extQuietSince = 0L
-                handler.postDelayed(extCheck, 500L)
-                return
-            }
-            // Config düştü
-            if (extQuietSince == 0L) {
-                extQuietSince = now
-                handler.postDelayed(extCheck, 600L)
-            } else if (now - extQuietSince >= 700L) {
-                extQuietSince = 0L
-                resumeFromFocus(false)
-            } else {
+            // Dış ses yoksa geri aç (kendi sekmelerimiz sayılmaz)
+            if (now - focusPauseSince < 800L) {
                 handler.postDelayed(extCheck, 400L)
+                return
+            }
+            if (nExt == 0) {
+                if (extQuietSince == 0L) {
+                    extQuietSince = now
+                    handler.postDelayed(extCheck, 400L)
+                } else if (now - extQuietSince >= 500L) {
+                    extQuietSince = 0L
+                    resumeFromFocus(false)
+                } else handler.postDelayed(extCheck, 300L)
+            } else {
+                extQuietSince = 0L
+                handler.postDelayed(extCheck, 450L)
             }
             return
         }
         val ourPlaying = hasMedia && lastPlaying
-        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null || now - mediaChangedAt < 5000L) {
-            extBaseline = -1; extSeenSince = 0L
+        if (!ourPlaying || focusFadeRunnable != null || duckFadeRunnable != null) {
+            extSeenSince = 0L
             return
         }
-        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) {
-            extBaseline = n
-            extBaseTuples = tupleCounts()
-        }
-        if (extBaseline >= 1 && n > extBaseline) {
+        // Başka uygulama sesi var mı?
+        if (nExt >= 1) {
             if (extSeenSince == 0L) {
                 extSeenSince = now
-                handler.postDelayed(extCheck, 250L)
-            } else if (now - extSeenSince >= 250L) {
+                handler.postDelayed(extCheck, 200L)
+            } else if (now - extSeenSince >= 200L) {
                 extSeenSince = 0L
                 beginExternalPause()
             }
-        } else extSeenSince = 0L
+        } else {
+            extSeenSince = 0L
+        }
     }
 
 private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
