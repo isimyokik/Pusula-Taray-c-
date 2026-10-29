@@ -422,8 +422,18 @@ class MainActivity : AppCompatActivity() {
         focusPermanentLoss = false
         extQuietSince = 0L
         externalPeakConfigs = countMediaConfigs().coerceAtLeast(1)
-        // Sadece ses seviyesi: yavaşça sıfıra iner ve sayfanın kendi volume yazmaları engellenir.
-        // Bildirim/hasMedia/lastPlaying/pause/mute YOK.
+        // Bildirim medyası ayakta kalsın (mikrofon / WhatsApp sesi sırasında kopmasın)
+        focusNotifHoldUntil = android.os.SystemClock.elapsedRealtime() + 10 * 60 * 1000L
+        try {
+            PlaybackService.update(
+                this, true,
+                lastTitle.ifBlank { "YouTube Music" }, lastArtist,
+                isInPictureInPictureMode, -1L, -2L, lastArtUrl
+            )
+        } catch (_: Exception) { }
+        handler.removeCallbacks(focusNotifKeepAlive)
+        handler.post(focusNotifKeepAlive)
+        // Sadece ses seviyesi: yavaşça sıfıra iner — pause/servis durdurma YOK
         duckBaseline = extBaseline
         injectAllMedia(AUDIO_DUCK_BEGIN_JS)
         runDuckFade(0.0, duckFadeOutMs) {
@@ -550,20 +560,36 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
         if (!pausedByAudioFocus) return
         pausedByAudioFocus = false
         focusIgnoreExtUntil = android.os.SystemClock.elapsedRealtime() + 1_000L
+        // Poll gecikse bile bildirim "çalıyor" kalsın
+        focusResumePlayUntil = android.os.SystemClock.elapsedRealtime() + 8_000L
+        focusNotifHoldUntil = android.os.SystemClock.elapsedRealtime() + 15_000L
         extQuietSince = 0L
         externalPeakConfigs = 0
         cancelFocusFade()
         stopFocusResumeWatch()
-        // Sadece volume geri (yavaşça) — servis/bildirim/play'e dokunma
+        handler.removeCallbacks(focusNotifKeepAlive)
+        try {
+            PlaybackService.update(
+                this, true,
+                lastTitle.ifBlank { "YouTube Music" }, lastArtist,
+                isInPictureInPictureMode, -1L, -2L, lastArtUrl
+            )
+        } catch (_: Exception) { }
+        // Sadece volume geri (yavaşça) — servis durdurulmaz
         injectAllMedia(AUDIO_DUCK_PREP_RESUME_JS)
         runDuckFade(1.0, duckFadeInMs) {
             injectAllMedia(AUDIO_DUCK_END_JS)
-            // Geçiş sırasında taban çizgisi sıfırlanıyordu; yeni dış ses (örn. ardışık sesli mesaj) bu sırada başladıysa
-            // taban olarak dış sesli sayıyı almamak için ses başlamadan önceki sayıya dön ve hemen kontrol et
             extBaseline = if (duckBaseline >= 1) duckBaseline else countMediaConfigs().coerceAtLeast(1)
             extSeenSince = 0L
             handler.removeCallbacks(extCheck)
             handler.postDelayed(extCheck, 100L)
+            try {
+                PlaybackService.update(
+                    this@MainActivity, true,
+                    lastTitle.ifBlank { "YouTube Music" }, lastArtist,
+                    isInPictureInPictureMode, -1L, -2L, lastArtUrl
+                )
+            } catch (_: Exception) { }
         }
         if (reacquire) {
             hasAudioFocus = false
@@ -579,6 +605,7 @@ private fun abortFocusPause() {
         extBaseline = countMediaConfigs().coerceAtLeast(1)
         extSeenSince = 0L
         stopFocusResumeWatch()
+        handler.removeCallbacks(focusNotifKeepAlive)
         pausedByAudioFocus = false
         focusResumePlayUntil = 0L
         focusIgnoreExtUntil = 0L
@@ -796,7 +823,8 @@ private fun pollMedia() {
         title = cleanMeta(title); artist = cleanMeta(artist)
         // Duck = volume 0, müzik çalmaya devam — poll "paused" dese de bildirim playing
         if (pausedByAudioFocus) playing = true
-        else if (focusFadeRunnable != null) playing = false
+        else if (duckFadeRunnable != null && focusLevel < 0.5) playing = true
+        else if (focusFadeRunnable != null) playing = lastPlaying
         // Devam sonrası poll gecikmeli false dönebilir; bildirim çalıyor kalsın
         if (!pausedByAudioFocus && android.os.SystemClock.elapsedRealtime() < focusResumePlayUntil) {
             if (!playing) playing = true
@@ -5565,6 +5593,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }
     }
 
+
     private fun showDownloads() {
         val items = ArrayList(prefs.downloads())
         val d = Dialog(this)
@@ -5574,28 +5603,52 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         val rootV = LinearLayout(this)
         rootV.orientation = LinearLayout.VERTICAL
         rootV.setBackgroundColor(cBg)
-        rootV.setPadding(dp(14), dp(34), dp(14), dp(14))
+        rootV.setPadding(dp(14), dp(28), dp(14), dp(14))
+
+        // Üst tutamak (tema sayfaları gibi)
+        val handle = View(this)
+        handle.background = shape(cField, 99)
+        rootV.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(14)
+        })
 
         val head = LinearLayout(this)
         head.orientation = LinearLayout.HORIZONTAL
         head.gravity = Gravity.CENTER_VERTICAL
+        head.setPadding(dp(6), 0, dp(6), dp(10))
         val tt = TextView(this)
         tt.text = "İndirilenler"
-        tt.textSize = 20f
+        tt.textSize = 24f
         tt.setTypeface(null, Typeface.BOLD)
         tt.setTextColor(cText)
         head.addView(tt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        fun pillBtn(label: String, fill: Int, textColor: Int, onClick: () -> Unit): TextView {
+            val b = TextView(this)
+            b.text = label
+            b.textSize = 13f
+            b.setTypeface(null, Typeface.BOLD)
+            b.setTextColor(textColor)
+            b.gravity = Gravity.CENTER
+            b.setPadding(dp(14), dp(8), dp(14), dp(8))
+            val g = GradientDrawable()
+            g.setColor(fill)
+            g.cornerRadius = dp(20).toFloat()
+            b.background = ripple(g)
+            b.setOnClickListener { onClick() }
+            return b
+        }
         if (items.isNotEmpty()) {
-            val clear = textBtn("Temizle") {
-                // Seçmeli silme: önce neyin silineceği seçilir, sonra listeden mi telefondan mı silineceği sorulur
-                showDownloadsSelect { d.dismiss(); showDownloads() }
-            }
-            clear.setTextColor(cAccent)
-            head.addView(clear)
+            head.addView(
+                pillBtn("Temizle", cField, cAccent) {
+                    showDownloadsSelect { d.dismiss(); showDownloads() }
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            )
         }
         rootV.addView(head)
 
-        // Aktif indirmeler (ilerleme)
         val activeBox = LinearLayout(this)
         activeBox.orientation = LinearLayout.VERTICAL
         rootV.addView(activeBox)
@@ -5605,85 +5658,94 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             val live = activeDls.filter { !it.done && !it.cancelled }
             if (live.isEmpty()) return
             val lab = TextView(this)
-            lab.text = "İndiriliyor"
+            lab.text = "Devam eden"
             lab.textSize = 13f
+            lab.setTypeface(null, Typeface.BOLD)
             lab.setTextColor(cSub)
-            lab.setPadding(0, dp(12), 0, dp(6))
+            lab.setPadding(dp(6), dp(8), dp(6), dp(8))
             activeBox.addView(lab)
             for (dl in live) {
                 val row = LinearLayout(this)
                 row.orientation = LinearLayout.VERTICAL
-                row.setPadding(dp(12), dp(10), dp(12), dp(10))
-                row.background = shape(cSurface, 14)
+                row.setPadding(dp(14), dp(12), dp(14), dp(12))
+                row.background = shape(cSurface, 16)
                 val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                lp.bottomMargin = dp(8)
+                lp.bottomMargin = dp(10)
                 val title = TextView(this)
                 title.text = dl.name
-                title.textSize = 14f
+                title.textSize = 15f
+                title.setTypeface(null, Typeface.BOLD)
                 title.setTextColor(cText)
                 title.maxLines = 2
                 row.addView(title)
                 val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
                 bar.isIndeterminate = !dl.paused && dl.total <= 0
+                try {
+                    bar.progressTintList = ColorStateList.valueOf(cAccent)
+                    bar.indeterminateTintList = ColorStateList.valueOf(cAccent)
+                } catch (_: Exception) { }
                 if (dl.total > 0) {
                     bar.max = 100
                     bar.progress = ((dl.received * 100) / dl.total).toInt().coerceIn(0, 100)
                 }
-                val blp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8))
-                blp.topMargin = dp(8)
-                row.addView(bar, blp)
+                row.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6)).apply {
+                    topMargin = dp(10)
+                })
                 val sub = TextView(this)
                 sub.textSize = 12f
                 sub.setTextColor(cSub)
                 sub.text = when {
-                    dl.paused && dl.total > 0 -> "Duraklatıldı · %${(dl.received * 100 / dl.total).toInt()} · ${dl.received / (1024 * 1024)} MB"
-                    dl.paused -> "Duraklatıldı · ${dl.received / (1024 * 1024)} MB"
+                    dl.paused && dl.total > 0 -> "Duraklatıldı · %${(dl.received * 100 / dl.total).toInt()}"
+                    dl.paused -> "Duraklatıldı"
                     dl.failed -> "Hata — devam deneyin"
                     dl.total > 0 -> "%${(dl.received * 100 / dl.total).toInt()} · ${dl.received / (1024 * 1024)} / ${dl.total / (1024 * 1024)} MB"
-                    dl.received > 0 -> "${dl.received / (1024 * 1024)} MB indirildi"
+                    dl.received > 0 -> "${dl.received / (1024 * 1024)} MB"
                     else -> "Bağlanıyor…"
                 }
-                val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                slp.topMargin = dp(4)
-                row.addView(sub, slp)
+                row.addView(sub, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = dp(6)
+                })
                 val actions = LinearLayout(this)
                 actions.orientation = LinearLayout.HORIZONTAL
                 actions.gravity = Gravity.END
-                val alp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                alp.topMargin = dp(8)
-                fun actBtn(label: String, color: Int, click: () -> Unit): TextView {
-                    val b = TextView(this)
-                    b.text = label
-                    b.textSize = 13f
-                    b.setTextColor(color)
-                    b.setPadding(dp(12), dp(6), dp(12), dp(6))
-                    b.setOnClickListener { click() }
-                    return b
-                }
                 if (dl.paused || dl.failed) {
-                    actions.addView(actBtn("Devam et", cAccent) {
-                        dl.failed = false
-                        dl.paused = false
-                        runActiveDownload(dl, null)
-                        paintActive()
-                    })
+                    actions.addView(
+                        pillBtn("Devam et", cAccent, Color.WHITE) {
+                            dl.failed = false
+                            dl.paused = false
+                            runActiveDownload(dl, null)
+                            paintActive()
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            marginEnd = dp(8)
+                        }
+                    )
                 } else {
-                    actions.addView(actBtn("Duraklat", cAccent) {
-                        dl.paused = true
-                        toast("Duraklatılıyor…")
-                        paintActive()
-                    })
+                    actions.addView(
+                        pillBtn("Duraklat", cField, cText) {
+                            dl.paused = true
+                            toast("Duraklatılıyor…")
+                            paintActive()
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            marginEnd = dp(8)
+                        }
+                    )
                 }
-                actions.addView(actBtn("İptal", 0xFFE53935.toInt()) {
-                    dl.cancelled = true
-                    dl.paused = false
-                    try { dl.tmpFile?.delete() } catch (_: Exception) {}
-                    activeDls.remove(dl)
-                    notifyDlProgress(dl)
-                    toast("İptal: ${dl.name}")
-                    refreshDownloadsDialogFull()
+                actions.addView(
+                    pillBtn("İptal", cField, cAccent) {
+                        dl.cancelled = true
+                        dl.paused = false
+                        try { dl.tmpFile?.delete() } catch (_: Exception) {}
+                        activeDls.remove(dl)
+                        notifyDlProgress(dl)
+                        toast("İptal: ${dl.name}")
+                        refreshDownloadsDialogFull()
+                    }
+                )
+                row.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = dp(10)
                 })
-                row.addView(actions, alp)
                 activeBox.addView(row, lp)
             }
         }
@@ -5697,71 +5759,101 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }
 
         if (items.isEmpty() && activeDls.none { !it.done && !it.failed }) {
+            val emptyBox = LinearLayout(this)
+            emptyBox.orientation = LinearLayout.VERTICAL
+            emptyBox.gravity = Gravity.CENTER
+            emptyBox.setPadding(dp(20), dp(48), dp(20), dp(20))
+            val emptyIcon = TextView(this)
+            emptyIcon.text = "📥"
+            emptyIcon.textSize = 36f
+            emptyIcon.gravity = Gravity.CENTER
+            emptyBox.addView(emptyIcon)
             val empty = TextView(this)
-            empty.text = "Henüz indirilen dosya yok.\nİndirdiğin dosyalar burada görünür."
-            empty.textSize = 15f
-            empty.setTextColor(cSub)
+            empty.text = "Henüz indirilen dosya yok"
+            empty.textSize = 16f
+            empty.setTypeface(null, Typeface.BOLD)
+            empty.setTextColor(cText)
             empty.gravity = Gravity.CENTER
-            empty.setPadding(0, dp(40), 0, 0)
-            rootV.addView(empty)
+            empty.setPadding(0, dp(12), 0, dp(6))
+            emptyBox.addView(empty)
+            val emptySub = TextView(this)
+            emptySub.text = "İndirdiğin dosyalar burada görünür"
+            emptySub.textSize = 14f
+            emptySub.setTextColor(cSub)
+            emptySub.gravity = Gravity.CENTER
+            emptyBox.addView(emptySub)
+            rootV.addView(emptyBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
             val scroll = ScrollView(this)
+            scroll.isFillViewport = true
             val listCol = LinearLayout(this)
             listCol.orientation = LinearLayout.VERTICAL
-            listCol.setPadding(0, dp(12), 0, dp(20))
+            listCol.setPadding(0, dp(8), 0, dp(12))
             for (e in items) {
                 val row = LinearLayout(this)
                 row.orientation = LinearLayout.HORIZONTAL
                 row.gravity = Gravity.CENTER_VERTICAL
                 row.setPadding(dp(12), dp(12), dp(12), dp(12))
-                row.background = shape(cSurface, 14)
+                row.background = ripple(shape(cSurface, 16))
+                val iconWrap = FrameLayout(this)
+                val iconBg = shape(cField, 12)
+                iconWrap.background = iconBg
                 val icon = TextView(this)
                 icon.text = when {
                     e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
-                    e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") -> "🎵"
+                    e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") || e.title.lowercase().endsWith(".m4a") -> "🎵"
                     e.mime.startsWith("image") -> "🖼️"
                     e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
                     else -> "📁"
                 }
-                icon.textSize = 22f
-                row.addView(icon, LinearLayout.LayoutParams(dp(36), dp(36)).apply { rightMargin = dp(10) })
-                val info = LinearLayout(this)
-                info.orientation = LinearLayout.VERTICAL
-                val nameTv = TextView(this)
-                nameTv.text = e.title
-                nameTv.textSize = 15f
-                nameTv.setTextColor(cText)
-                nameTv.maxLines = 1
-                nameTv.ellipsize = android.text.TextUtils.TruncateAt.END
-                val subTv = TextView(this)
-                subTv.text = try {
-                    java.text.SimpleDateFormat("dd MMM yyyy HH:mm", java.util.Locale("tr")).format(java.util.Date(e.time))
-                } catch (_: Exception) { "" }
-                subTv.textSize = 12f
-                subTv.setTextColor(cSub)
-                info.addView(nameTv)
-                info.addView(subTv)
-                row.addView(info, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                icon.textSize = 20f
+                icon.gravity = Gravity.CENTER
+                iconWrap.addView(icon, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                row.addView(iconWrap, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(12) })
+
+                val texts = LinearLayout(this)
+                texts.orientation = LinearLayout.VERTICAL
+                val name = TextView(this)
+                name.text = e.title
+                name.textSize = 15f
+                name.setTypeface(null, Typeface.BOLD)
+                name.setTextColor(cText)
+                name.maxLines = 2
+                texts.addView(name)
+                val meta = TextView(this)
+                meta.textSize = 12f
+                meta.setTextColor(cSub)
+                meta.maxLines = 1
+                meta.text = when {
+                    e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "Video"
+                    e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") || e.title.lowercase().endsWith(".m4a") -> "Ses"
+                    else -> e.mime.ifBlank { "Dosya" }
+                }
+                texts.addView(meta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = dp(2)
+                })
+                row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
                 row.setOnClickListener {
                     try {
                         val f = java.io.File(e.path)
                         if (f.exists()) {
                             val kind = mediaKindOf(e.title, e.mime)
-                                      if (kind != null) {
-                                          openMediaPlayer(f, e.title, kind == "audio")
-                                      } else if (isLocalViewable(e.title, e.mime)) {
-                                          openLocalDocument(f, e)
-                                      } else {
-                                          val uri = androidx.core.content.FileProvider.getUriForFile(this, "com.pusula.browser.files", f)
-                                          val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
-                                          open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                                          try {
-                                              startActivity(Intent.createChooser(open, "Aç"))
-                                          } catch (_: Exception) {
-                                              toast("Bu dosyayı açacak uygulama yok: " + e.title)
-                                          }
-                                      }
-                                  } else if (e.url.startsWith("http")) {
+                            if (kind != null) {
+                                openMediaPlayer(f, e.title, kind == "audio")
+                            } else if (isLocalViewable(e.title, e.mime)) {
+                                openLocalDocument(f, e)
+                            } else {
+                                val uri = androidx.core.content.FileProvider.getUriForFile(this, "com.pusula.browser.files", f)
+                                val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, e.mime.ifBlank { "*/*" })
+                                open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                try {
+                                    startActivity(Intent.createChooser(open, "Aç"))
+                                } catch (_: Exception) {
+                                    toast("Bu dosyayı açacak uygulama yok: " + e.title)
+                                }
+                            }
+                        } else if (e.url.startsWith("http")) {
                             openTab(e.url)
                             d.dismiss()
                         } else {
@@ -5778,18 +5870,20 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     }
                     true
                 }
-                val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                lp.bottomMargin = dp(8)
-                listCol.addView(row, lp)
+                listCol.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(8)
+                })
             }
             scroll.addView(listCol)
             rootV.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
 
-        val close = textBtn("Kapat") { d.dismiss() }
-        close.setTextColor(cSub)
-        close.gravity = Gravity.CENTER
-        rootV.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        rootV.addView(
+            pillBtn("Kapat", cField, cText) { d.dismiss() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
+                topMargin = dp(8)
+            }
+        )
 
         sheetWindow(d, rootV, true)
         d.show()
@@ -5901,13 +5995,23 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         head.gravity = Gravity.CENTER_VERTICAL
         val tt = TextView(this)
         tt.text = "Silinecekleri seç"
-        tt.textSize = 20f
+        tt.textSize = 24f
         tt.setTypeface(null, Typeface.BOLD)
         tt.setTextColor(cText)
         head.addView(tt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val cancel = textBtn("Vazgeç") { d.dismiss() }
+        val cancel = TextView(this)
+        cancel.text = "Vazgeç"
+        cancel.textSize = 13f
+        cancel.setTypeface(null, Typeface.BOLD)
         cancel.setTextColor(cSub)
-        head.addView(cancel, LinearLayout.LayoutParams(dp(84), dp(40)))
+        cancel.gravity = Gravity.CENTER
+        cancel.setPadding(dp(12), dp(8), dp(12), dp(8))
+        val cg = GradientDrawable()
+        cg.setColor(cField)
+        cg.cornerRadius = dp(20).toFloat()
+        cancel.background = ripple(cg)
+        cancel.setOnClickListener { d.dismiss() }
+        head.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         rootV.addView(head)
 
         val selectAll = textBtn("Tümünü seç / kaldır") { }
