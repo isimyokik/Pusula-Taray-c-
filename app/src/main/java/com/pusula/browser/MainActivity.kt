@@ -2759,10 +2759,7 @@ fun onMusicCatalog(raw: String?) {
             "adcolony.com", "taboola.com", "outbrain.com", "scorecardresearch.com",
             "amazon-adsystem.com", "criteo.com", "hotjar.com", "pagead2.googlesyndication.com",
             "googleads.g.doubleclick.net", "static.doubleclick.net", "ad.youtube.com",
-            "s0.2mdn.net", "s1.2mdn.net", "partnerad.l.doubleclick.net",
-            "googleads4.g.doubleclick.net", "adclick.g.doubleclick.net",
-            "securepubads.g.doubleclick.net", "pagead.l.doubleclick.net",
-            "www.googleadservices.com", "ade.googlesyndication.com"
+            "s0.2mdn.net", "s1.2mdn.net", "partnerad.l.doubleclick.net"
         )
         if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true
         // YouTube reklam uçları (video playback googlevideo'ya dokunma)
@@ -2788,35 +2785,11 @@ fun onMusicCatalog(raw: String?) {
             val uri = request?.url ?: return null
             // Reklam isteği: boş 204 — oynatıcı timeout (≈15sn) beklemesin
             if (prefs.adBlock && request?.isForMainFrame != true && shouldBlockAd(uri)) {
-                // 204 oynatıcıyı ~15sn bekletebiliyor; hemen boş 200 (premium)
-                val path = (uri.encodedPath ?: "").lowercase()
-                val isImg = path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".gif") ||
-                    path.endsWith(".webp") || path.endsWith(".ico") || path.contains("/pagead/adview")
-                return if (isImg) {
-                    val gif = byteArrayOf(
-                        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00,
-                        0x80.toByte(), 0x00, 0x00, 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
-                        0x00, 0x00, 0x00, 0x21, 0xf9.toByte(), 0x04, 0x01, 0x00, 0x00, 0x00, 0x00,
-                        0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02,
-                        0x44, 0x01, 0x00, 0x3b
-                    )
-                    WebResourceResponse(
-                        "image/gif", "utf-8", 200, "OK",
-                        mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "no-store"),
-                        ByteArrayInputStream(gif)
-                    )
-                } else {
-                    val empty = "{}".toByteArray(Charsets.UTF_8)
-                    WebResourceResponse(
-                        "application/json", "utf-8", 200, "OK",
-                        mapOf(
-                            "Access-Control-Allow-Origin" to "*",
-                            "Content-Type" to "application/json",
-                            "Cache-Control" to "no-store"
-                        ),
-                        ByteArrayInputStream(empty)
-                    )
-                }
+                return WebResourceResponse(
+                    "text/plain", "utf-8", 204, "No Content",
+                    mapOf("Access-Control-Allow-Origin" to "*"),
+                    ByteArrayInputStream(ByteArray(0))
+                )
             }
             return loader.shouldInterceptRequest(uri)
         }
@@ -7348,118 +7321,156 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(e){return '[]';}})();"
 
         const val STABLE_AD_BLOCKER_JS =
-            "(function(){" +
-            "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;" +
-            "if(window.__rotaAdStripV4)return;window.__rotaAdStripV4=1;" +
-            "function cleanPlayer(pr){" +
-            "if(!pr||typeof pr!=='object')return;" +
-            "try{" +
-            "pr.adPlacements=[];pr.playerAds=[];pr.adSlots=[];" +
-            "if(pr.adPlacementCueMap)pr.adPlacementCueMap={};" +
-            "if(pr.adBreakHeartbeatParams)delete pr.adBreakHeartbeatParams;" +
-            "if(pr.adBreaks)pr.adBreaks=[];" +
-            "if(pr.adModuleParams)delete pr.adModuleParams;" +
-            "if(pr.playerConfig){try{if(pr.playerConfig.daiConfig)delete pr.playerConfig.daiConfig;if(pr.playerConfig.adsConfig)delete pr.playerConfig.adsConfig;}catch(z){}}" +
-            "if(pr.auxiliaryUi){try{pr.auxiliaryUi.messageRenderers={};}catch(z){}}" +
-            "if(pr.messages)pr.messages=[];" +
-            "}catch(e){}" +
-            "}" +
-            "function cleanRoot(o){" +
-            "if(!o||typeof o!=='object')return o;" +
-            "try{" +
-            "if(o.adPlacements)o.adPlacements=[];" +
-            "if(o.playerAds)o.playerAds=[];" +
-            "if(o.adSlots)o.adSlots=[];" +
-            "if(o.playerResponse)cleanPlayer(o.playerResponse);" +
-            "if(o.response&&o.response.playerResponse)cleanPlayer(o.response.playerResponse);" +
-            "if(o.playerResponses&&Array.isArray(o.playerResponses))o.playerResponses.forEach(cleanPlayer);" +
-            "}catch(e){}" +
-            "return o;" +
-            "}" +
-            "function cleanText(s){" +
-            "if(typeof s!=='string')return s;" +
-            "if(s.indexOf('adPlacements')<0&&s.indexOf('playerAds')<0&&s.indexOf('adSlots')<0)return s;" +
-            "try{var j=JSON.parse(s);cleanRoot(j);if(j.playerResponse)cleanPlayer(j.playerResponse);return JSON.stringify(j);}catch(e){return s;}" +
-            "}" +
-            "function scrub(){" +
-            "try{" +
-            "if(window.ytInitialPlayerResponse)cleanPlayer(window.ytInitialPlayerResponse);" +
-            "if(window.ytplayer&&ytplayer.config&&ytplayer.config.args){" +
-            "var a=ytplayer.config.args;" +
-            "['raw_player_response','player_response','playerResponse'].forEach(function(k){" +
-            "if(!a[k])return;" +
-            "try{" +
-            "var r=typeof a[k]==='string'?JSON.parse(a[k]):a[k];" +
-            "cleanPlayer(r);cleanRoot(r);" +
-            "a[k]=typeof a[k]==='string'?JSON.stringify(r):r;" +
-            "}catch(x){}" +
-            "});" +
-            "}" +
-            "}catch(e){}" +
-            "}" +
-            "try{" +
-            "var _jp=JSON.parse;" +
-            "JSON.parse=function(text,rev){" +
-            "var o=_jp.call(JSON,text,rev);" +
-            "if(typeof text==='string'&&text.length>200&&(text.indexOf('adPlacements')>=0||text.indexOf('\"playerAds\"')>=0||text.indexOf('adSlots')>=0||(text.indexOf('streamingData')>=0&&text.indexOf('videoDetails')>=0))){" +
-            "try{cleanRoot(o);if(o.playerResponse)cleanPlayer(o.playerResponse);}catch(x){}" +
-            "}" +
-            "return o;" +
-            "};" +
-            "}catch(e){}" +
-            "try{" +
-            "var _fetch=window.fetch;" +
-            "window.fetch=function(input,init){" +
-            "var u='';try{u=typeof input==='string'?input:(input&&input.url)||'';}catch(x){}" +
-            "var p=_fetch.call(this,input,init);" +
-            "if(!/youtubei\\/v1\\/player/.test(u))return p;" +
-            "return p.then(function(res){" +
-            "return res.clone().text().then(function(txt){" +
-            "return new Response(cleanText(txt),{status:res.status,statusText:res.statusText,headers:res.headers});" +
-            "}).catch(function(){return res;});" +
-            "});" +
-            "};" +
-            "}catch(e){}" +
-            "try{" +
-            "var XO=XMLHttpRequest.prototype.open,XS=XMLHttpRequest.prototype.send;" +
-            "XMLHttpRequest.prototype.open=function(m,u){this.__ru=u||'';return XO.apply(this,arguments);};" +
-            "XMLHttpRequest.prototype.send=function(){" +
-            "var x=this,u=x.__ru||'';" +
-            "if(/youtubei\\/v1\\/player/.test(u)){" +
-            "x.addEventListener('readystatechange',function(){" +
-            "if(x.readyState===4&&(!x.responseType||x.responseType===''||x.responseType==='text')){" +
-            "try{" +
-            "var t=x.responseText;if(!t)return;" +
-            "if(t.indexOf('adPlacements')<0&&t.indexOf('playerAds')<0)return;" +
-            "var c=cleanText(t);" +
-            "try{Object.defineProperty(x,'responseText',{get:function(){return c;}});}catch(e){}" +
-            "try{Object.defineProperty(x,'response',{get:function(){return c;}});}catch(e){}" +
-            "}catch(e){}" +
-            "}" +
-            "});" +
-            "}" +
-            "return XS.apply(this,arguments);" +
-            "};" +
-            "}catch(e){}" +
-            "try{" +
-            "var st=document.createElement('style');st.id='__rotaNoAd';" +
-            "st.textContent='.ytp-ad-player-overlay,.ytp-ad-module,.video-ads,.ytp-ad-image-overlay,.ytp-ad-overlay-slot,.ytp-ad-message-container,.ytp-ad-text-overlay,.ytp-ad-progress,.ytp-ad-progress-list,.ytp-ad-message-text,.ytp-ad-feedback-dialog-container,.ytp-ad-action-interstitial{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}';" +
-            "document.documentElement.appendChild(st);" +
-            "}catch(e){}" +
-            "scrub();" +
-            "var n=0;var iv=setInterval(function(){scrub();if(++n>12)clearInterval(iv);},200);" +
-            "setInterval(function(){" +
-            "try{" +
-            "var pl=document.querySelector('.html5-video-player,#movie_player');" +
-            "if(!pl)return;" +
-            "if(!(pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting')))return;" +
-            "var sels=['.ytp-skip-ad-button','.ytp-ad-skip-button','.ytp-ad-skip-button-modern','.ytp-ad-skip-button-container button','[id^=skip-button]','.videoAdUiSkipButton'];" +
-            "for(var i=0;i<sels.length;i++){var b=document.querySelector(sels[i]);if(b){try{b.click();}catch(z){}}}" +
-            "try{var mp=document.getElementById('movie_player');if(mp&&typeof mp.skipAd==='function')mp.skipAd();}catch(z){}" +
-            "}catch(e){}" +
-            "},300);" +
-            "})();
-"
+            "(function(){\n" +
+            "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;\n" +
+            "if(window.__rotaAdStripV3)return;window.__rotaAdStripV3=1;\n" +
+            "function log(){try{console.log('[rota-yt] '+[].slice.call(arguments).join(' '));}catch(e){}}\n" +
+            "// Reklam alanlarını boşalt: oynatıcı reklam beklemeden içeriğe geçer\n" +
+            "function cleanPlayer(pr){\n" +
+            "if(!pr||typeof pr!=='object')return false;\n" +
+            "var hit=false;\n" +
+            "try{\n" +
+            "if('adPlacements' in pr){pr.adPlacements=[];hit=true;}\n" +
+            "if('playerAds' in pr){pr.playerAds=[];hit=true;}\n" +
+            "if('adSlots' in pr){pr.adSlots=[];hit=true;}\n" +
+            "if(pr.adPlacementCueMap){pr.adPlacementCueMap={};hit=true;}\n" +
+            "if(pr.adBreakHeartbeatParams){delete pr.adBreakHeartbeatParams;hit=true;}\n" +
+            "if(pr.playerConfig&&pr.playerConfig.daiConfig){delete pr.playerConfig.daiConfig;hit=true;}\n" +
+            "}catch(e){}\n" +
+            "return hit;\n" +
+            "}\n" +
+            "function cleanRoot(o){\n" +
+            "if(!o||typeof o!=='object')return o;\n" +
+            "try{\n" +
+            "cleanPlayer(o);\n" +
+            "if(o.playerResponse)cleanPlayer(o.playerResponse);\n" +
+            "if(o.response&&o.response.playerResponse)cleanPlayer(o.response.playerResponse);\n" +
+            "if(o.playerResponses&&Array.isArray(o.playerResponses))o.playerResponses.forEach(cleanPlayer);\n" +
+            "}catch(e){}\n" +
+            "return o;\n" +
+            "}\n" +
+            "function hasMarker(s){return s.indexOf('adPlacements')>=0||s.indexOf('playerAds')>=0||s.indexOf('adSlots')>=0;}\n" +
+            "function cleanText(s){\n" +
+            "if(typeof s!=='string'||!hasMarker(s))return s;\n" +
+            "try{var j=JSON.parse(s);cleanRoot(j);log('player yaniti temizlendi');return JSON.stringify(j);}catch(e){return s;}\n" +
+            "}\n" +
+            "// Sayfa ilk yüklenirken: değişken atanır atanmaz temizle (yarış yok)\n" +
+            "function trap(name){\n" +
+            "try{\n" +
+            "var d=Object.getOwnPropertyDescriptor(window,name);\n" +
+            "if(d&&(d.get||d.set))return;\n" +
+            "var cur=window[name];\n" +
+            "if(cur)cleanPlayer(cur);\n" +
+            "Object.defineProperty(window,name,{configurable:true,enumerable:true,\n" +
+            "get:function(){return cur;},\n" +
+            "set:function(v){try{if(cleanPlayer(v))log(name,'temizlendi');}catch(e){}cur=v;}});\n" +
+            "}catch(e){}\n" +
+            "}\n" +
+            "trap('ytInitialPlayerResponse');\n" +
+            "function scrub(){\n" +
+            "try{\n" +
+            "if(window.ytInitialPlayerResponse)cleanPlayer(window.ytInitialPlayerResponse);\n" +
+            "if(window.ytplayer&&ytplayer.config&&ytplayer.config.args){\n" +
+            "var a=ytplayer.config.args;\n" +
+            "['raw_player_response','player_response','playerResponse'].forEach(function(k){\n" +
+            "if(!a[k])return;\n" +
+            "try{\n" +
+            "var r=typeof a[k]==='string'?JSON.parse(a[k]):a[k];\n" +
+            "cleanRoot(r);\n" +
+            "a[k]=typeof a[k]==='string'?JSON.stringify(r):r;\n" +
+            "}catch(x){}\n" +
+            "});\n" +
+            "}\n" +
+            "}catch(e){}\n" +
+            "}\n" +
+            "// Şüpheli JSON.parse\n" +
+            "try{\n" +
+            "var _jp=JSON.parse;\n" +
+            "JSON.parse=function(text,rev){\n" +
+            "var o=_jp.call(JSON,text,rev);\n" +
+            "if(typeof text==='string'&&text.length>200&&(hasMarker(text)||text.indexOf('streamingData')>=0&&text.indexOf('videoDetails')>=0)){\n" +
+            "try{cleanRoot(o);}catch(x){}\n" +
+            "}\n" +
+            "return o;\n" +
+            "};\n" +
+            "}catch(e){}\n" +
+            "var RE=/youtubei\\/v1\\/(player|next)/;\n" +
+            "// fetch: player/next uçları; değişmediyse orijinal yanıtı aynen döndür\n" +
+            "try{\n" +
+            "var _fetch=window.fetch;\n" +
+            "window.fetch=function(input,init){\n" +
+            "var u='';try{u=typeof input==='string'?input:(input&&(input.url||input.href))||'';}catch(x){}\n" +
+            "var p=_fetch.apply(this,arguments);\n" +
+            "if(!RE.test(u))return p;\n" +
+            "return p.then(function(res){\n" +
+            "if(!res||!res.ok)return res;\n" +
+            "return res.clone().text().then(function(txt){\n" +
+            "var c=cleanText(txt);\n" +
+            "if(c===txt)return res;\n" +
+            "var nr=new Response(c,{status:res.status,statusText:res.statusText,headers:res.headers});\n" +
+            "try{Object.defineProperty(nr,'url',{value:res.url});}catch(e){}\n" +
+            "return nr;\n" +
+            "}).catch(function(){return res;});\n" +
+            "});\n" +
+            "};\n" +
+            "}catch(e){}\n" +
+            "// XHR\n" +
+            "try{\n" +
+            "var XO=XMLHttpRequest.prototype.open,XS=XMLHttpRequest.prototype.send;\n" +
+            "XMLHttpRequest.prototype.open=function(m,u){this.__ru=u||'';return XO.apply(this,arguments);};\n" +
+            "XMLHttpRequest.prototype.send=function(){\n" +
+            "var x=this,u=String(x.__ru||'');\n" +
+            "if(RE.test(u)){\n" +
+            "x.addEventListener('readystatechange',function(){\n" +
+            "if(x.readyState===4&&(!x.responseType||x.responseType==='text')){\n" +
+            "try{\n" +
+            "var t=x.responseText;if(!t||!hasMarker(t))return;\n" +
+            "var c=cleanText(t);\n" +
+            "try{Object.defineProperty(x,'responseText',{get:function(){return c;}});}catch(e){}\n" +
+            "try{Object.defineProperty(x,'response',{get:function(){return c;}});}catch(e){}\n" +
+            "}catch(e){}\n" +
+            "}\n" +
+            "});\n" +
+            "}\n" +
+            "return XS.apply(this,arguments);\n" +
+            "};\n" +
+            "}catch(e){}\n" +
+            "scrub();\n" +
+            "var n=0;var iv=setInterval(function(){scrub();if(++n>8)clearInterval(iv);},300);\n" +
+            "// Kaçak reklam: beklemeden atla (seek yok)\n" +
+            "setInterval(function(){\n" +
+            "try{\n" +
+            "var pl=document.querySelector('.html5-video-player');\n" +
+            "if(!pl||!pl.classList.contains('ad-showing'))return;\n" +
+            "var b=pl.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,[id^=skip-button]');\n" +
+            "if(b)b.click();\n" +
+            "}catch(e){}\n" +
+            "},400);\n" +
+            "// Kurtarıcı: video başlarken (reklam yokken) dönen simgede takılırsa dürt\n" +
+            "var st={id:'',since:0,k1:0,k2:0};\n" +
+            "setInterval(function(){\n" +
+            "try{\n" +
+            "if(location.pathname!=='/watch'){st.since=0;return;}\n" +
+            "var pl=document.getElementById('movie_player')||document.querySelector('.html5-video-player');\n" +
+            "if(!pl){st.since=0;return;}\n" +
+            "var cl=pl.classList,v=pl.querySelector('video');\n" +
+            "var ad=cl.contains('ad-showing')||cl.contains('ad-interrupting');\n" +
+            "if(ad||!v||!cl.contains('buffering-mode')||v.currentTime>1){st.since=0;return;}\n" +
+            "var id='';try{id=pl.getVideoData().video_id||'';}catch(e){}\n" +
+            "var now=Date.now();\n" +
+            "if(id!==st.id||!st.since){st={id:id,since:now,k1:0,k2:0};return;}\n" +
+            "var d=now-st.since;\n" +
+            "if(d>2500&&!st.k1){\n" +
+            "st.k1=1;log('takildi, dürtülüyor',id,d);\n" +
+            "try{if(pl.playVideo)pl.playVideo();}catch(e){}\n" +
+            "try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}\n" +
+            "}else if(d>5000&&!st.k2&&id){\n" +
+            "st.k2=1;log('hala takili, yeniden yükleniyor',id,d);\n" +
+            "try{if(pl.loadVideoById)pl.loadVideoById(id);}catch(e){}\n" +
+            "}\n" +
+            "}catch(e){}\n" +
+            "},500);\n" +
+            "})();\n"
 
 
         /** YouTube: kaldığın saniyeyi saklar, aynı videoya dönünce devam eder. */
@@ -8325,4 +8336,5 @@ class PosBridge(ctx: android.content.Context) {
     }
 
     fun clear() { sp.edit().clear().apply() }
-}
+}      "},500);\n" +
+            "})();\n"
