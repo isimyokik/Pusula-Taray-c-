@@ -138,6 +138,21 @@ class PlaybackService : Service() {
                 s.setSessionActivity(pi)
             }
         } catch (_: Exception) { }
+        try {
+            @Suppress("DEPRECATION")
+            s.setFlags(
+                MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
+                    MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
+            )
+        } catch (_: Exception) { }
+        try {
+            val mb = PendingIntent.getBroadcast(
+                this, 0,
+                Intent(Intent.ACTION_MEDIA_BUTTON).setPackage(packageName),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            s.setMediaButtonReceiver(mb)
+        } catch (_: Exception) { }
         s.isActive = true
         session = s
         sessionToken = s.sessionToken
@@ -248,7 +263,7 @@ class PlaybackService : Service() {
         // Auto / kilit ekranı için oturum servis yaşadığı sürece açık kalsın
                   s.isActive = true
                   idleHandler.removeCallbacks(idleStop)
-                  if (!playing) idleHandler.postDelayed(idleStop, 90000L)
+                  if (!playing) idleHandler.postDelayed(idleStop, 600000L) // 10 dk — focus pause bildirimini öldürme
                   s.setMetadata(mb.build())
         // SEEK_TO: Auto ve bildirimde kaydırma çubuğu (süre biliniyorsa)
         var actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
