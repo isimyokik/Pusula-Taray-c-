@@ -7371,9 +7371,18 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(e){}\n" +
             "return hit;\n" +
             "}\n" +
+            "function prune(o,d){\n" +
+            "if(!o||typeof o!=='object'||d>7)return;\n" +
+            "if(Array.isArray(o)){for(var i=0;i<o.length;i++)prune(o[i],d+1);return;}\n" +
+            "for(var k in o){\n" +
+            "if(k==='adPlacements'||k==='playerAds'||k==='adSlots'){if(o[k]&&o[k].length)adCnt+=o[k].length;o[k]=[];continue;}\n" +
+            "var v=o[k];if(v&&typeof v==='object')prune(v,d+1);\n" +
+            "}\n" +
+            "}\n" +
             "function cleanRoot(o){\n" +
             "if(!o||typeof o!=='object')return o;\n" +
             "try{\n" +
+            "if(Array.isArray(o)){o.forEach(cleanRoot);return o;}\n" +
             "cleanPlayer(o);\n" +
             "if(o.playerResponse)cleanPlayer(o.playerResponse);\n" +
             "if(o.response&&o.response.playerResponse)cleanPlayer(o.response.playerResponse);\n" +
@@ -7384,7 +7393,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "function hasMarker(s){return s.indexOf('adPlacements')>=0||s.indexOf('playerAds')>=0||s.indexOf('adSlots')>=0;}\n" +
             "function cleanText(s){\n" +
             "if(typeof s!=='string'||!hasMarker(s))return s;\n" +
-            "try{var j=JSON.parse(s);var b=adCnt;cleanRoot(j);mark('player yaniti: reklam '+(adCnt>b?(adCnt-b)+' adet SILINDI':'yok'));return JSON.stringify(j);}catch(e){return s;}\n" +
+            "try{var j=JSON.parse(s);var b=adCnt;cleanRoot(j);prune(j,0);mark('player yaniti: reklam '+(adCnt>b?(adCnt-b)+' adet SILINDI':'yok'));return JSON.stringify(j);}catch(e){return s;}\n" +
             "}\n" +
             "// Sayfa ilk yüklenirken: değişken atanır atanmaz temizle (yarış yok)\n" +
             "function trap(name){\n" +
@@ -7426,14 +7435,14 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "return o;\n" +
             "};\n" +
             "}catch(e){}\n" +
-            "var RE=/youtubei\\/v1\\/(player|next)/;\n" +
+            "var RE=/youtubei\\/v1\\/(player|next|get_watch)/;\n" +
             "// fetch: player/next uçları; değişmediyse orijinal yanıtı aynen döndür\n" +
             "try{\n" +
             "var _fetch=window.fetch;\n" +
             "window.fetch=function(input,init){\n" +
             "var u='';try{u=typeof input==='string'?input:(input&&(input.url||input.href))||'';}catch(x){}\n" +
             "var p=_fetch.apply(this,arguments);\n" +
-            "if(/youtubei\\/v1\\/next/.test(u))resetDbg('gezinme basladi');\n" +
+            "if(/youtubei\\/v1\\/(next|get_watch)/.test(u))resetDbg('gezinme basladi');\n" +
             "if(!RE.test(u))return p;\n" +
             "return p.then(function(res){\n" +
             "if(!res||!res.ok)return res;\n" +
