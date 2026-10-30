@@ -1197,10 +1197,12 @@ fun onMusicCatalog(raw: String?) {
     private fun setWebImportance(web: WebView, important: Boolean) {
         if (Build.VERSION.SDK_INT < 26) return
         try {
-            web.setRendererPriorityWhenInactive(
-                if (important) WebView.RENDERER_PRIORITY_BOUND
-                else WebView.RENDERER_PRIORITY_WAIVED
-            )
+            // Bazı compileSdk / WebView stub'larında doğrudan yok → reflection
+            val cls = WebView::class.java
+            val bound = cls.getField("RENDERER_PRIORITY_BOUND").getInt(null)
+            val waived = cls.getField("RENDERER_PRIORITY_WAIVED").getInt(null)
+            val m = cls.getMethod("setRendererPriorityWhenInactive", Int::class.javaPrimitiveType)
+            m.invoke(web, if (important) bound else waived)
         } catch (_: Exception) { }
     }
 
@@ -1216,6 +1218,10 @@ fun onMusicCatalog(raw: String?) {
     private fun hibernateTab(t: BTab) {
         if (t.hibernated || isProtectedTab(t)) return
         try {
+            // Önizlemeyi blank'ten önce al — sekme listesinde kalsın
+            if (t.preview == null) {
+                try { capturePreview(t) } catch (_: Exception) { }
+            }
             val b = Bundle()
             try { t.web.saveState(b) } catch (_: Exception) { }
             if (!b.isEmpty) t.pendingState = b
@@ -1226,8 +1232,7 @@ fun onMusicCatalog(raw: String?) {
             try { t.web.clearHistory() } catch (_: Exception) { }
             try { t.web.onPause() } catch (_: Exception) { }
             setWebImportance(t.web, false)
-            try { t.preview?.recycle() } catch (_: Exception) { }
-            t.preview = null
+            // preview silinmez
             t.hibernated = true
         } catch (_: Exception) { }
     }
@@ -1989,11 +1994,7 @@ fun onMusicCatalog(raw: String?) {
         try { if (Build.VERSION.SDK_INT >= 23) s.offscreenPreRaster = false } catch (_: Exception) { }
         try { if (Build.VERSION.SDK_INT >= 26) s.safeBrowsingEnabled = true } catch (_: Exception) { }
         // Boştaki sekme renderer'ı sistem tarafından düşürülebilsin (native benzeri bellek)
-        try {
-            if (Build.VERSION.SDK_INT >= 26) {
-                web.setRendererPriorityWhenInactive(WebView.RENDERER_PRIORITY_WAIVED)
-            }
-        } catch (_: Exception) { }
+        try { setWebImportance(web, false) } catch (_: Exception) { }
         try {
             val cm = android.webkit.CookieManager.getInstance()
             cm.setAcceptCookie(true)
@@ -7268,7 +7269,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
     private companion object {
         const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
         const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
-        const val MAX_TABS = 12
+        const val MAX_TABS = 50
 
 
         // YouTube sayfasından progressive + ses URL'lerini çıkar (cipher'sız olanlar)
