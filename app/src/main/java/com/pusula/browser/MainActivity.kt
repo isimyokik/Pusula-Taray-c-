@@ -789,12 +789,12 @@ private fun pollMedia() {
     }
 
     /** Sonuçlardan gerçek medya kaynağını seçer: önce bakılan sekme çalıyorsa o, sonra önceki kaynak, sonra çalan herhangi biri. */
-    private fun pickMediaSource(cands: List<BTab>, res: Array<String?>) {
+        private fun pickMediaSource(cands: List<BTab>, res: Array<String?>) {
         fun has(r: String?): Boolean = r != null && r != "null" && r != "\"\"" && r.length > 2
         fun playing(r: String?): Boolean {
             if (!has(r)) return false
             val s = r!!
-            return s.contains("\"p\":true") || s.contains(""p":true") || s.contains("p\":true")
+            return s.contains("\"p\":true")
         }
         val sticky = mediaSrc
         if (sticky != null) {
@@ -818,7 +818,7 @@ private fun pollMedia() {
         onMediaState(res[pick])
     }
 
-    private fun onMediaState(raw: String?) {
+private fun onMediaState(raw: String?) {
         var has = false
         var playing = false
         var title = ""
