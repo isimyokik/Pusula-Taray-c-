@@ -269,6 +269,7 @@ class MainActivity : AppCompatActivity() {
     private var extSeenSince = 0L
     private var extQuietSince = 0L
     private var mediaChangedAt = 0L
+    private var tabSwitchUntil = 0L
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
@@ -451,6 +452,7 @@ class MainActivity : AppCompatActivity() {
 
 private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
+        if (now < tabSwitchUntil) return
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
             // Erken açılma = sızıntı. En az 2 sn bekle, config net düşünce aç.
@@ -754,7 +756,7 @@ private fun pollMedia() {
         val cands = ArrayList<BTab>()
         miniTab?.let { cands.add(it) }
         tabs.getOrNull(cur)?.let { c0 -> if (cands.none { c -> c === c0 }) cands.add(c0) }
-        for (t in tabs) if (isMediaUrl(t.url) && cands.none { c -> c === t }) cands.add(t)
+        for (t in tabs) if (!t.hibernated && isMediaUrl(t.url) && cands.none { c -> c === t }) cands.add(t)
         if (cands.isEmpty()) return
         val results = arrayOfNulls<String>(cands.size)
         var left = cands.size
@@ -789,7 +791,20 @@ private fun pollMedia() {
     /** Sonuçlardan gerçek medya kaynağını seçer: önce bakılan sekme çalıyorsa o, sonra önceki kaynak, sonra çalan herhangi biri. */
     private fun pickMediaSource(cands: List<BTab>, res: Array<String?>) {
         fun has(r: String?): Boolean = r != null && r != "null" && r != "\"\"" && r.length > 2
-        fun playing(r: String?): Boolean = has(r) && r!!.contains("\\\"p\\\":true")
+        fun playing(r: String?): Boolean {
+            if (!has(r)) return false
+            val s = r!!
+            return s.contains("\"p\":true") || s.contains(""p":true") || s.contains("p\":true")
+        }
+        val sticky = mediaSrc
+        if (sticky != null) {
+            val si = cands.indexOfFirst { it === sticky }
+            if (si >= 0 && playing(res[si])) {
+                mediaSrc = sticky
+                onMediaState(res[si])
+                return
+            }
+        }
         val cur0 = tabs.getOrNull(cur)
         val idxs = cands.indices
         val pick: Int? =
@@ -1210,11 +1225,8 @@ fun onMusicCatalog(raw: String?) {
     private fun isProtectedTab(t: BTab): Boolean {
         if (tabs.getOrNull(cur) === t) return true
         if (miniTab === t) return true
-        // Sadece şu an çalan medya sekmesi canlı kalsın; diğer YT/YTM uyutulabilir
-        if (hasMedia || lastPlaying) {
-            if (mediaSrc === t) return true
-            if (mediaTarget() === t) return true
-        }
+        if (mediaSrc === t) return true
+        if ((hasMedia || lastPlaying) && mediaTarget() === t) return true
         return false
     }
 
@@ -2212,6 +2224,10 @@ fun onMusicCatalog(raw: String?) {
         // WebView hiyerarşide kalsın (GONE) — medya diğer sekmede susmasın
         cur = i
         val t = tabs[i]
+        val nowSw = android.os.SystemClock.elapsedRealtime()
+        tabSwitchUntil = nowSw + 5000L
+        focusIgnoreExtUntil = maxOf(focusIgnoreExtUntil, tabSwitchUntil)
+        mediaChangedAt = nowSw
         // Hedef sekmeyi uyandır (Firefox: discard edilmiş sekmeyi geri yükle)
         try { wakeTab(t) } catch (_: Exception) { }
         for (tab in tabs) {
