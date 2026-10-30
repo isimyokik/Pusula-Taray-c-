@@ -267,6 +267,7 @@ class MainActivity : AppCompatActivity() {
     private var extSeenSince = 0L
     private var extQuietSince = 0L
     private var mediaChangedAt = 0L
+    private var tabSwitchUntil = 0L
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
@@ -448,6 +449,7 @@ class MainActivity : AppCompatActivity() {
 
 private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
+        if (now < tabSwitchUntil) return
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
             // Erken açılma = sızıntı. En az 2 sn bekle, config net düşünce aç.
@@ -2140,6 +2142,10 @@ fun onMusicCatalog(raw: String?) {
         // WebView hiyerarşide kalsın (GONE) — medya diğer sekmede susmasın
         cur = i
         val t = tabs[i]
+        val nowSw = android.os.SystemClock.elapsedRealtime()
+        tabSwitchUntil = nowSw + 5000L
+        try { focusIgnoreExtUntil = maxOf(focusIgnoreExtUntil, tabSwitchUntil) } catch (_: Exception) { }
+        mediaChangedAt = nowSw
         try { wakeTab(t) } catch (_: Exception) { }
         for (tab in tabs) {
             val w = tab.web
@@ -7233,6 +7239,26 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(z){}\n" +
             "}\n" +
             "scrub();\n" +
+            "function killBlueRipple(){\n" +
+            "try{\n" +
+            "if(document.getElementById('__rota_no_blue'))return;\n" +
+            "var s=document.createElement('style');s.id='__rota_no_blue';\n" +
+            "s.textContent=\n" +
+            "'#play-pause-button paper-ripple,ytmusic-player-page paper-ripple,'+\n" +
+            "'ytmusic-player-page .play-pause-button paper-ripple,'+\n" +
+            "'tp-yt-paper-icon-button.play-pause-button paper-ripple,'+\n" +
+            "'ytmusic-player-bar #play-pause-button paper-ripple,'+\n" +
+            "'.middle-controls paper-ripple,.center-controls paper-ripple{display:none!important;opacity:0!important;}'+\n" +
+            "'#play-pause-button,.play-pause-button,ytmusic-player-page .play-pause-button,'+\n" +
+            "'tp-yt-paper-icon-button.play-pause-button{--paper-ripple-color:transparent!important;'+\n" +
+            "'--paper-ripple-opacity:0!important;outline:none!important;}'+\n" +
+            "'#play-pause-button:active,.play-pause-button:active,ytmusic-player-page .play-pause-button:active{'+\n" +
+            "'background:rgba(255,255,255,0.12)!important;border-radius:50%!important;}';\n" +
+            "document.documentElement.appendChild(s);\n" +
+            "}catch(z){}\n" +
+            "}\n" +
+            "killBlueRipple();\n" +
+            "setInterval(killBlueRipple,3000);\n" +
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
