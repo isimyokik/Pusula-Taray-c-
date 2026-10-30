@@ -442,6 +442,11 @@ class MainActivity : AppCompatActivity() {
         injectAllMedia(AUDIO_DUCK_BEGIN_JS)
         runDuckFade(0.0, duckFadeOutMs) {
             injectAllMedia(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"))
+            // WhatsApp / dış ses: YT Music sızıntısını kes (pause yok)
+            injectAllMedia(
+                "(function(){try{window.__rotaDuck=true;document.querySelectorAll('video,audio').forEach(function(m){try{" +
+                "m.volume=0;m.muted=true;}catch(x){}});}catch(e){}})();"
+            )
         }
         handler.removeCallbacks(extCheck)
         handler.postDelayed(extCheck, 600L)
@@ -7239,26 +7244,19 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(z){}\n" +
             "}\n" +
             "scrub();\n" +
-            "function killBlueRipple(){\n" +
-            "try{\n" +
-            "if(document.getElementById('__rota_no_blue'))return;\n" +
-            "var s=document.createElement('style');s.id='__rota_no_blue';\n" +
-            "s.textContent=\n" +
-            "'#play-pause-button paper-ripple,ytmusic-player-page paper-ripple,'+\n" +
-            "'ytmusic-player-page .play-pause-button paper-ripple,'+\n" +
-            "'tp-yt-paper-icon-button.play-pause-button paper-ripple,'+\n" +
-            "'ytmusic-player-bar #play-pause-button paper-ripple,'+\n" +
-            "'.middle-controls paper-ripple,.center-controls paper-ripple{display:none!important;opacity:0!important;}'+\n" +
-            "'#play-pause-button,.play-pause-button,ytmusic-player-page .play-pause-button,'+\n" +
-            "'tp-yt-paper-icon-button.play-pause-button{--paper-ripple-color:transparent!important;'+\n" +
-            "'--paper-ripple-opacity:0!important;outline:none!important;}'+\n" +
-            "'#play-pause-button:active,.play-pause-button:active,ytmusic-player-page .play-pause-button:active{'+\n" +
-            "'background:rgba(255,255,255,0.12)!important;border-radius:50%!important;}';\n" +
-            "document.documentElement.appendChild(s);\n" +
-            "}catch(z){}\n" +
+            // Sadece mavi kare WebView tap-highlight; orijinal gri ripple kalsın (v11)
+" +
+            "if(!document.getElementById('__rota_ytm_fb')){\n" +
+            "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
+            "st.textContent=\n" +
+            "'ytmusic-player-page,ytmusic-player-page *{-webkit-tap-highlight-color:transparent!important;}'+\n" +
+            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-page .play-pause-button,'+\n" +
+            "'ytmusic-player-bar #play-pause-button,tp-yt-paper-icon-button.play-pause-button{'+\n" +
+            "'-webkit-tap-highlight-color:transparent!important;outline:none!important;}'+\n" +
+            "'ytmusic-player-page button,.center-controls button,.middle-controls button{'+\n" +
+            "'-webkit-tap-highlight-color:transparent!important;}';\n" +
+            "document.documentElement.appendChild(st);\n" +
             "}\n" +
-            "killBlueRipple();\n" +
-            "setInterval(killBlueRipple,3000);\n" +
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
@@ -8187,6 +8185,10 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "var v=Math.max(0,Math.min(1,to*__F__));" +
             "if(g)g.set.call(m,v);else m.volume=v;" +
+            // YT Music volume=0 yetmez; muted zorunlu
+            "if(v<=0.001){m.muted=true;if(g)g.set.call(m,0);else m.volume=0;}" +
+            "else if(!window.__rotaDuck){m.muted=false;}" +
+            "else if(v>0.001){m.muted=false;}" +
             "}catch(x){}});}catch(e){}})();"
 
         // Geri açmadan önce: duck sırasında kullanıcı sesi kendisi değiştirdiyse (>0.05) onu hedef al
@@ -8203,6 +8205,7 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "try{delete m.__rotaWant;}catch(z){}" +
+            "m.muted=false;" +
             "if(g)g.set.call(m,to);else m.volume=to;" +
             "}catch(x){}});}catch(e){}})();"
 
