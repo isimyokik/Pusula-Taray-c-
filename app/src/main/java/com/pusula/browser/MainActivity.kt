@@ -7363,12 +7363,15 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}\n" +
             "document.addEventListener('click',grab,true);\n" +
             "document.addEventListener('touchend',grab,true);\n" +
+            "function el(tag,css,cls){var e=document.createElement(tag);if(css)e.style.cssText=css;if(cls)e.className=cls;return e;}\n" +
+            "// innerHTML kullanılmaz: YouTube sayfaları Trusted Types ile bunu engeller\n" +
             "function build(){\n" +
-            "var d=document.createElement('div');d.id='__rota_cover';\n" +
-            "d.style.cssText='position:fixed;z-index:2147483000;overflow:hidden;pointer-events:none;background:#000;opacity:0;transition:opacity .18s ease;display:none';\n" +
-            "d.innerHTML='<img class=\"pic\" style=\"position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;display:none\"><div style=\"position:absolute;left:0;top:0;right:0;bottom:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.25) 40%,rgba(0,0,0,.65))\"></div>'+\n" +
-            "'<div class=\"tx\" style=\"position:absolute;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.85);font:500 12px system-ui,sans-serif;letter-spacing:.3px\"></div>'+\n" +
-            "'<div style=\"position:absolute;left:0;bottom:0;height:3px;width:30%;background:#fff;opacity:.9;animation:__rbar 1.2s ease-in-out infinite\"></div>';\n" +
+            "var d=el('div','position:fixed;z-index:2147483000;overflow:hidden;pointer-events:none;background:#000;opacity:0;transition:opacity .18s ease;display:none');\n" +
+            "d.id='__rota_cover';\n" +
+            "d.appendChild(el('img','position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;display:none','pic'));\n" +
+            "d.appendChild(el('div','position:absolute;left:0;top:0;right:0;bottom:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.25) 40%,rgba(0,0,0,.65))'));\n" +
+            "d.appendChild(el('div','position:absolute;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.85);font:500 12px system-ui,sans-serif;letter-spacing:.3px','tx'));\n" +
+            "d.appendChild(el('div','position:absolute;left:0;bottom:0;height:3px;width:30%;background:#fff;opacity:.9;animation:__rbar 1.2s ease-in-out infinite'));\n" +
             "return d;\n" +
             "}\n" +
             "function findPlayer(){\n" +
