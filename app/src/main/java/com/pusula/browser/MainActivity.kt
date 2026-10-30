@@ -1209,8 +1209,12 @@ fun onMusicCatalog(raw: String?) {
     /** Arka planda sadece medya sekmesi canlı; diğer WebView'lar uyu (RAM/CPU). */
     private fun isProtectedTab(t: BTab): Boolean {
         if (tabs.getOrNull(cur) === t) return true
-        if (mediaTarget() === t) return true
         if (miniTab === t) return true
+        // Sadece şu an çalan medya sekmesi canlı kalsın; diğer YT/YTM uyutulabilir
+        if (hasMedia || lastPlaying) {
+            if (mediaSrc === t) return true
+            if (mediaTarget() === t) return true
+        }
         return false
     }
 
@@ -1259,6 +1263,19 @@ fun onMusicCatalog(raw: String?) {
             try { t.web.loadUrl(p) } catch (_: Exception) { }
         }
         try { syncScripts(t) } catch (_: Exception) { }
+        // Uyandıktan sonra sessiz kalmasın (duck/focus dışında)
+        if (!pausedByAudioFocus) {
+            try {
+                t.web.evaluateJavascript(
+                    "(function(){try{window.__rotaDuck=false;window.__userPause=false;" +
+                    "document.querySelectorAll('video,audio').forEach(function(m){try{" +
+                    "m.muted=false;var v=parseFloat(m.dataset._afv||'1');if(!(v>0))v=1;m.volume=v;" +
+                    "if(m.paused&&m.dataset.pusulaWasPlaying==='1'){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                    "}catch(x){}});}catch(e){}})();",
+                    null
+                )
+            } catch (_: Exception) { }
+        }
     }
 
     private fun hibernateIdleTabs() {
@@ -1268,10 +1285,9 @@ fun onMusicCatalog(raw: String?) {
     }
 
     private fun pauseNonMediaWebViews() {
-        val keep = try { mediaTarget()?.web } catch (_: Exception) { null }
         for (tb in tabs) {
             try {
-                if (keep != null && tb.web === keep) {
+                if (isProtectedTab(tb)) {
                     setWebImportance(tb.web, true)
                     tb.web.onResume()
                 } else {
@@ -1281,14 +1297,13 @@ fun onMusicCatalog(raw: String?) {
             } catch (_: Exception) { }
         }
         try {
-            val mw = miniTab?.web
-            if (mw != null) {
-                if (keep != null && mw === keep) {
-                    setWebImportance(mw, true)
-                    mw.onResume()
+            miniTab?.let { tb ->
+                if (isProtectedTab(tb)) {
+                    setWebImportance(tb.web, true)
+                    tb.web.onResume()
                 } else {
-                    setWebImportance(mw, false)
-                    mw.onPause()
+                    setWebImportance(tb.web, false)
+                    tb.web.onPause()
                 }
             }
         } catch (_: Exception) { }
@@ -2209,14 +2224,13 @@ fun onMusicCatalog(raw: String?) {
         shown = t.web
         for (tab in tabs) {
             try {
-                val important = (tab === t) || (mediaTarget()?.web === tab.web)
+                val important = isProtectedTab(tab) || (tab === t)
                 setWebImportance(tab.web, important)
                 if (important) {
                     tab.web.onResume()
                 } else {
                     tab.web.onPause()
-                    // Medya değilse belleği boşalt
-                    if (mediaTarget() !== tab) hibernateTab(tab)
+                    hibernateTab(tab)
                 }
             } catch (_: Exception) { }
         }
@@ -7280,12 +7294,18 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "function scrub(){\n" +
             "try{\n" +
             "document.documentElement.classList.remove('rota-peek','rota-peek2','rota-noanim');\n" +
-            "['__rota_peek','__rota_peek2','__rota_noanim'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "['__rota_peek','__rota_peek2','__rota_noanim','__pip','__adcover'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});\n" +
+            "document.querySelectorAll('[class*=rota-peek],[id^=__rota]').forEach(function(e){try{e.remove();}catch(z){}});\n" +
             "var p=document.querySelector('ytmusic-player-page');\n" +
-            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
+            "if(p){['transform','transition','border-radius','will-change','overflow','opacity','filter','backdrop-filter','-webkit-backdrop-filter','pointer-events','z-index','top','left','right','bottom','width','height'].forEach(function(k){try{p.style.removeProperty(k);}catch(z){}});}\n" +
+            // Siyah perde: takılı full-screen katmanlar
+            "document.querySelectorAll('ytmusic-player-page,ytmusic-app-layout,#layout,#content').forEach(function(el){\n" +
+            "try{el.style.removeProperty('opacity');el.style.removeProperty('filter');el.style.removeProperty('background');}catch(z){}\n" +
+            "});\n" +
             "}catch(z){}\n" +
             "}\n" +
             "scrub();\n" +
+            "setInterval(scrub,2000);\n" +
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
@@ -7332,6 +7352,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var el=findMinBtn();\n" +
             "if(!el)return;\n" +
             "try{el.click();}catch(z){}\n" +
+            "setTimeout(scrub,100);setTimeout(scrub,400);setTimeout(unlock,500);\n" +
             "try{\n" +
             "if(window.RotaTap){\n" +
             "var r=el.getBoundingClientRect();\n" +
