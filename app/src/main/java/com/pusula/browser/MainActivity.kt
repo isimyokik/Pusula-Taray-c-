@@ -101,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         var preview: Bitmap? = null
         var adScript: ScriptHandler? = null
         var adKey: String = ""
+        var coverScript: ScriptHandler? = null
         var keepScript: ScriptHandler? = null
         var hookScript: ScriptHandler? = null
         var capScript: ScriptHandler? = null
@@ -1985,7 +1986,7 @@ fun onMusicCatalog(raw: String?) {
 
     // YouTube reklam davranışı (ayarlardan açılıp kapanır): veri temizleme / ağ engeli / hızlı atlama
     private val ytPrefs by lazy { getSharedPreferences("rota_yt_mode", Context.MODE_PRIVATE) }
-    private fun ytClean() = ytPrefs.getBoolean("clean", true)
+    private fun ytClean() = ytPrefs.getBoolean("clean", false)
     private fun ytNetBlock() = ytPrefs.getBoolean("net", false)
     private fun ytSkip() = ytPrefs.getBoolean("skip", true)
     private fun ytScriptKey(): String = if (!ytClean() && !ytSkip()) "" else "c" + ytClean() + "s" + ytSkip()
@@ -1999,6 +2000,7 @@ fun onMusicCatalog(raw: String?) {
             if (t.openScript == null) t.openScript = WebViewCompat.addDocumentStartJavaScript(t.web, OPEN_APP_HIDE_JS, setOf("*"))
             if (t.capScript == null) t.capScript = WebViewCompat.addDocumentStartJavaScript(t.web, CAPTIONS_OFF_JS, setOf("*"))
             if (t.hookScript == null) t.hookScript = WebViewCompat.addDocumentStartJavaScript(t.web, MEDIA_HOOK_JS, setOf("*"))
+            if (t.coverScript == null) t.coverScript = WebViewCompat.addDocumentStartJavaScript(t.web, YT_COVER_JS, setOf("*"))
             val wantAd = if (prefs.adBlock) ytScriptKey() else ""
             if (wantAd != t.adKey) {
                 t.adScript?.remove(); t.adScript = null; t.adKey = wantAd
@@ -6934,10 +6936,10 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         add(switchRow("🛡️", "Reklam engelleyici", "YouTube reklamlarını atlar", prefs.adBlock) { v ->
             prefs.adBlock = v; settingsChanged()
         })
-        add(switchRow("🧹", "YouTube: reklam verisini sil", "Oynatıcıya giden reklam verisini temizler. Video geç açılıyorsa kapat", ytClean()) { v ->
+        add(switchRow("🧹", "YouTube: reklam verisini sil", "YouTube bunu fark edip videoyu 5-10 sn bekletiyor. Kapalı kalması önerilir", ytClean()) { v ->
             ytPrefs.edit().putBoolean("clean", v).apply(); settingsChanged()
         })
-        add(switchRow("🚫", "YouTube: reklam adreslerini engelle", "YouTube bunu fark edip videoyu bekletiyor olabilir. Geç açılıyorsa kapat", ytNetBlock()) { v ->
+        add(switchRow("🚫", "YouTube: reklam adreslerini engelle", "YouTube bunu fark edip videoyu 5-10 sn bekletiyor. Kapalı kalması önerilir", ytNetBlock()) { v ->
             ytPrefs.edit().putBoolean("net", v).apply(); settingsChanged()
         })
         add(switchRow("⏩", "YouTube: reklamı hızlı atla", "Reklam çıkarsa sessize alır, 16 kat hızlandırır, Atla'ya basar", ytSkip()) { v ->
@@ -7342,6 +7344,61 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "var out=collect(p);" +
             "return JSON.stringify(out.slice(0,60));" +
             "}catch(e){return '[]';}})();"
+
+        /** Video geçişinde dönen halka/siyah ekran yerine kapak + ince yükleme çubuğu gösterir. */
+        const val YT_COVER_JS =
+            "(function(){\n" +
+            "if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;\n" +
+            "if(window.__rotaCover)return;window.__rotaCover=1;\n" +
+            "// Video geçişinde: dönen halka / gri-siyah ekran yerine ince yükleme çubuğu + videonun kapağı\n" +
+            "try{\n" +
+            "var st=document.createElement('style');\n" +
+            "st.textContent='@keyframes __rbar{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}'+\n" +
+            "'#__rota_cover{position:absolute;left:0;top:0;right:0;bottom:0;z-index:2147483000;overflow:hidden;pointer-events:none;background:#000 center/cover no-repeat;opacity:0;transition:opacity .18s ease;display:none}'+\n" +
+            "'#__rota_cover .sh{position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.25) 40%,rgba(0,0,0,.65))}'+\n" +
+            "'#__rota_cover .bar{position:absolute;left:0;bottom:0;height:3px;width:30%;background:#fff;opacity:.9;animation:__rbar 1.2s ease-in-out infinite}'+\n" +
+            "'#__rota_cover .tx{position:absolute;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.85);font:500 12px system-ui,sans-serif;letter-spacing:.3px}';\n" +
+            "(document.head||document.documentElement).appendChild(st);\n" +
+            "}catch(e){}\n" +
+            "var cov=null,shown=false,lastId='',hideT=0;\n" +
+            "function build(){\n" +
+            "var d=document.createElement('div');d.id='__rota_cover';\n" +
+            "d.innerHTML='<div class=\"sh\"></div><div class=\"tx\"></div><div class=\"bar\"></div>';\n" +
+            "return d;\n" +
+            "}\n" +
+            "function vid(pl){\n" +
+            "var id='';try{id=pl.getVideoData().video_id||'';}catch(e){}\n" +
+            "if(!id){try{id=new URLSearchParams(location.search).get('v')||'';}catch(e){}}\n" +
+            "return id;\n" +
+            "}\n" +
+            "function show(pl,ad){\n" +
+            "if(!cov)cov=build();\n" +
+            "if(cov.parentNode!==pl)pl.appendChild(cov);\n" +
+            "var id=vid(pl);\n" +
+            "if(id&&id!==lastId){lastId=id;cov.style.backgroundImage='url(https://i.ytimg.com/vi/'+id+'/hqdefault.jpg)';}\n" +
+            "cov.querySelector('.tx').textContent=ad?'Reklam atlanıyor…':'';\n" +
+            "clearTimeout(hideT);\n" +
+            "if(!shown){shown=true;cov.style.display='block';requestAnimationFrame(function(){cov.style.opacity='1';});}\n" +
+            "}\n" +
+            "function hide(){\n" +
+            "if(!shown||!cov)return;\n" +
+            "shown=false;cov.style.opacity='0';\n" +
+            "clearTimeout(hideT);\n" +
+            "hideT=setTimeout(function(){if(!shown&&cov)cov.style.display='none';},220);\n" +
+            "}\n" +
+            "function tick(){\n" +
+            "try{\n" +
+            "var pl=document.querySelector('.html5-video-player');\n" +
+            "if(!pl||document.getElementById('__pip')){hide();return;}\n" +
+            "var cl=pl.classList;\n" +
+            "var ad=cl.contains('ad-showing')||cl.contains('ad-interrupting');\n" +
+            "var v=pl.querySelector('video');\n" +
+            "var loading=cl.contains('buffering-mode')&&(!v||v.currentTime<1);\n" +
+            "if(ad||loading)show(pl,ad);else hide();\n" +
+            "}catch(e){}\n" +
+            "}\n" +
+            "setInterval(tick,120);\n" +
+            "})();\n"
 
         const val YT_FAST_SKIP_JS =
             "(function(){\n" +
