@@ -7244,8 +7244,6 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(z){}\n" +
             "}\n" +
             "scrub();\n" +
-            // Sadece mavi kare WebView tap-highlight; orijinal gri ripple kalsın (v11)
-" +
             "if(!document.getElementById('__rota_ytm_fb')){\n" +
             "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
             "st.textContent=\n" +
@@ -8185,7 +8183,6 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "var v=Math.max(0,Math.min(1,to*__F__));" +
             "if(g)g.set.call(m,v);else m.volume=v;" +
-            // YT Music volume=0 yetmez; muted zorunlu
             "if(v<=0.001){m.muted=true;if(g)g.set.call(m,0);else m.volume=0;}" +
             "else if(!window.__rotaDuck){m.muted=false;}" +
             "else if(v>0.001){m.muted=false;}" +
