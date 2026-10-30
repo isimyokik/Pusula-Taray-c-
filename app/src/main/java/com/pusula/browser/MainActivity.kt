@@ -1216,7 +1216,8 @@ fun onMusicCatalog(raw: String?) {
             val cls = WebView::class.java
             val bound = cls.getField("RENDERER_PRIORITY_BOUND").getInt(null)
             val waived = cls.getField("RENDERER_PRIORITY_WAIVED").getInt(null)
-            val m = cls.getMethod("setRendererPriorityWhenInactive", Int::class.javaPrimitiveType)
+            val intCls = Class.forName("java.lang.Integer").getField("TYPE").get(null) as Class<*>
+            val m = cls.getMethod("setRendererPriorityWhenInactive", intCls)
             m.invoke(web, if (important) bound else waived)
         } catch (_: Exception) { }
     }
