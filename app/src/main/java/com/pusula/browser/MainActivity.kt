@@ -1989,9 +1989,10 @@ fun onMusicCatalog(raw: String?) {
     private fun ytClean() = ytPrefs.getBoolean("clean", false)
     private fun ytNetBlock() = ytPrefs.getBoolean("net", false)
     private fun ytSkip() = ytPrefs.getBoolean("skip", true)
-    private fun ytScriptKey(): String = if (!ytClean() && !ytSkip()) "" else "c" + ytClean() + "s" + ytSkip()
+    private fun ytSeek() = ytPrefs.getBoolean("seek", true)
+    private fun ytScriptKey(): String = if (!ytClean() && !ytSkip()) "" else "c" + ytClean() + "s" + ytSkip() + "k" + ytSeek()
     private fun ytScriptSource(): String =
-        (if (ytClean()) STABLE_AD_BLOCKER_JS else "") + "\n" + (if (ytSkip()) YT_FAST_SKIP_JS else "")
+        "window.__rotaSeek=" + ytSeek() + ";\n" + (if (ytClean()) STABLE_AD_BLOCKER_JS else "") + "\n" + (if (ytSkip()) YT_FAST_SKIP_JS else "")
     private fun onYoutubePage(u: String) = u.contains("youtube.com") || u.contains("youtu.be")
 
     private fun syncScripts(t: BTab) {
@@ -6945,6 +6946,9 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         add(switchRow("⏩", "YouTube: reklamı hızlı atla", "Reklam çıkarsa sessize alır, 16 kat hızlandırır, Atla'ya basar", ytSkip()) { v ->
             ytPrefs.edit().putBoolean("skip", v).apply(); settingsChanged()
         })
+        add(switchRow("⏭️", "YouTube: reklamı sona sar", "Hızlı atla açıkken reklam videosunu doğrudan sonuna sarar. Beklemeye yol açarsa kapat", ytSeek()) { v ->
+            ytPrefs.edit().putBoolean("seek", v).apply(); settingsChanged()
+        })
         add(switchRow("🎧", "Arka planda çalma", "Uygulamadan çıkınca müzik sürer", prefs.bgPlay) { v ->
             prefs.bgPlay = v; settingsChanged()
         })
@@ -7350,35 +7354,53 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "(function(){\n" +
             "if(location.hostname.indexOf('youtube.com')<0||location.hostname.indexOf('music.')===0)return;\n" +
             "if(window.__rotaCover)return;window.__rotaCover=1;\n" +
-            "// Video geçişinde: dönen halka / gri-siyah ekran yerine ince yükleme çubuğu + videonun kapağı\n" +
+            "// Video geçişinde dönen halka / gri-siyah ekran yerine kapak resmi + ince yükleme çubuğu.\n" +
+            "// Oynatıcının içine değil sayfa düzeyine konur: YouTube'un kendi katmanları üstüne çıkamaz.\n" +
+            "var styled=false;\n" +
+            "function ensureStyle(){\n" +
+            "if(styled||!(document.head||document.body))return;\n" +
             "try{\n" +
             "var st=document.createElement('style');\n" +
-            "st.textContent='@keyframes __rbar{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}'+\n" +
-            "'#__rota_cover{position:absolute;left:0;top:0;right:0;bottom:0;z-index:2147483000;overflow:hidden;pointer-events:none;background:#000 center/cover no-repeat;opacity:0;transition:opacity .18s ease;display:none}'+\n" +
-            "'#__rota_cover .sh{position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.25) 40%,rgba(0,0,0,.65))}'+\n" +
-            "'#__rota_cover .bar{position:absolute;left:0;bottom:0;height:3px;width:30%;background:#fff;opacity:.9;animation:__rbar 1.2s ease-in-out infinite}'+\n" +
-            "'#__rota_cover .tx{position:absolute;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.85);font:500 12px system-ui,sans-serif;letter-spacing:.3px}';\n" +
-            "(document.head||document.documentElement).appendChild(st);\n" +
+            "st.textContent='@keyframes __rbar{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}';\n" +
+            "(document.head||document.body).appendChild(st);styled=true;\n" +
             "}catch(e){}\n" +
+            "}\n" +
             "var cov=null,shown=false,lastId='',hideT=0;\n" +
             "function build(){\n" +
             "var d=document.createElement('div');d.id='__rota_cover';\n" +
-            "d.innerHTML='<div class=\"sh\"></div><div class=\"tx\"></div><div class=\"bar\"></div>';\n" +
+            "d.style.cssText='position:fixed;z-index:2147483000;overflow:hidden;pointer-events:none;background:#000 center/cover no-repeat;opacity:0;transition:opacity .18s ease;display:none';\n" +
+            "d.innerHTML='<div style=\"position:absolute;left:0;top:0;right:0;bottom:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.25) 40%,rgba(0,0,0,.65))\"></div>'+\n" +
+            "'<div class=\"tx\" style=\"position:absolute;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.85);font:500 12px system-ui,sans-serif;letter-spacing:.3px\"></div>'+\n" +
+            "'<div style=\"position:absolute;left:0;bottom:0;height:3px;width:30%;background:#fff;opacity:.9;animation:__rbar 1.2s ease-in-out infinite\"></div>';\n" +
             "return d;\n" +
+            "}\n" +
+            "function findPlayer(){\n" +
+            "var sels=['#movie_player','.html5-video-player','ytm-player','#player-container-id','#player'];\n" +
+            "for(var i=0;i<sels.length;i++){\n" +
+            "var e=document.querySelector(sels[i]);\n" +
+            "if(e){var r=e.getBoundingClientRect();if(r.width>50&&r.height>50)return e;}\n" +
+            "}\n" +
+            "return null;\n" +
             "}\n" +
             "function vid(pl){\n" +
             "var id='';try{id=pl.getVideoData().video_id||'';}catch(e){}\n" +
             "if(!id){try{id=new URLSearchParams(location.search).get('v')||'';}catch(e){}}\n" +
             "return id;\n" +
             "}\n" +
+            "function place(pl){\n" +
+            "var r=pl.getBoundingClientRect();\n" +
+            "cov.style.left=r.left+'px';cov.style.top=r.top+'px';cov.style.width=r.width+'px';cov.style.height=r.height+'px';\n" +
+            "}\n" +
             "function show(pl,ad){\n" +
+            "ensureStyle();\n" +
             "if(!cov)cov=build();\n" +
-            "if(cov.parentNode!==pl)pl.appendChild(cov);\n" +
+            "if(!cov.parentNode)(document.body||document.documentElement).appendChild(cov);\n" +
+            "place(pl);\n" +
             "var id=vid(pl);\n" +
             "if(id&&id!==lastId){lastId=id;cov.style.backgroundImage='url(https://i.ytimg.com/vi/'+id+'/hqdefault.jpg)';}\n" +
             "cov.querySelector('.tx').textContent=ad?'Reklam atlanıyor…':'';\n" +
             "clearTimeout(hideT);\n" +
-            "if(!shown){shown=true;cov.style.display='block';requestAnimationFrame(function(){cov.style.opacity='1';});}\n" +
+            "if(!shown){shown=true;cov.style.display='block';requestAnimationFrame(function(){if(shown)cov.style.opacity='1';});}\n" +
             "}\n" +
             "function hide(){\n" +
             "if(!shown||!cov)return;\n" +
@@ -7386,18 +7408,22 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "clearTimeout(hideT);\n" +
             "hideT=setTimeout(function(){if(!shown&&cov)cov.style.display='none';},220);\n" +
             "}\n" +
+            "function spinning(pl){\n" +
+            "try{var s=pl.querySelector('.ytp-spinner');if(!s)return false;var r=s.getBoundingClientRect();var cs=getComputedStyle(s);return r.width>0&&cs.display!=='none'&&cs.visibility!=='hidden';}catch(e){return false;}\n" +
+            "}\n" +
             "function tick(){\n" +
             "try{\n" +
-            "var pl=document.querySelector('.html5-video-player');\n" +
+            "var pl=findPlayer();\n" +
             "if(!pl||document.getElementById('__pip')){hide();return;}\n" +
             "var cl=pl.classList;\n" +
             "var ad=cl.contains('ad-showing')||cl.contains('ad-interrupting');\n" +
             "var v=pl.querySelector('video');\n" +
-            "var loading=cl.contains('buffering-mode')&&(!v||v.currentTime<1);\n" +
+            "var early=!v||v.currentTime<1;\n" +
+            "var loading=(cl.contains('buffering-mode')||spinning(pl))&&early;\n" +
             "if(ad||loading)show(pl,ad);else hide();\n" +
             "}catch(e){}\n" +
             "}\n" +
-            "setInterval(tick,120);\n" +
+            "setInterval(tick,100);\n" +
             "})();\n"
 
         const val YT_FAST_SKIP_JS =
@@ -7406,15 +7432,20 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(window.__rotaFastSkip)return;window.__rotaFastSkip=1;\n" +
             "// Hiçbir ağ isteği engellenmez, hiçbir yanıt değiştirilmez: YouTube gecikme uygulamaz.\n" +
             "// Reklam çıkarsa: sessiz, görünmez, 16x hızlı, Atla düğmesine bas.\n" +
+            "var cssOn=false;\n" +
+            "function ensureCss(){\n" +
+            "if(cssOn||!(document.head||document.body))return;\n" +
             "try{\n" +
             "var css=document.createElement('style');\n" +
             "css.textContent='.html5-video-player.ad-showing .html5-main-video,.html5-video-player.ad-interrupting .html5-main-video{opacity:0!important}'+\n" +
             "'.ytp-ad-overlay-container,.ytp-ad-text-overlay,.ytp-ad-image-overlay,.ytp-ad-player-overlay{opacity:0!important}'+\n" +
             "'.ytp-ad-skip-button-container,.ytp-skip-ad-button,.ytp-ad-skip-button-modern{opacity:0!important}';\n" +
-            "(document.head||document.documentElement).appendChild(css);\n" +
+            "(document.head||document.body).appendChild(css);cssOn=true;\n" +
             "}catch(e){}\n" +
-            "var saved=null;\n" +
+            "}\n" +
+            "var saved=null,lastSeek=0;\n" +
             "function tick(){\n" +
+            "ensureCss();\n" +
             "try{\n" +
             "var pl=document.querySelector('.html5-video-player');\n" +
             "if(!pl)return;\n" +
@@ -7427,6 +7458,11 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(v.playbackRate!==16){try{v.playbackRate=16;}catch(e){}}\n" +
             "var b=pl.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,[id^=skip-button] button,[id^=skip-button]');\n" +
             "if(b)b.click();\n" +
+            "// Reklam videosunu sona sar (ayardan kapatılabilir)\n" +
+            "if(window.__rotaSeek!==false&&isFinite(v.duration)&&v.duration>0&&v.duration<180&&v.currentTime<v.duration-0.4&&Date.now()-lastSeek>700){\n" +
+            "lastSeek=Date.now();\n" +
+            "try{v.currentTime=v.duration-0.1;}catch(e){}\n" +
+            "}\n" +
             "}else if(saved){\n" +
             "try{v.playbackRate=saved.rate>=16?1:saved.rate;}catch(e){}\n" +
             "v.muted=saved.muted;\n" +
