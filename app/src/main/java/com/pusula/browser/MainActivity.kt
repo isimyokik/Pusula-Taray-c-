@@ -92,6 +92,8 @@ class MainActivity : AppCompatActivity() {
         var url: String = ""
         var pendingUrl: String? = null
         var pendingState: Bundle? = null
+        /** true: içerik boşaltıldı (Firefox gibi); geri dönünce restoreState */
+        var hibernated: Boolean = false
         var desktop: Boolean = false
         var mobileUa: String = ""
         var spoofUa: Boolean = false
@@ -239,10 +241,11 @@ class MainActivity : AppCompatActivity() {
 
     private val mediaStatePoll = object : Runnable {
         override fun run() {
-            pollMedia()
+            if (isFinishing || isDestroyed) return
+            try { pollMedia() } catch (_: Exception) { }
             try { evalExternalAudio() } catch (_: Exception) { }
-            // Auto kaydırma çubuğu için konum daha sık güncellenir
-            handler.postDelayed(this, 1000L)
+            val delay = if (appInBackground) 2500L else 1000L
+            if (!isFinishing && !isDestroyed) handler.postDelayed(this, delay)
         }
     }
 
@@ -273,6 +276,7 @@ class MainActivity : AppCompatActivity() {
     /** Pause süresince bildirimi ayakta tut (idle stop olmasın) */
     private val focusNotifKeepAlive = object : Runnable {
         override fun run() {
+            if (isFinishing || isDestroyed) return
             if (!pausedByAudioFocus) return
             // Duck: müzik çalıyor (ses 0) — bildirim playing kalsın
             try {
@@ -282,7 +286,7 @@ class MainActivity : AppCompatActivity() {
                     isInPictureInPictureMode, -1L, -2L, lastArtUrl
                 )
             } catch (_: Exception) { }
-            handler.postDelayed(this, 5000L)
+            if (!isFinishing && !isDestroyed) handler.postDelayed(this, 5000L)
         }
     }
 
@@ -849,8 +853,9 @@ private fun pollMedia() {
             }
             if (hasMedia) {
                 hasMedia = false; lastPlaying = false
-                PlaybackService.stop(this); abandonMediaAudioFocus()
-                releaseMediaLocks()
+                try { PlaybackService.stop(this) } catch (_: Exception) { }
+                try { abandonMediaAudioFocus() } catch (_: Exception) { }
+                try { releaseMediaLocks() } catch (_: Exception) { }
             }
             return
         }
@@ -1188,13 +1193,110 @@ fun onMusicCatalog(raw: String?) {
         }
     }
 
+    /** true = bu WebView önemli (görünen / medya); false = sistem öldürebilir (RAM). */
+    private fun setWebImportance(web: WebView, important: Boolean) {
+        if (Build.VERSION.SDK_INT < 26) return
+        try {
+            web.setRendererPriorityWhenInactive(
+                if (important) WebView.RENDERER_PRIORITY_BOUND
+                else WebView.RENDERER_PRIORITY_WAIVED
+            )
+        } catch (_: Exception) { }
+    }
+
+    /** Arka planda sadece medya sekmesi canlı; diğer WebView'lar uyu (RAM/CPU). */
+    private fun isProtectedTab(t: BTab): Boolean {
+        if (tabs.getOrNull(cur) === t) return true
+        if (mediaTarget() === t) return true
+        if (miniTab === t) return true
+        return false
+    }
+
+    /** Firefox gibi: sekme içeriğini bellektan at, URL/state kalsın */
+    private fun hibernateTab(t: BTab) {
+        if (t.hibernated || isProtectedTab(t)) return
+        try {
+            val b = Bundle()
+            try { t.web.saveState(b) } catch (_: Exception) { }
+            if (!b.isEmpty) t.pendingState = b
+            val u = t.url
+            if (u.startsWith("http")) t.pendingUrl = u
+            try { t.web.stopLoading() } catch (_: Exception) { }
+            try { t.web.loadUrl("about:blank") } catch (_: Exception) { }
+            try { t.web.clearHistory() } catch (_: Exception) { }
+            try { t.web.onPause() } catch (_: Exception) { }
+            setWebImportance(t.web, false)
+            try { t.preview?.recycle() } catch (_: Exception) { }
+            t.preview = null
+            t.hibernated = true
+        } catch (_: Exception) { }
+    }
+
+    private fun wakeTab(t: BTab) {
+        if (!t.hibernated) return
+        t.hibernated = false
+        setWebImportance(t.web, true)
+        try { t.web.onResume() } catch (_: Exception) { }
+        try { t.web.resumeTimers() } catch (_: Exception) { }
+        val ps = t.pendingState
+        val p = t.pendingUrl
+        if (ps != null && !ps.isEmpty) {
+            t.pendingState = null
+            val ok = try { t.web.restoreState(ps) != null } catch (_: Exception) { false }
+            if (!ok && !p.isNullOrBlank()) {
+                t.pendingUrl = null
+                try { t.web.loadUrl(p) } catch (_: Exception) { }
+            } else {
+                t.pendingUrl = null
+            }
+        } else if (!p.isNullOrBlank()) {
+            t.pendingUrl = null
+            try { t.web.loadUrl(p) } catch (_: Exception) { }
+        }
+        try { syncScripts(t) } catch (_: Exception) { }
+    }
+
+    private fun hibernateIdleTabs() {
+        for (tb in tabs) {
+            if (!isProtectedTab(tb)) hibernateTab(tb)
+        }
+    }
+
+    private fun pauseNonMediaWebViews() {
+        val keep = try { mediaTarget()?.web } catch (_: Exception) { null }
+        for (tb in tabs) {
+            try {
+                if (keep != null && tb.web === keep) {
+                    setWebImportance(tb.web, true)
+                    tb.web.onResume()
+                } else {
+                    setWebImportance(tb.web, false)
+                    tb.web.onPause()
+                }
+            } catch (_: Exception) { }
+        }
+        try {
+            val mw = miniTab?.web
+            if (mw != null) {
+                if (keep != null && mw === keep) {
+                    setWebImportance(mw, true)
+                    mw.onResume()
+                } else {
+                    setWebImportance(mw, false)
+                    mw.onPause()
+                }
+            }
+        } catch (_: Exception) { }
+    }
+
     private val backgroundMediaPump = object : Runnable {
         override fun run() {
+            if (isFinishing || isDestroyed) return
             if (!appInBackground || !prefs.bgPlay) return
-            try { shown?.onResume() } catch (_: Exception) { }
-            try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
+            try { pauseNonMediaWebViews() } catch (_: Exception) { }
+            val mediaWeb = try { mediaTarget()?.web } catch (_: Exception) { null }
+            try { mediaWeb?.onResume() } catch (_: Exception) { }
             if (pausedByAudioFocus) {
-                // Duck: idle stop olmasın, bildirim playing (müzik durmadı)
                 try {
                     PlaybackService.update(
                         this@MainActivity, true,
@@ -1202,20 +1304,13 @@ fun onMusicCatalog(raw: String?) {
                         false, -1L, -2L, lastArtUrl
                     )
                 } catch (_: Exception) { }
-                handler.postDelayed(this, 2000L)
+                if (!isFinishing && !isDestroyed) handler.postDelayed(this, 3000L)
                 return
             }
             if (hasMedia) acquireMediaLocks()
-            val t = mediaTarget() ?: tabs.getOrNull(cur)
-            try { t?.web?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
-            // hafif ağ canlı tutucu (Doze/offline)
-            try {
-                t?.web?.evaluateJavascript(
-                    "(function(){try{fetch('https://www.google.com/generate_204',{mode:'no-cors',cache:'no-store'}).catch(function(){});}catch(e){}})();",
-                    null
-                )
-            } catch (_: Exception) { }
-            handler.postDelayed(this, 1500L)
+            try { mediaWeb?.evaluateJavascript(BACKGROUND_MEDIA_JS, null) } catch (_: Exception) { }
+            // Gereksiz generate_204 yok — pil/ağ yükü
+            if (!isFinishing && !isDestroyed) handler.postDelayed(this, 2500L)
         }
     }
 
@@ -1366,20 +1461,21 @@ fun onMusicCatalog(raw: String?) {
         // Ana ekran / PiP ✕: WebView'ı durdurma, arka planda çalsın
         if (prefs.bgPlay) {
             appInBackground = true
-            try { shown?.onResume() } catch (_: Exception) { }
+            try { hibernateIdleTabs() } catch (_: Exception) { }
+            try { pauseNonMediaWebViews() } catch (_: Exception) { }
+            try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
             if (hasMedia && lastPlaying && !pausedByAudioFocus) {
                 try {
-                    currentWeb()?.evaluateJavascript(
+                    mediaTarget()?.web?.evaluateJavascript(
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
-                PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                try { PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
             } else if (!pausedByAudioFocus) {
-                // Kullanıcı durdurmuşsa arka planda tekrar başlatma
                 try {
-                    currentWeb()?.evaluateJavascript(
+                    mediaTarget()?.web?.evaluateJavascript(
                         "(function(){try{window.__userPause=true;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
@@ -1407,16 +1503,18 @@ fun onMusicCatalog(raw: String?) {
         // PiP penceresi ✕ ile kapanınca da buraya gelinir (PiP bayrağı hâlâ true olabilir): arka planda çalma yolu çalışsın
         if (prefs.bgPlay) {
             appInBackground = true
-            try { shown?.onResume() } catch (_: Exception) { }
+            try { hibernateIdleTabs() } catch (_: Exception) { }
+            try { pauseNonMediaWebViews() } catch (_: Exception) { }
+            try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
             if (hasMedia && lastPlaying && !pausedByAudioFocus) {
                 try {
-                    currentWeb()?.evaluateJavascript(
+                    mediaTarget()?.web?.evaluateJavascript(
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
-                PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                try { PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl) } catch (_: Exception) { }
             }
         }
     }
@@ -1453,7 +1551,30 @@ fun onMusicCatalog(raw: String?) {
         }
         appInBackground = false
         handler.removeCallbacks(backgroundMediaPump)
-        shown?.onResume()
+        try {
+            val curWeb = tabs.getOrNull(cur)?.web
+            val mediaWeb = mediaTarget()?.web
+            for (tb in tabs) {
+                val imp = (tb.web === curWeb) || (mediaWeb != null && tb.web === mediaWeb)
+                setWebImportance(tb.web, imp)
+                if (imp) tb.web.onResume() else tb.web.onPause()
+            }
+        } catch (_: Exception) { }
+        try { shown?.onResume() } catch (_: Exception) { }
+        try { miniTab?.web?.onResume() } catch (_: Exception) { }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Sistem bellek istiyor: önizlemeleri bırak (arka plan öldürme riskini azaltır)
+        if (level >= 60 /* RUNNING_CRITICAL */ || level >= 40 /* MODERATE */ || level >= 80 /* COMPLETE */) {
+            try {
+                for (tb in tabs) {
+                    try { tb.preview?.recycle() } catch (_: Exception) { }
+                    tb.preview = null
+                }
+            } catch (_: Exception) { }
+        }
     }
 
     override fun onDestroy() {
@@ -1865,7 +1986,14 @@ fun onMusicCatalog(raw: String?) {
         s.setGeolocationEnabled(false)
         s.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
         s.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+        try { if (Build.VERSION.SDK_INT >= 23) s.offscreenPreRaster = false } catch (_: Exception) { }
         try { if (Build.VERSION.SDK_INT >= 26) s.safeBrowsingEnabled = true } catch (_: Exception) { }
+        // Boştaki sekme renderer'ı sistem tarafından düşürülebilsin (native benzeri bellek)
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                web.setRendererPriorityWhenInactive(WebView.RENDERER_PRIORITY_WAIVED)
+            }
+        } catch (_: Exception) { }
         try {
             val cm = android.webkit.CookieManager.getInstance()
             cm.setAcceptCookie(true)
@@ -1986,7 +2114,7 @@ fun onMusicCatalog(raw: String?) {
 
     // YouTube: hiçbir şey engellenmez/değiştirilmez (YouTube bunu fark edip videoyu bekletiyor);
     // reklam çıkarsa sessize alınır, görüntüsü gizlenir, sona sarılır ve atlanır.
-    private val ytAdScript = "window.__rotaSeek=true;\n" + YT_FAST_SKIP_JS
+    private val ytAdScript = YT_FAST_SKIP_JS
     private fun onYoutubePage(u: String) = u.contains("youtube.com") || u.contains("youtu.be")
 
     private fun syncScripts(t: BTab) {
@@ -2068,6 +2196,8 @@ fun onMusicCatalog(raw: String?) {
         // WebView hiyerarşide kalsın (GONE) — medya diğer sekmede susmasın
         cur = i
         val t = tabs[i]
+        // Hedef sekmeyi uyandır (Firefox: discard edilmiş sekmeyi geri yükle)
+        try { wakeTab(t) } catch (_: Exception) { }
         for (tab in tabs) {
             val w = tab.web
             if (w.parent == null) {
@@ -2076,6 +2206,19 @@ fun onMusicCatalog(raw: String?) {
             w.visibility = if (tab === t) View.VISIBLE else View.GONE
         }
         shown = t.web
+        for (tab in tabs) {
+            try {
+                val important = (tab === t) || (mediaTarget()?.web === tab.web)
+                setWebImportance(tab.web, important)
+                if (important) {
+                    tab.web.onResume()
+                } else {
+                    tab.web.onPause()
+                    // Medya değilse belleği boşalt
+                    if (mediaTarget() !== tab) hibernateTab(tab)
+                }
+            } catch (_: Exception) { }
+        }
         try { t.web.onResume() } catch (_: Exception) { }
         // GONE -> VISIBLE geçişinde WebView bazen çizimi/giriş işlemeyi bırakıyor: zamanlayıcıları uyandır, yeniden çizdir
         try { t.web.resumeTimers() } catch (_: Exception) { }
@@ -2760,35 +2903,27 @@ fun onMusicCatalog(raw: String?) {
     }
 
     private fun shouldBlockAd(uri: Uri): Boolean {
+        // YouTube sayfasında hiç kullanılmaz (intercept). Diğer sitelerde yalnızca
+        // bilinen üçüncü taraf reklam ağları — YouTube ile çift yönlü haberleşme yok.
         val host = (uri.host ?: "").lowercase()
         val path = (uri.encodedPath ?: "").lowercase()
-        val q = (uri.encodedQuery ?: "").lowercase()
-        val full = uri.toString().lowercase()
+        if (host.endsWith("youtube.com") || host.endsWith("youtu.be") ||
+            host.endsWith("youtubekids.com") || host.endsWith("youtube-nocookie.com") ||
+            host.endsWith("googlevideo.com") || host.endsWith("ytimg.com") ||
+            host.endsWith("ggpht.com") || host.endsWith("googleusercontent.com")) {
+            return false
+        }
         val blockedHosts = listOf(
             "doubleclick.net", "googlesyndication.com", "googleadservices.com",
             "adservice.google.com", "adnxs.com", "adsrvr.org", "adform.net",
             "adcolony.com", "taboola.com", "outbrain.com", "scorecardresearch.com",
             "amazon-adsystem.com", "criteo.com", "hotjar.com", "pagead2.googlesyndication.com",
-            "googleads.g.doubleclick.net", "static.doubleclick.net", "ad.youtube.com",
+            "googleads.g.doubleclick.net", "static.doubleclick.net",
             "s0.2mdn.net", "s1.2mdn.net", "partnerad.l.doubleclick.net"
         )
         if (blockedHosts.any { host == it || host.endsWith("." + it) }) return true
-        // YouTube reklam uçları (video playback googlevideo'ya dokunma)
-        if (host.endsWith("youtube.com") || host.endsWith("youtu.be") || host.endsWith("youtube-nocookie.com")) {
-            if (path.contains("/pagead") || path.contains("/ptracking") ||
-                path.contains("/api/stats/ads") || path.contains("/pcs/") ||
-                path.contains("/ad_unit") || path.contains("/get_midroll") ||
-                path.contains("/youtubei/v1/player/ad") || path.contains("/youtubei/v1/browse/ad") ||
-                path.contains("/youtubei/v1/log_event") && full.contains("ad") ||
-                path.contains("/activelive") ||
-                q.contains("adformat=") || q.contains("adunit") ||
-                q.contains("client_side_ad") || q.contains("break_type")
-            ) return true
-        }
         return path.contains("/ads/") || path.contains("/adserver/") ||
-            path.contains("/pagead/") || path.contains("/advertisement/") ||
-            path.contains("/api/stats/ads") || path.contains("/pagead/adview") ||
-            path.contains("/pagead/conversion")
+            path.contains("/pagead/") || path.contains("/advertisement/")
     }
 
     private fun makeClient(tab: BTab): WebViewClient = object : WebViewClient() {
@@ -7133,7 +7268,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
     private companion object {
         const val ASSET_PREFIX = "https://appassets.androidplatform.net/"
         const val NEWTAB_URL = "https://appassets.androidplatform.net/assets/newtab.html"
-        const val MAX_TABS = 20
+        const val MAX_TABS = 12
 
 
         // YouTube sayfasından progressive + ses URL'lerini çıkar (cipher'sız olanlar)
@@ -7438,50 +7573,46 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
         const val YT_FAST_SKIP_JS =
             "(function(){\n" +
             "if(location.hostname.indexOf('youtube.com')<0&&location.hostname.indexOf('youtu.be')<0)return;\n" +
-            "if(window.__rotaFastSkip)return;window.__rotaFastSkip=1;\n" +
-            "// Hiçbir ağ isteği engellenmez, hiçbir yanıt değiştirilmez: YouTube gecikme uygulamaz.\n" +
-            "// Reklam çıkarsa: sessiz, görünmez, 16x hızlı, Atla düğmesine bas.\n" +
-            "var cssOn=false;\n" +
-            "function ensureCss(){\n" +
-            "if(cssOn||!(document.head||document.body))return;\n" +
-            "try{\n" +
-            "var css=document.createElement('style');\n" +
-            "css.textContent='.html5-video-player.ad-showing .html5-main-video,.html5-video-player.ad-interrupting .html5-main-video{opacity:0!important}'+\n" +
-            "'.ytp-ad-overlay-container,.ytp-ad-text-overlay,.ytp-ad-image-overlay,.ytp-ad-player-overlay{opacity:0!important}'+\n" +
-            "'.ytp-ad-skip-button-container,.ytp-skip-ad-button,.ytp-ad-skip-button-modern{opacity:0!important}';\n" +
-            "(document.head||document.body).appendChild(css);cssOn=true;\n" +
-            "}catch(e){}\n" +
+            "if(window.__rotaFastSkip2)return;window.__rotaFastSkip2=1;\n" +
+            "// Ağ/yanıt engeli YOK. Sadece görünen reklamı sessiz+hızlı bitir; ana videoya dokunma.\n" +
+            "var saved=null,lastSkip=0;\n" +
+            "function isAd(pl){\n" +
+            "return !!(pl&&(pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting')));\n" +
             "}\n" +
-            "var saved=null,lastSeek=0;\n" +
             "function tick(){\n" +
-            "ensureCss();\n" +
             "try{\n" +
             "var pl=document.querySelector('.html5-video-player');\n" +
             "if(!pl)return;\n" +
             "var v=pl.querySelector('video.html5-main-video')||pl.querySelector('video');\n" +
             "if(!v)return;\n" +
-            "var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');\n" +
-            "if(ad){\n" +
-            "if(!saved)saved={rate:v.playbackRate||1,muted:v.muted};\n" +
-            "v.muted=true;\n" +
-            "if(v.playbackRate!==16){try{v.playbackRate=16;}catch(e){}}\n" +
+            "if(isAd(pl)){\n" +
+            "if(!saved)saved={rate:(v.playbackRate>0&&v.playbackRate<8)?v.playbackRate:1,muted:v.muted};\n" +
+            "try{v.muted=true;v.volume=0;}catch(e){}\n" +
+            "try{if(v.playbackRate!==16)v.playbackRate=16;}catch(e){}\n" +
+            // Atla (görünür bırak — gizleyince YouTube atlamayı bozabiliyor)
             "var b=pl.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,[id^=skip-button] button,[id^=skip-button]');\n" +
-            "if(b)b.click();\n" +
-            "// Reklam videosunu sona sar (ayardan kapatılabilir)\n" +
-            "if(window.__rotaSeek!==false&&isFinite(v.duration)&&v.duration>0&&v.duration<180&&v.currentTime<v.duration-0.4&&Date.now()-lastSeek>700){\n" +
-            "lastSeek=Date.now();\n" +
-            "try{v.currentTime=v.duration-0.1;}catch(e){}\n" +
+            "if(b){try{b.click();}catch(e){}}\n" +
+            // Yalnızca kısa reklam (<=60sn). Uzun süre = içerik, SARMA.
+            "var d=v.duration;\n" +
+            "if(isFinite(d)&&d>0&&d<=60&&v.currentTime<d-0.25&&Date.now()-lastSkip>500){\n" +
+            "lastSkip=Date.now();\n" +
+            "try{v.currentTime=Math.max(0,d-0.05);}catch(e){}\n" +
             "}\n" +
-            "}else if(saved){\n" +
-            "try{v.playbackRate=saved.rate>=16?1:saved.rate;}catch(e){}\n" +
-            "v.muted=saved.muted;\n" +
+            "}else{\n" +
+            "if(saved){\n" +
+            "try{v.playbackRate=(saved.rate>0&&saved.rate<8)?saved.rate:1;}catch(e){}\n" +
+            "try{v.muted=!!saved.muted;if(!v.muted&&v.volume<0.05)v.volume=1;}catch(e){}\n" +
             "saved=null;\n" +
+            "}\n" +
+            // Spinner'da takılı kalmasın: reklam değilken ve başta pause ise play
+            "if(v.paused&&!v.ended&&v.readyState>=2&&(v.currentTime||0)<1.5){\n" +
+            "try{window.__userPause=false;var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(e){}\n" +
+            "}\n" +
             "}\n" +
             "}catch(e){}\n" +
             "}\n" +
-            "setInterval(tick,100);\n" +
+            "setInterval(tick,120);\n" +
             "})();\n"
-
 
 
         /** YouTube: kaldığın saniyeyi saklar, aynı videoya dönünce devam eder. */
