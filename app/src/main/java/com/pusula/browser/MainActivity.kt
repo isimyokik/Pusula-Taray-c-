@@ -92,7 +92,6 @@ class MainActivity : AppCompatActivity() {
         var url: String = ""
         var pendingUrl: String? = null
         var pendingState: Bundle? = null
-        var hibernated: Boolean = false
         var desktop: Boolean = false
         var mobileUa: String = ""
         var spoofUa: Boolean = false
@@ -267,7 +266,6 @@ class MainActivity : AppCompatActivity() {
     private var extSeenSince = 0L
     private var extQuietSince = 0L
     private var mediaChangedAt = 0L
-    private var tabSwitchUntil = 0L
     private var playbackCb: AudioManager.AudioPlaybackCallback? = null
     private val extCheck = Runnable { evalExternalAudio() }
 
@@ -442,11 +440,6 @@ class MainActivity : AppCompatActivity() {
         injectAllMedia(AUDIO_DUCK_BEGIN_JS)
         runDuckFade(0.0, duckFadeOutMs) {
             injectAllMedia(AUDIO_DUCK_VOL_JS.replace("__F__", "0.000"))
-            // WhatsApp / dış ses: YT Music sızıntısını kes (pause yok)
-            injectAllMedia(
-                "(function(){try{window.__rotaDuck=true;document.querySelectorAll('video,audio').forEach(function(m){try{" +
-                "m.volume=0;m.muted=true;}catch(x){}});}catch(e){}})();"
-            )
         }
         handler.removeCallbacks(extCheck)
         handler.postDelayed(extCheck, 600L)
@@ -454,7 +447,6 @@ class MainActivity : AppCompatActivity() {
 
 private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now < tabSwitchUntil) return
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
             // Erken açılma = sızıntı. En az 2 sn bekle, config net düşünce aç.
@@ -1374,8 +1366,6 @@ fun onMusicCatalog(raw: String?) {
         // Ana ekran / PiP ✕: WebView'ı durdurma, arka planda çalsın
         if (prefs.bgPlay) {
             appInBackground = true
-            try { hibernateIdleTabs() } catch (_: Exception) { }
-            try { mediaSrc?.web?.onResume() } catch (_: Exception) { }
             try { shown?.onResume() } catch (_: Exception) { }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
@@ -1417,14 +1407,12 @@ fun onMusicCatalog(raw: String?) {
         // PiP penceresi ✕ ile kapanınca da buraya gelinir (PiP bayrağı hâlâ true olabilir): arka planda çalma yolu çalışsın
         if (prefs.bgPlay) {
             appInBackground = true
-            try { hibernateIdleTabs() } catch (_: Exception) { }
-            try { mediaSrc?.web?.onResume() } catch (_: Exception) { }
             try { shown?.onResume() } catch (_: Exception) { }
             handler.removeCallbacks(backgroundMediaPump)
             handler.post(backgroundMediaPump)
             if (hasMedia && lastPlaying && !pausedByAudioFocus) {
                 try {
-                    (mediaSrc?.web ?: currentWeb())?.evaluateJavascript(
+                    currentWeb()?.evaluateJavascript(
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
@@ -2074,84 +2062,12 @@ fun onMusicCatalog(raw: String?) {
         } catch (_: Exception) { }
     }
 
-
-    private fun isProtectedTab(t: BTab): Boolean {
-        if (tabs.getOrNull(cur) === t) return true
-        if (miniTab === t) return true
-        // Sadece çalan medya kaynağı — diğer sekmeler (diğer YT dahil) uyutulabilir
-        if (mediaSrc === t) return true
-        return false
-    }
-
-    private fun hibernateTab(t: BTab) {
-        if (t.hibernated || isProtectedTab(t)) return
-        try {
-            if (t.preview == null) {
-                try { capturePreview(t) } catch (_: Exception) { }
-            }
-            val b = Bundle()
-            try { t.web.saveState(b) } catch (_: Exception) { }
-            if (!b.isEmpty) t.pendingState = b
-            val u = t.url
-            if (u.startsWith("http")) t.pendingUrl = u
-            try { t.web.stopLoading() } catch (_: Exception) { }
-            try { t.web.loadUrl("about:blank") } catch (_: Exception) { }
-            try { t.web.onPause() } catch (_: Exception) { }
-            t.hibernated = true
-        } catch (_: Exception) { }
-    }
-
-    private fun wakeTab(t: BTab) {
-        if (!t.hibernated) return
-        t.hibernated = false
-        try { t.web.onResume() } catch (_: Exception) { }
-        try { t.web.resumeTimers() } catch (_: Exception) { }
-        val ps = t.pendingState
-        val p = t.pendingUrl
-        if (ps != null && !ps.isEmpty) {
-            t.pendingState = null
-            val ok = try { t.web.restoreState(ps) != null } catch (_: Exception) { false }
-            if (!ok && !p.isNullOrBlank()) {
-                t.pendingUrl = null
-                try { t.web.loadUrl(p) } catch (_: Exception) { }
-            } else {
-                t.pendingUrl = null
-            }
-        } else if (!p.isNullOrBlank()) {
-            t.pendingUrl = null
-            try { t.web.loadUrl(p) } catch (_: Exception) { }
-        }
-        try { syncScripts(t) } catch (_: Exception) { }
-        if (!pausedByAudioFocus) {
-            try {
-                t.web.evaluateJavascript(
-                    "(function(){try{window.__rotaDuck=false;window.__userPause=false;" +
-                    "document.querySelectorAll('video,audio').forEach(function(m){try{" +
-                    "m.muted=false;var v=parseFloat(m.dataset._afv||'1');if(!(v>0))v=1;m.volume=v;" +
-                    "}catch(x){}});}catch(e){}})();",
-                    null
-                )
-            } catch (_: Exception) { }
-        }
-    }
-
-    private fun hibernateIdleTabs() {
-        for (tb in tabs) {
-            if (!isProtectedTab(tb)) hibernateTab(tb)
-        }
-    }
-
     private fun switchTo(i: Int) {
         if (i !in tabs.indices) return
         tabs.getOrNull(cur)?.let { capturePreview(it) }
         // WebView hiyerarşide kalsın (GONE) — medya diğer sekmede susmasın
         cur = i
         val t = tabs[i]
-        val nowSw = android.os.SystemClock.elapsedRealtime()
-        tabSwitchUntil = nowSw + 5000L
-        try { focusIgnoreExtUntil = maxOf(focusIgnoreExtUntil, tabSwitchUntil) } catch (_: Exception) { }
-        mediaChangedAt = nowSw
-        try { wakeTab(t) } catch (_: Exception) { }
         for (tab in tabs) {
             val w = tab.web
             if (w.parent == null) {
@@ -2160,16 +2076,6 @@ fun onMusicCatalog(raw: String?) {
             w.visibility = if (tab === t) View.VISIBLE else View.GONE
         }
         shown = t.web
-        for (tab in tabs) {
-            try {
-                if (isProtectedTab(tab) || tab === t) {
-                    tab.web.onResume()
-                } else {
-                    tab.web.onPause()
-                    hibernateTab(tab)
-                }
-            } catch (_: Exception) { }
-        }
         try { t.web.onResume() } catch (_: Exception) { }
         // GONE -> VISIBLE geçişinde WebView bazen çizimi/giriş işlemeyi bırakıyor: zamanlayıcıları uyandır, yeniden çizdir
         try { t.web.resumeTimers() } catch (_: Exception) { }
@@ -3053,7 +2959,7 @@ fun onMusicCatalog(raw: String?) {
                 val real = ht == WebView.HitTestResult.SRC_ANCHOR_TYPE || ht == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
                 if (!real) { toast("Açılır pencere engellendi"); return false }
             }
-            val nt = openTab(null, false) ?: return false
+            val nt = openTab(null, false, tab.incognito) ?: return false
             nt.fromPopup = true
             val transport = resultMsg.obj as WebView.WebViewTransport
             transport.webView = nt.web
@@ -7244,17 +7150,6 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "}catch(z){}\n" +
             "}\n" +
             "scrub();\n" +
-            "if(!document.getElementById('__rota_ytm_fb')){\n" +
-            "var st=document.createElement('style');st.id='__rota_ytm_fb';\n" +
-            "st.textContent=\n" +
-            "'ytmusic-player-page,ytmusic-player-page *{-webkit-tap-highlight-color:transparent!important;}'+\n" +
-            "'#play-pause-button,ytmusic-play-button-renderer,ytmusic-player-page .play-pause-button,'+\n" +
-            "'ytmusic-player-bar #play-pause-button,tp-yt-paper-icon-button.play-pause-button{'+\n" +
-            "'-webkit-tap-highlight-color:transparent!important;outline:none!important;}'+\n" +
-            "'ytmusic-player-page button,.center-controls button,.middle-controls button{'+\n" +
-            "'-webkit-tap-highlight-color:transparent!important;}';\n" +
-            "document.documentElement.appendChild(st);\n" +
-            "}\n" +
             "function isFullPlayer(){\n" +
             "var p=document.querySelector('ytmusic-player-page#player-page,ytmusic-player-page');\n" +
             "if(!p)return false;\n" +
@@ -8183,9 +8078,6 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "var v=Math.max(0,Math.min(1,to*__F__));" +
             "if(g)g.set.call(m,v);else m.volume=v;" +
-            "if(v<=0.001){m.muted=true;if(g)g.set.call(m,0);else m.volume=0;}" +
-            "else if(!window.__rotaDuck){m.muted=false;}" +
-            "else if(v>0.001){m.muted=false;}" +
             "}catch(x){}});}catch(e){}})();"
 
         // Geri açmadan önce: duck sırasında kullanıcı sesi kendisi değiştirdiyse (>0.05) onu hedef al
@@ -8202,7 +8094,6 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "document.querySelectorAll('video,audio').forEach(function(m){try{" +
             "var to=parseFloat(m.dataset._afv||'1');if(!(to>0))to=1;" +
             "try{delete m.__rotaWant;}catch(z){}" +
-            "m.muted=false;" +
             "if(g)g.set.call(m,to);else m.volume=to;" +
             "}catch(x){}});}catch(e){}})();"
 
