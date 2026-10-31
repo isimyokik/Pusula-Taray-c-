@@ -116,6 +116,8 @@ class MainActivity : AppCompatActivity() {
         var errorLoading: Boolean = false
         var networkRetryUsed: Boolean = false
         var fromPopup: Boolean = false
+        /** RAM'den boşaltıldı: sayfa about:blank, durum pendingState'te, önizleme resmi duruyor. */
+        var asleep: Boolean = false
     }
 
     private class SheetItem(val icon: String, val label: String, val on: Boolean, val act: () -> Unit)
@@ -195,6 +197,7 @@ class MainActivity : AppCompatActivity() {
     private var micResumePending = false
     private var micStartAt = 0L
     private var micResumeGen = 0
+    private var micDucked = false
     private var lastPlayingTrueAt = 0L
     private var recCb: AudioManager.AudioRecordingCallback? = null
     // --- Ses odağı yavaş kısma / yavaş açma ---
@@ -245,6 +248,16 @@ class MainActivity : AppCompatActivity() {
     private var lastDur = -1L
     /** Bildirim / PiP düğmelerinin bağlı olduğu gerçek medya sekmesi (YouTube veya YouTube Music). */
     private var mediaSrc: BTab? = null
+    /**
+     * İndirilenler/Explorer medya oynatıcısı (MediaPlayerActivity) açıkken bildirimi O yönetir.
+     * Arkadaki YouTube sekmesinin başlık/kapağı bildirime yazılıp çakışmasın diye burada susuyoruz.
+     */
+    private fun pbUpdate(ctx: MainActivity, playing: Boolean, title: String, artist: String,
+                         pip: Boolean, pos: Long, dur: Long, art: String) {
+        if (MediaPlayerActivity.active && MediaPlayerActivity.owner == "player") return
+        PlaybackService.update(ctx, playing, title, artist, pip, pos, dur, art)
+    }
+
     private fun mediaTarget(): BTab? =
         miniTab ?: mediaSrc?.takeIf { s -> tabs.any { it === s } } ?: tabs.getOrNull(cur)
     private lateinit var dockBar: LinearLayout
@@ -290,7 +303,7 @@ class MainActivity : AppCompatActivity() {
             if (!pausedByAudioFocus) return
             // Duck: müzik çalıyor (ses 0) — bildirim playing kalsın
             try {
-                PlaybackService.update(
+                pbUpdate(
                     this@MainActivity, true,
                     lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                     isInPictureInPictureMode, -1L, -2L, lastArtUrl
@@ -397,9 +410,27 @@ class MainActivity : AppCompatActivity() {
                             micStartAt = now
                             // Duraklasa bile bildirim/servis kapanmasın
                             focusNotifHoldUntil = maxOf(focusNotifHoldUntil, now + 10 * 60 * 1000L)
+                            // WhatsApp sesi gibi: ses yavaşça sıfıra iner (kayıt gerçekten sürüyorsa)
+                            val gen0 = micResumeGen
+                            handler.postDelayed({
+                                if (gen0 == micResumeGen && micActive && !pausedByAudioFocus) {
+                                    micDucked = true
+                                    focusIgnoreExtUntil = 0L
+                                    beginExternalPause()
+                                }
+                            }, 250L)
                         }
                     } else if (!recording && micActive) {
                         micActive = false
+                        if (micDucked) {
+                            // Kayıt bitti: sesi yavaşça geri aç
+                            handler.postDelayed({
+                                if (!micActive && micDucked) {
+                                    micDucked = false
+                                    if (pausedByAudioFocus) resumeFromFocus(false)
+                                }
+                            }, 500L)
+                        }
                         if (micResumePending) {
                             micResumePending = false
                             if (now - micStartAt < 10 * 60 * 1000L) {
@@ -493,7 +524,7 @@ class MainActivity : AppCompatActivity() {
         // Bildirim medyası ayakta kalsın (mikrofon / WhatsApp sesi sırasında kopmasın)
         focusNotifHoldUntil = android.os.SystemClock.elapsedRealtime() + 10 * 60 * 1000L
         try {
-            PlaybackService.update(
+            pbUpdate(
                 this, true,
                 lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                 isInPictureInPictureMode, -1L, -2L, lastArtUrl
@@ -515,6 +546,11 @@ private fun evalExternalAudio() {
         val now = android.os.SystemClock.elapsedRealtime()
         val n = countMediaConfigs()
         if (pausedByAudioFocus) {
+            // Mikrofon kaydı sürüyorsa ses kapalı kalsın (kayıt bitince mikrofon callback'i açar)
+            if (micDucked && micActive) {
+                handler.postDelayed(extCheck, 500L)
+                return
+            }
             // Erken açılma = sızıntı. En az 2 sn bekle, config net düşünce aç.
             if (now - focusPauseSince < 2000L) {
                 handler.postDelayed(extCheck, 500L)
@@ -577,7 +613,7 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
     private fun updateFocusNotification(playing: Boolean) {
         if (hasMedia) {
             try {
-                PlaybackService.update(
+                pbUpdate(
                     this, playing, lastTitle, lastArtist,
                     isInPictureInPictureMode, -1L, -2L, lastArtUrl
                 )
@@ -637,7 +673,7 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
         stopFocusResumeWatch()
         handler.removeCallbacks(focusNotifKeepAlive)
         try {
-            PlaybackService.update(
+            pbUpdate(
                 this, true,
                 lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                 isInPictureInPictureMode, -1L, -2L, lastArtUrl
@@ -652,7 +688,7 @@ private fun fmtLevel(x: Double): String = String.format(java.util.Locale.US, "%.
             handler.removeCallbacks(extCheck)
             handler.postDelayed(extCheck, 100L)
             try {
-                PlaybackService.update(
+                pbUpdate(
                     this@MainActivity, true,
                     lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                     isInPictureInPictureMode, -1L, -2L, lastArtUrl
@@ -814,9 +850,9 @@ private fun pollMedia() {
             return x.contains("youtube.com") || x.contains("youtu.be") || x.contains("music.youtube")
         }
         val cands = ArrayList<BTab>()
-        miniTab?.let { cands.add(it) }
-        tabs.getOrNull(cur)?.let { c0 -> if (cands.none { c -> c === c0 }) cands.add(c0) }
-        for (t in tabs) if (isMediaUrl(t.url) && cands.none { c -> c === t }) cands.add(t)
+        miniTab?.let { if (!it.asleep) cands.add(it) }
+        tabs.getOrNull(cur)?.let { c0 -> if (!c0.asleep && cands.none { c -> c === c0 }) cands.add(c0) }
+        for (t in tabs) if (!t.asleep && isMediaUrl(t.url) && cands.none { c -> c === t }) cands.add(t)
         if (cands.isEmpty()) return
         val results = arrayOfNulls<String>(cands.size)
         var left = cands.size
@@ -854,8 +890,34 @@ private fun pollMedia() {
         fun playing(r: String?): Boolean = has(r) && r!!.contains("\\\"p\\\":true")
         val cur0 = tabs.getOrNull(cur)
         val idxs = cands.indices
+        // --- Ortak medya koordinasyonu: aynı anda tek kaynak çalar, bildirim onundur ---
+        val nowPlaying = idxs.filter { playing(res[it]) }.map { cands[it] }
+        val newly = nowPlaying.filter { n -> prevPlayingTabs.none { it === n } }
+        prevPlayingTabs.clear(); prevPlayingTabs.addAll(nowPlaying)
+        val playerOwns = MediaPlayerActivity.active && MediaPlayerActivity.owner == "player"
+        if (playerOwns && nowPlaying.isNotEmpty()) {
+            if (newly.isNotEmpty() && android.os.SystemClock.elapsedRealtime() - lastWakeAt > 6000L) {
+                // Kullanıcı bir web medyasını başlattı → yerel oynatıcı durur, bildirim webe geçer
+                MediaPlayerActivity.owner = "web"
+                try { MediaPlayerActivity.pauseHook?.invoke() } catch (_: Exception) { }
+            } else {
+                // Sekme yeni uyandı / kendiliğinden oynadı: oynatıcıyı bozma
+                for (t in nowPlaying) try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { }
+                return
+            }
+        }
+        if (MediaPlayerActivity.active && MediaPlayerActivity.owner == "player") return
+        var winner: BTab? = null
+        if (newly.isNotEmpty()) winner = newly.firstOrNull { it === cur0 } ?: newly.first()
+        else if (nowPlaying.size > 1) winner = nowPlaying.firstOrNull { it === mediaSrc } ?: nowPlaying.first()
+        if (winner != null) {
+            for (t in nowPlaying) if (t !== winner) {
+                try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { }
+            }
+        }
         val pick: Int? =
-            idxs.firstOrNull { playing(res[it]) && cands[it] === cur0 }
+            winner?.let { w -> idxs.firstOrNull { cands[it] === w } }
+            ?: idxs.firstOrNull { playing(res[it]) && cands[it] === cur0 }
             ?: idxs.firstOrNull { playing(res[it]) && cands[it] === mediaSrc }
             ?: idxs.firstOrNull { playing(res[it]) }
             ?: idxs.firstOrNull { has(res[it]) && cands[it] === mediaSrc }
@@ -926,7 +988,7 @@ private fun pollMedia() {
                 // Duck sırasında da playing: sadece ses kısık
                 val showPlay = pausedByAudioFocus || now0 < focusResumePlayUntil || lastPlaying
                 try {
-                    PlaybackService.update(
+                    pbUpdate(
                         this, showPlay,
                         lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                         isInPictureInPictureMode, -1L, -2L, lastArtUrl
@@ -936,7 +998,7 @@ private fun pollMedia() {
             }
             if (hasMedia) {
                 hasMedia = false; lastPlaying = false
-                PlaybackService.stop(this); abandonMediaAudioFocus()
+                if (!(MediaPlayerActivity.active && MediaPlayerActivity.owner == "player")) { PlaybackService.stop(this); abandonMediaAudioFocus() }
                 releaseMediaLocks()
             }
             return
@@ -975,7 +1037,7 @@ private fun pollMedia() {
         // Çalarken konumu da gönder (Android Auto / bildirim kaydırma çubuğu)
         if ((changed || playing) && (playing || PlaybackService.running)) {
             sentPos = pos; sentAt = now; sentPlaying = playing
-            PlaybackService.update(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
+            pbUpdate(this, playing, title, artist, isInPictureInPictureMode, pos, dur, artUrl)
         }
         // PiP düğme simgesi oynat/duraklat durumuna göre güncellensin
         if (playChanged && isInPictureInPictureMode) updatePipActions()
@@ -1098,7 +1160,7 @@ fun onMusicCatalog(raw: String?) {
                 try { currentWeb()?.evaluateJavascript(PIP_ON_JS, null) } catch (_: Exception) { }
             }
             updatePipActions()
-            if (hasMedia) PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
+            if (hasMedia) pbUpdate(this, lastPlaying, lastTitle, lastArtist, true, -1L, -2L, lastArtUrl)
         } else {
             // PiP ✕ ile kapandıysa (uygulama ekranda değil) hiçbir şeye dokunma; büyütüldüyse temizle
             pipExitPending = true
@@ -1157,7 +1219,7 @@ fun onMusicCatalog(raw: String?) {
             }
 
             if (hasMedia) {
-                PlaybackService.update(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                pbUpdate(this, lastPlaying, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
             }
             if (wasMini) {
                 handler.postDelayed({ reopenAfterMiniPip(false) }, 200)
@@ -1181,7 +1243,7 @@ fun onMusicCatalog(raw: String?) {
         override fun onReceive(context: Context?, intent: Intent?) {
             val act = intent?.action ?: return
             // İndirilenler oynatıcısı açıkken bildirim düğmeleri ona gitsin
-            if (MediaPlayerActivity.active && act != PlaybackService.ACTION_CLOSE) return
+            if (MediaPlayerActivity.active && MediaPlayerActivity.owner == "player" && act != PlaybackService.ACTION_CLOSE) return
             if (act == PlaybackService.ACTION_CLOSE) {
                 // Bildirim ✕: tüm medya hemen durur, bildirim geri gelmez
                 mediaDismissedUntil = android.os.SystemClock.elapsedRealtime() + 4000L
@@ -1288,7 +1350,7 @@ fun onMusicCatalog(raw: String?) {
             if (pausedByAudioFocus) {
                 // Duck: idle stop olmasın, bildirim playing (müzik durmadı)
                 try {
-                    PlaybackService.update(
+                    pbUpdate(
                         this@MainActivity, true,
                         lastTitle.ifBlank { "YouTube Music" }, lastArtist,
                         false, -1L, -2L, lastArtUrl
@@ -1389,6 +1451,7 @@ fun onMusicCatalog(raw: String?) {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         buildUi()
+        MediaPlayerActivity.takeoverHook = { onPlayerTakeover() }
         val bars = WindowInsetsControllerCompat(window, window.decorView)
         bars.isAppearanceLightStatusBars = !dark
         bars.isAppearanceLightNavigationBars = !dark
@@ -1501,7 +1564,7 @@ fun onMusicCatalog(raw: String?) {
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
-                PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                pbUpdate(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
             } else if (!pausedByAudioFocus) {
                 // Kullanıcı durdurmuşsa arka planda tekrar başlatma
                 try {
@@ -1518,7 +1581,7 @@ fun onMusicCatalog(raw: String?) {
                 try { t.web.evaluateJavascript(stopJs, null) } catch (_: Exception) { }
             }
             lastPlaying = false
-            if (hasMedia) PlaybackService.update(this, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+            if (hasMedia) pbUpdate(this, false, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
             // Betiğin çalışması için WebView'ı kısa bir gecikmeyle durdur
             handler.postDelayed({
                 if (appInBackground && !isResumedNow && !isInPictureInPictureMode && !pipEntering) {
@@ -1542,7 +1605,7 @@ fun onMusicCatalog(raw: String?) {
                         "(function(){try{window.__userPause=false;document.querySelectorAll('video,audio').forEach(function(m){" +
                         "m.dataset.pusulaWasPlaying='1';});}catch(e){}})();", null)
                 } catch (_: Exception) { }
-                PlaybackService.update(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
+                pbUpdate(this, true, lastTitle, lastArtist, false, -1L, -2L, lastArtUrl)
             }
         }
     }
@@ -1579,6 +1642,7 @@ fun onMusicCatalog(raw: String?) {
         }
         appInBackground = false
         handler.removeCallbacks(backgroundMediaPump)
+        try { if (tabs.getOrNull(cur)?.asleep == true) switchTo(cur) } catch (_: Exception) { }
         shown?.onResume()
         try { mediaTarget()?.web?.onResume() } catch (_: Exception) { }
         // Kilit açılınca: bitmiş parçayı baştan zorla başlatma; sıradaki/canlı çalanı kesme
@@ -1619,6 +1683,7 @@ fun onMusicCatalog(raw: String?) {
                 clearTabStates()
             } catch (_: Exception) { }
         }
+        MediaPlayerActivity.takeoverHook = null
         try { miniTab?.web?.destroy() } catch (_: Exception) { }
         for (t in tabs) { try { t.web.destroy() } catch (_: Exception) { } }
         super.onDestroy()
@@ -2209,12 +2274,68 @@ fun onMusicCatalog(raw: String?) {
         } catch (_: Exception) { }
     }
 
+    // ---- Sekme uyutma: yalnızca açık sekme canlı; diğerleri RAM'den boşalır (önizleme resmi kalır) ----
+    private var lastWakeAt = 0L
+    private val prevPlayingTabs = ArrayList<BTab>()
+
+    /** Sayfayı about:blank'e alıp RAM'i boşaltır; durum+önizleme saklanır. Geri dönünce switchTo yükler. */
+    private fun sleepTab(t: BTab, includeCurrent: Boolean = false) {
+        if (t.asleep || t === miniTab) return
+        val isCur = t === tabs.getOrNull(cur)
+        if (isCur && !includeCurrent) return
+        if (t.fromPopup || tabs.any { it.fromPopup && it !== t }) return // OAuth/pop-up girişi bozulmasın
+        val u = try { t.web.url } catch (_: Exception) { null } ?: t.url
+        if (!u.startsWith("http")) return // yeni sekme / yerel sayfalar zaten hafif
+        try { if (isCur) capturePreview(t) else loadPreview(t) } catch (_: Exception) { }
+        val st = Bundle()
+        val ok = try { t.web.saveState(st) != null } catch (_: Exception) { false }
+        t.pendingState = if (ok && !st.isEmpty) st else null
+        t.pendingUrl = u
+        t.asleep = true
+        try { t.web.stopLoading(); t.web.loadUrl("about:blank") } catch (_: Exception) { }
+        if (t === mediaSrc) mediaSrc = null
+    }
+
+    /** Sekmeden ayrıldıktan kısa süre sonra: medya çalmıyorsa uyut (çalan sekme asla ölmez). */
+    private fun sleepTabLater(t: BTab, delayMs: Long) {
+        handler.postDelayed({
+            if (t.asleep || tabs.none { it === t } || t === tabs.getOrNull(cur) || t === miniTab) return@postDelayed
+            try {
+                t.web.evaluateJavascript(PLAYING_PROBE_JS) { r ->
+                    if (r == "1" || r == "\"1\"") return@evaluateJavascript
+                    if (t.asleep || t === tabs.getOrNull(cur) || t === miniTab) return@evaluateJavascript
+                    sleepTab(t)
+                }
+            } catch (_: Exception) { }
+        }, delayMs)
+    }
+
+    /** Yerel medya oynatıcı devralınca: tüm web medyası durur, tüm sekmeler (açık olan dahil) uyutulur. */
+    private fun onPlayerTakeover() {
+        for (t in (tabs.toList() + listOfNotNull(miniTab))) {
+            try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { }
+        }
+        hasMedia = false
+        lastPlaying = false
+        try { abortFocusPause() } catch (_: Exception) { }
+        try { abandonMediaAudioFocus() } catch (_: Exception) { }
+        prevPlayingTabs.clear()
+        // MEDIA_PAUSE_JS sesi 300 ms'de kısıp durdurur; sonra sekmeleri boşalt
+        handler.postDelayed({
+            if (MediaPlayerActivity.owner == "player") {
+                for (t in tabs.toList()) sleepTab(t, includeCurrent = true)
+            }
+        }, 450L)
+    }
+
     private fun switchTo(i: Int) {
         if (i !in tabs.indices) return
         tabs.getOrNull(cur)?.let { capturePreview(it) }
         // WebView hiyerarşide kalsın (GONE) — medya diğer sekmede susmasın
         cur = i
         val t = tabs[i]
+        val wasAsleep = t.asleep
+        if (wasAsleep) { t.asleep = false; lastWakeAt = android.os.SystemClock.elapsedRealtime() }
         for (tab in tabs) {
             val w = tab.web
             if (w.parent == null) {
@@ -2256,6 +2377,8 @@ fun onMusicCatalog(raw: String?) {
         if (t.url.startsWith(ASSET_PREFIX)) {
             try { t.web.evaluateJavascript("if(window.__rotaTheme)window.__rotaTheme();", null) } catch (_: Exception) { }
         }
+        // Açık sekme dışındakiler 12 sn sonra (çalmıyorlarsa) RAM'den boşalır
+        for (o in tabs) if (o !== t && !o.asleep) sleepTabLater(o, 12_000L)
     }
 
     private fun closeTab(index: Int) {
@@ -2983,6 +3106,7 @@ fun onMusicCatalog(raw: String?) {
         }
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            if (tab.asleep) return
             val u = url ?: ""
             tab.bridge.trusted = u.startsWith(ASSET_PREFIX)
             tab.url = u
@@ -2993,12 +3117,14 @@ fun onMusicCatalog(raw: String?) {
         }
 
         override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+            if (tab.asleep) return
             if (url != null && !url.startsWith("data:")) tab.url = url
             if (miniTab != null && tab !== miniTab && url != null && url.contains("youtube.com/watch")) dismissMini()
             if (tabs.getOrNull(cur) === tab) syncUi()
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
+            if (tab.asleep) { tab.progress = 100; return }
             tab.progress = 100
             tab.networkRetryUsed = false
             if (url != null && url.startsWith(ASSET_PREFIX)) {
@@ -3099,7 +3225,7 @@ fun onMusicCatalog(raw: String?) {
             tab.progress = newProgress
             if (tabs.getOrNull(cur) === tab) setLoadProgress(newProgress)
         }
-        override fun onReceivedTitle(view: WebView?, title: String?) { if (!title.isNullOrBlank()) tab.title = title }
+        override fun onReceivedTitle(view: WebView?, title: String?) { if (!tab.asleep && !title.isNullOrBlank()) tab.title = title }
         override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
             if (!isUserGesture || resultMsg == null) return false
             if (prefs.adBlock) {
@@ -7410,6 +7536,7 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
     }
 
     private fun capturePreview(tab: BTab) {
+        if (tab.asleep) { loadPreview(tab); return }
         try {
             val w = tab.web.width; val h = tab.web.height
             if (w <= 0 || h <= 0) {
@@ -8315,6 +8442,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
                 "}catch(z){}}" +
                 "function rotaOnTrackEnd(){try{" +
                 "if(window.__userPause)return;" +
+                "if((window.__rotaAdAt&&Date.now()-window.__rotaAdAt<4000)||document.querySelector('.html5-video-player.ad-showing,.html5-video-player.ad-interrupting'))return;" +
                 "if(window.__rotaNextLock&&Date.now()-window.__rotaNextLock<4000)return;" +
                 "window.__rotaNextLock=Date.now();" +
                 "rotaClickNext();" +
@@ -8542,6 +8670,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "if(!v)return;\n" +
             "var ad=pl.classList.contains('ad-showing')||pl.classList.contains('ad-interrupting');\n" +
             "if(ad){\n" +
+            "window.__rotaAdAt=Date.now();\n" +
             "if(!saved)saved={rate:v.playbackRate||1,muted:v.muted};\n" +
             "v.muted=true;\n" +
             "if(v.playbackRate!==16){try{v.playbackRate=16;}catch(e){}}\n" +
@@ -8553,6 +8682,7 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
             "try{v.currentTime=v.duration-0.1;}catch(e){}\n" +
             "}\n" +
             "}else if(saved){\n" +
+            "window.__rotaAdAt=Date.now();\n" +
             "try{v.playbackRate=saved.rate>=16?1:saved.rate;}catch(e){}\n" +
             "v.muted=saved.muted;\n" +
             "saved=null;\n" +
@@ -8826,9 +8956,13 @@ if(isYt){
             "setInterval(capsOff,400);" +
             "})();"
 
+        const val PLAYING_PROBE_JS =
+            "(function(){try{var l=document.querySelectorAll('video,audio');for(var i=0;i<l.length;i++){if(!l[i].paused&&!l[i].ended)return 1;}}catch(e){}return 0;})();"
+
         const val YT_AUTO_NEXT_JS =
             "(function(){try{" +
             "if(window.__userPause)return;" +
+            "if((window.__rotaAdAt&&Date.now()-window.__rotaAdAt<4000)||document.querySelector('.html5-video-player.ad-showing,.html5-video-player.ad-interrupting'))return;" +
             "if(window.__rotaNextLock&&Date.now()-window.__rotaNextLock<3500)return;" +
             "window.__rotaNextLock=Date.now();" +
             "var sels=['ytmusic-player-bar #next-button','ytmusic-player-bar .next-button','#next-button','.next-button','.ytp-next-button','tp-yt-paper-icon-button#next-button'];" +
@@ -8843,6 +8977,7 @@ if(isYt){
             "(function(){try{" +
                 "if(window.__rotaDuck){document.querySelectorAll('video,audio').forEach(function(m){try{m.volume=0;}catch(x){}});return;}" +
                 "if(window.__userPause||window.__rotaFocusPaused)return;" +
+                "if((window.__rotaAdAt&&Date.now()-window.__rotaAdAt<4000)||document.querySelector('.html5-video-player.ad-showing,.html5-video-player.ad-interrupting'))return;" +
                 "function clickNext(){try{" +
                 "var sels=['ytmusic-player-bar #next-button','ytmusic-player-bar .next-button','#next-button','.next-button','.ytp-next-button','tp-yt-paper-icon-button#next-button'];" +
                 "for(var i=0;i<sels.length;i++){var n=document.querySelector(sels[i]);if(n){n.click();return true;}}" +
