@@ -3700,7 +3700,7 @@ fun onMusicCatalog(raw: String?) {
                 } catch (_: Exception) { "Dosya" }
             } else shownUrl(url)
         } else t.title)
-            .replace(Regex("\\s+"), " ")
+            .replace(Regex("\s+"), " ")
             .trim()
             .ifBlank { "Rota" }
             .take(40)
@@ -3792,38 +3792,9 @@ fun onMusicCatalog(raw: String?) {
         val low = u.lowercase()
         if (low.startsWith("http://") || low.startsWith("https://")) return false
         if (low.startsWith("file:") || low.startsWith("content:") || low.startsWith("about:")) return true
-        if (low.startsWith("/") && (low.endsWith(".html") || low.endsWith(".htm"))) return true
+        // WebView bazen path verir; .html yerel sayfa
         if (low.endsWith(".html") || low.endsWith(".htm") || ".html?" in low || ".htm?" in low) return true
         return false
-    }
-
-    /** Launcher logosu → Bitmap (MIUI harf monogramına düşmesin diye resource yerine bitmap) */
-    private fun appLauncherBitmap(size: Int = 432): Bitmap {
-        return try {
-            val d = packageManager.getApplicationIcon(packageName)
-            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            val c = android.graphics.Canvas(bmp)
-            d.setBounds(0, 0, size, size)
-            d.draw(c)
-            bmp
-        } catch (_: Exception) {
-            try {
-                val d = getDrawable(R.drawable.ic_launcher)
-                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-                val c = android.graphics.Canvas(bmp)
-                if (d != null) {
-                    d.setBounds(0, 0, size, size)
-                    d.draw(c)
-                } else {
-                    c.drawColor(0xFF4C8DFF.toInt())
-                }
-                bmp
-            } catch (_: Exception) {
-                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-                android.graphics.Canvas(bmp).drawColor(0xFF4C8DFF.toInt())
-                bmp
-            }
-        }
     }
 
     /** Yeni sekme “Hızlı erişim” kutularına site ekler (kalıcı). */
@@ -3882,26 +3853,17 @@ fun onMusicCatalog(raw: String?) {
 
 private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
         try {
-            // Yerel HTML: uygulama logosu bitmap (resource değil — MIUI harf üretmesin)
+            // Yerel HTML/dosya: her zaman uygulama logosu (G harfi değil)
             val forceApp = isLocalPinUrl(url)
-            val appBmp = try { appLauncherBitmap(432) } catch (_: Exception) { null }
-            val shaped: Bitmap? = when {
-                forceApp -> appBmp
-                icon != null -> try { toShortcutBitmap(icon) } catch (_: Exception) { appBmp }
-                else -> appBmp
+            val shaped = if (forceApp) null else icon?.let {
+                try { toShortcutBitmap(it) } catch (_: Exception) { null }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val sm = getSystemService(ShortcutManager::class.java)
                 if (sm != null && sm.isRequestPinShortcutSupported) {
                     val id = "rota_" + Integer.toHexString(url.hashCode())
-                    val ic = when {
-                        shaped != null -> try {
-                            Icon.createWithAdaptiveBitmap(shaped)
-                        } catch (_: Exception) {
-                            Icon.createWithBitmap(shaped)
-                        }
-                        else -> Icon.createWithResource(this, R.drawable.ic_launcher)
-                    }
+                    val ic = if (shaped != null) Icon.createWithAdaptiveBitmap(shaped)
+                    else Icon.createWithResource(this, R.drawable.ic_launcher)
                     val info = ShortcutInfo.Builder(this, id)
                         .setShortLabel(title.take(25))
                         .setLongLabel(title)
@@ -3919,10 +3881,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, launch)
                 add.putExtra(Intent.EXTRA_SHORTCUT_NAME, title.take(25))
                 if (shaped != null) {
-                    add.putExtra(
-                        Intent.EXTRA_SHORTCUT_ICON,
-                        Bitmap.createScaledBitmap(shaped, 192, 192, true)
-                    )
+                    add.putExtra(Intent.EXTRA_SHORTCUT_ICON, Bitmap.createScaledBitmap(shaped, 192, 192, true))
                 } else {
                     add.putExtra(
                         Intent.EXTRA_SHORTCUT_ICON_RESOURCE,
@@ -6139,55 +6098,31 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }.start()
     }
 
-    /** İndirilenler: "MP3" rozeti — renkler güncel temadan (tema değişince uyumlu) */
+    /** İndirilenler: ses dosyası için net "MP3" rozeti (kapak/nota yok — videoyla karışmasın) */
     private fun makeMp3LabelThumb(): android.graphics.Bitmap {
         val size = 256
         val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(bmp)
-        val bgColor = if (cField != 0) cField else 0xFF1A2338.toInt()
-        val acc = if (cAccent != 0) cAccent else 0xFF4C8DFF.toInt()
-        val acc2 = if (cAccent2 != 0) cAccent2 else acc
-        val textColor = if (cText != 0) cText else 0xFFEAF0FF.toInt()
-        // Zemin: tema field
+        // Koyu nötr zemin (mor gradient / nota yok)
         val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        bg.color = bgColor
+        bg.color = 0xFF1A2338.toInt()
         c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 40f, 40f, bg)
-        // Accent soft geçiş (temanın ana renkleri)
-        val ov = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        val a1 = android.graphics.Color.argb(
-            48,
-            android.graphics.Color.red(acc),
-            android.graphics.Color.green(acc),
-            android.graphics.Color.blue(acc)
-        )
-        val a2 = android.graphics.Color.argb(
-            72,
-            android.graphics.Color.red(acc2),
-            android.graphics.Color.green(acc2),
-            android.graphics.Color.blue(acc2)
-        )
-        ov.shader = android.graphics.LinearGradient(
-            0f, 0f, size.toFloat(), size.toFloat(),
-            a1, a2,
-            android.graphics.Shader.TileMode.CLAMP
-        )
-        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 40f, 40f, ov)
-        // Kenar: accent
+        // İnce çerçeve
         val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         stroke.style = android.graphics.Paint.Style.STROKE
-        stroke.strokeWidth = 4f
-        stroke.color = acc
-        c.drawRoundRect(5f, 5f, size - 5f, size - 5f, 36f, 36f, stroke)
-        // "MP3" — tema yazı rengi
+        stroke.strokeWidth = 3f
+        stroke.color = 0xFF3D4F73.toInt()
+        c.drawRoundRect(6f, 6f, size - 6f, size - 6f, 36f, 36f, stroke)
+        // "MP3" yazısı
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        p.color = textColor
+        p.color = 0xFFE8EEF9.toInt()
         p.textAlign = android.graphics.Paint.Align.CENTER
         p.typeface = android.graphics.Typeface.create(
             android.graphics.Typeface.DEFAULT,
             android.graphics.Typeface.BOLD
         )
         p.textSize = 72f
-        p.letterSpacing = 0.1f
+        p.letterSpacing = 0.08f
         val fm = p.fontMetrics
         c.drawText("MP3", size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, p)
         return bmp
