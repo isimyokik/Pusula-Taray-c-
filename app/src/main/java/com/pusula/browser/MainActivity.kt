@@ -798,7 +798,12 @@ private fun pollMedia() {
             ?: idxs.firstOrNull { has(res[it]) && cands[it] === mediaSrc }
             ?: idxs.firstOrNull { has(res[it]) }
         if (pick == null) { onMediaState(""); return }
+        val prevSrc = mediaSrc
         mediaSrc = cands[pick]
+        if (prevSrc !== mediaSrc) {
+            // YT ↔ YT Music: eski kapak bir tick bile kalmasın
+            lastArtUrl = ""
+        }
         onMediaState(res[pick])
     }
 
@@ -8957,7 +8962,7 @@ const val AUDIO_FOCUS_CLEAR_JS =
             "if(!art&&yt){try{var vid=new URLSearchParams(location.search).get('v');if(!vid){try{var pl=document.getElementById('movie_player');var vd=pl&&pl.getVideoData&&pl.getVideoData();if(vd&&vd.video_id)vid=vd.video_id;}catch(x){}}if(!vid){try{var cu=document.querySelector('link[rel=canonical],meta[property=\"og:url\"]');var cs=cu?(cu.href||cu.getAttribute('content')||''):'';var m3=cs.match(/[?&]v=([\\w-]{11})/);if(m3)vid=m3[1];}catch(x){}}if(!vid){var mm=location.pathname.match(/\\/(?:shorts|embed|live)\\/([\\w-]{11})/);if(mm)vid=mm[1];}if(vid&&/^[\\w-]{11}$/.test(vid))art='https://i.ytimg.com/vi/'+vid+'/mqdefault.jpg';}catch(x){}}" +
             "if(!art&&!yt){try{var mt=document.getElementsByTagName('meta');for(var q=0;q<mt.length;q++){var pp=mt[q].getAttribute('property')||mt[q].getAttribute('name')||'';if(pp==='og:image'||pp==='twitter:image'){var cc=mt[q].getAttribute('content')||'';if(ok(cc)){art=cc;break;}}}}catch(x){}}" +
             "if(art)art=fx(art);" +
-            "try{if(art){window.__rart={t:t,a:art};}else if(window.__rart&&window.__rart.t===t){art=window.__rart.a;}}catch(x){}" +
+            "try{if(art){window.__rart={t:t,a:art};}else if(window.__rart&&window.__rart.t===t){art=window.__rart.a;}else if(window.__rart&&window.__rart.t!==t){window.__rart=null;}}catch(x){}" +
             "return JSON.stringify({p:!v.paused&&!v.ended&&v.readyState>1,t:t,a:a,d:(isFinite(v.duration)?Math.round(v.duration*1000):-1),c:Math.round((v.currentTime||0)*1000),art:art||''});" +
             "}catch(e){return '';}})();"
         const val KEEP_MEDIA_PLAYING_JS =
