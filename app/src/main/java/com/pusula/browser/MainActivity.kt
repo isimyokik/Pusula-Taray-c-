@@ -3789,11 +3789,14 @@ fun onMusicCatalog(raw: String?) {
                 } catch (_: Exception) { cleanUrl }
             }
             if (t.length > 40) t = t.take(40)
-            // Logo yazma: artı ile aynı — newtab favicon() yükleyip pin.i kaydeder
+            // Yerel HTML/dosya: e="__app__" → newtab uygulama logosunu gösterir (harf/emoji yok)
+            // Web: e boş → newtab site favicon çeker (Ana ekran kısayolu ayrı, dokunulmaz)
+            val isLocal = cleanUrl.startsWith("file:", ignoreCase = true) ||
+                cleanUrl.startsWith("content:", ignoreCase = true)
             arr.put(JSONObject()
                 .put("t", t)
                 .put("u", cleanUrl)
-                .put("e", "")
+                .put("e", if (isLocal) "__app__" else "")
                 .put("g", (0..6).random()))
             val json = arr.toString()
             prefs.pins = json
