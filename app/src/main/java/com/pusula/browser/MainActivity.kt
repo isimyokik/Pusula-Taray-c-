@@ -1301,6 +1301,7 @@ fun onMusicCatalog(raw: String?) {
         bars.isAppearanceLightStatusBars = !dark
         bars.isAppearanceLightNavigationBars = !dark
 
+        normalizeLocalShortcutIntent(intent)
         startUrl = intent?.dataString
         startAppMode = intent?.getBooleanExtra("pusula_app", false) == true
         // content:// / file:// adresleri WebView'a doğrudan verilemez (ERR_ACCESS_DENIED): önce önbelleğe kopyalanıp açılır
@@ -1353,6 +1354,7 @@ fun onMusicCatalog(raw: String?) {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        normalizeLocalShortcutIntent(intent)
         setIntent(intent)
         try { if (handleIncomingViewIntent(intent)) return } catch (_: Exception) { }
         if (intent.getBooleanExtra("open_newtab", false) && intent.dataString.isNullOrBlank()) {
@@ -1363,6 +1365,19 @@ fun onMusicCatalog(raw: String?) {
         if (isLocalUriString(u)) return
         val app = intent.getBooleanExtra("pusula_app", false)
         openTab(u, appMode = app)
+    }
+
+    /** Ana ekran kısayolundan gelen yerel dosya isteğini normal VIEW intent'ine çevirir. */
+    private fun normalizeLocalShortcutIntent(i: Intent?) {
+        try {
+            if (i?.action == "com.pusula.browser.OPEN_LOCAL") {
+                val u = i.getStringExtra("pusula_local")
+                if (!u.isNullOrBlank()) {
+                    i.action = Intent.ACTION_VIEW
+                    i.data = Uri.parse(u)
+                }
+            }
+        } catch (_: Exception) { }
     }
 
     private fun isLocalUriString(s: String?): Boolean {
@@ -3705,8 +3720,14 @@ fun onMusicCatalog(raw: String?) {
             .ifBlank { "Rota" }
             .take(40)
         val launch = Intent(this, MainActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
-            data = Uri.parse(url)
+            if (local) {
+                // Yerel dosya: data/VIEW yok → MIUI dosya kısayoluna harf ikonu üretmesin
+                action = "com.pusula.browser.OPEN_LOCAL"
+                putExtra("pusula_local", url)
+            } else {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+            }
             putExtra("pusula_app", true)
             // Son uygulamalarda Rota'tan ayrı bir "uygulama" gibi görünsün
             flags = Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
@@ -4466,10 +4487,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 !audioOnly -> {
                     val prog = bestProgressive()
-                    fun mp4V(h: Int): String? =
-                        links.firstOrNull { it.first == "V:$h" && isMp4Avc(it.second) }?.second
-                    // 1080 → 720 → 480 → 360 (yalnızca H.264; hepsi birleştirme)
-                    val cands = listOf(1080, 720, 480, 360).mapNotNull { mp4V(it) }
+                    // 1080 → 720 → 480 → 360 → 240 (önce H.264; hepsi birleştirme)
+                    val cands = videoCandidates(links)
                     when {
                         audio != null && cands.isNotEmpty() ->
                             downloadAndMerge(cands[0], audio, "$base.mp4", prog, id, cands.drop(1))
@@ -4478,7 +4497,10 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                             cacheDownloadThumb("$base.mp4", id, lastArtUrl.ifBlank { null })
                             startDownload(prog, null, null, "video/mp4", "$base.mp4")
                         }
-                        else -> toast("İndirme linki alınamadı")
+                        else -> toast(
+                            "İndirme linki alınamadı (" +
+                                links.joinToString(",") { it.first.take(8) + "#" + itagOf(it.second) }.take(160) + ")"
+                        )
                     }
                 }
                 else -> toast("İndirme linki alınamadı")
@@ -4918,9 +4940,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     advance()
                 }
                 !playlistAudioOnly -> {
-                    val cands = listOf(1080, 720, 480, 360).mapNotNull { h ->
-                        links.firstOrNull { it.first == "V:$h" && isMp4Avc(it.second) }?.second
-                    }
+                    val cands = videoCandidates(links)
                     when {
                         cands.isNotEmpty() && audio != null -> {
                             downloadAndMerge(cands[0], audio, "$base.mp4", prog, id, cands.drop(1))
@@ -5423,7 +5443,22 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
     /** Yalnızca MediaMuxer'ın güvenle birleştirebildiği H.264 (AVC) mp4 video itag'leri */
     private fun isMp4Avc(url: String): Boolean {
         val itag = Regex("""[?&]itag=(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
-        return itag in listOf(133, 134, 135, 136, 137, 160, 298, 299)
+        if (itag in listOf(133, 134, 135, 136, 137, 160, 298, 299)) return true
+        val u = url.lowercase()
+        val av1 = itag in 394..402 || itag in 694..702 || itag == 571
+        return !av1 && (u.contains("mime=video%2fmp4") || u.contains("mime=video/mp4")) && !u.contains("av01")
+    }
+
+    /** Birleştirilecek video adayları: önce H.264 (yüksekten alta 1080→240), sonra diğer kodekler (son çare). */
+    private fun videoCandidates(links: List<Pair<String, String>>): List<String> {
+        val vs = links.mapNotNull { (lab, u) ->
+            if (!lab.startsWith("V:")) return@mapNotNull null
+            val h = lab.removePrefix("V:").toIntOrNull() ?: return@mapNotNull null
+            if (h < 240 || h > 1080) null else Triple(h, u, isMp4Avc(u))
+        }
+        val avc = vs.filter { it.third }.sortedByDescending { it.first }.map { it.second }
+        val other = vs.filter { !it.third }.sortedByDescending { it.first }.map { it.second }
+        return (avc + other).distinct()
     }
 
     private fun downloadAndMerge(
