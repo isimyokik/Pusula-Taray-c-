@@ -192,15 +192,27 @@ class PlaybackService : Service() {
                 val nd = intent.getLongExtra("dur", -2L)
                 if (nd != -2L) duration = nd
                 val nu = intent.getStringExtra("art") ?: ""
-                if (nu.isBlank()) {
-                    // Boş art: kapağı ASLA silme (saniye başı update kapağı yok ediyordu)
-                    // Yeni parça + kapak yoksa eski bitmap kalsın; yükleme yarışı olmasın
-                } else if (nu == artUrl && artBmp != null) {
-                    // Aynı kapak zaten yüklü — tekrar indirme / titreme yok
-                } else if (nu != artUrl) {
-                    artUrl = nu
-                    loadArt(nu)
+                if (titleChanged) {
+                    // Parça / kaynak değişti (YT ↔ YT Music): eski kapağı tutma
+                    if (nu.isNotBlank()) {
+                        if (nu != artUrl || artBmp == null) {
+                            artUrl = nu
+                            artBmp = null
+                            loadArt(nu)
+                        }
+                    } else {
+                        artUrl = ""
+                        artBmp = null
+                    }
+                } else if (nu.isNotBlank()) {
+                    if (nu == artUrl && artBmp != null) {
+                        // aynı kapak
+                    } else if (nu != artUrl || artBmp == null) {
+                        artUrl = nu
+                        loadArt(nu)
+                    }
                 }
+                // nu boş ve başlık aynı: konum tick — kapağı koru
             }
             ACTION_PLAY, ACTION_TOGGLE, ACTION_PAUSE, ACTION_PREVIOUS, ACTION_NEXT -> send(intent.action!!)
             ACTION_CLOSE -> {
