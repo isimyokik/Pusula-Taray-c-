@@ -172,7 +172,9 @@ class MainActivity : AppCompatActivity() {
         @Volatile var paused: Boolean = false,
         @Volatile var cancelled: Boolean = false,
         @Volatile var running: Boolean = false,
-        var tmpFile: java.io.File? = null
+        var tmpFile: java.io.File? = null,
+        /** Video+ses birleştirme indirmesi: duraklat/devam yok, yalnızca iptal */
+        val merge: Boolean = false
     )
     private val activeDls = java.util.concurrent.CopyOnWriteArrayList<ActiveDl>()
     private var activeDlSeq = 1L
@@ -4409,6 +4411,20 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     ?: links.firstOrNull {
                         it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h
                     }?.second
+            // Aynı yükseklikte birden çok akış varsa H.264 (birleştirilebilen) olanı seç; VP9/AV1 MP4'e birleşmez
+            fun adaptiveAvc(h: Int): String? {
+                val avc = when (h) {
+                    1080 -> listOf(137, 299)
+                    720 -> listOf(136, 298)
+                    480 -> listOf(135)
+                    360 -> listOf(134)
+                    else -> emptyList()
+                }
+                val cands = links.filter { it.first == "V:$h" }
+                return cands.firstOrNull { itagOf(it.second) in avc }?.second
+                    ?: cands.firstOrNull()?.second
+                    ?: adaptive(h)
+            }
             fun bestProgressive(): String? {
                 // 1) itag 22 = 720p sesli
                 links.firstOrNull {
@@ -4436,6 +4452,14 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 !audioOnly -> {
                     val prog = bestProgressive()
                     when {
+                        // 1080p + ses: 720p ile aynı hızlı yol (paralel parça indirme + birleştirme).
+                        // Birleşmezse sırayla 720 → 480 → 360, en sonda sesli progressive.
+                        adaptiveAvc(1080) != null && audio != null -> {
+                            val progOk = prog?.takeIf { !isVideoOnly("", it) }
+                            val alts: List<String> = if (progOk != null && itagOf(progOk) == 22) emptyList<String>()
+                                else listOf(720, 480, 360).mapNotNull { adaptiveAvc(it) }
+                            downloadAndMerge(adaptiveAvc(1080)!!, audio, "$base.mp4", progOk, id, alts)
+                        }
                         // Sadece gerçekten sesli progressive — V:720 asla tek başına
                         prog != null && !isVideoOnly("", prog) -> {
                             toast("İndiriliyor…")
@@ -4444,19 +4468,19 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                         }
                         // Adaptive video + ses birleştir (sessiz indirme olmasın)
                         adaptive(720) != null && audio != null ->
-                            downloadAndMerge(adaptive(720)!!, audio, "$base.mp4", prog)
+                            downloadAndMerge(adaptive(720)!!, audio, "$base.mp4", prog, id)
                         adaptive(1080) != null && audio != null ->
-                            downloadAndMerge(adaptive(1080)!!, audio, "$base.mp4", prog)
+                            downloadAndMerge(adaptive(1080)!!, audio, "$base.mp4", prog, id)
                         adaptive(480) != null && audio != null ->
-                            downloadAndMerge(adaptive(480)!!, audio, "$base.mp4", prog)
+                            downloadAndMerge(adaptive(480)!!, audio, "$base.mp4", prog, id)
                         adaptive(360) != null && audio != null ->
-                            downloadAndMerge(adaptive(360)!!, audio, "$base.mp4", prog)
+                            downloadAndMerge(adaptive(360)!!, audio, "$base.mp4", prog, id)
                         // Son çare: herhangi V:* + ses
                         audio != null -> {
                             val anyV = links.firstOrNull {
                                 it.first.startsWith("V:") || isVideoOnly(it.first, it.second)
                             }?.second
-                            if (anyV != null) downloadAndMerge(anyV, audio, "$base.mp4", prog)
+                            if (anyV != null) downloadAndMerge(anyV, audio, "$base.mp4", prog, id)
                             else toast("İndirme linki alınamadı")
                         }
                         else -> toast("İndirme linki alınamadı")
@@ -4903,11 +4927,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     val v720 = adaptive(720)
                     when {
                         v1080 != null && audio != null -> {
-                            downloadAndMerge(v1080, audio, "$base.mp4")
+                            downloadAndMerge(v1080, audio, "$base.mp4", null, id)
                             advance()
                         }
                         v720 != null && audio != null -> {
-                            downloadAndMerge(v720, audio, "$base.mp4")
+                            downloadAndMerge(v720, audio, "$base.mp4", null, id)
                             advance()
                         }
                         prog != null -> {
@@ -5412,36 +5436,111 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         videoUrl: String,
         audioUrl: String,
         outName: String,
-        progressiveFallback: String? = null
+        progressiveFallback: String? = null,
+        videoId: String? = null,
+        altVideos: List<String> = emptyList()
     ) {
-        toast("Birleştirerek indiriliyor…")
+        // Listede + bildirimde görünsün: yüzde ve MB (video + ses toplamı)
+        val dl = ActiveDl(id = activeDlSeq++, name = outName, url = videoUrl, kind = "MP4", merge = true)
+        val vDl = ActiveDl(id = activeDlSeq++, name = outName, url = videoUrl)
+        val aDl = ActiveDl(id = activeDlSeq++, name = outName, url = audioUrl)
+        dl.running = true
+        activeDls.add(0, dl)
+        toast("MP4 indiriliyor: $outName")
+        // Kapak: birleştirilen dosyalarda da olsun (indirme başlar başlamaz kaydet)
+        val thumbId = videoId?.takeIf { it.length >= 8 }
+            ?: Regex("""/vi/([\w-]{11})/""").find(lastArtUrl)?.groupValues?.getOrNull(1)
+        val art = lastArtUrl.ifBlank { null }
+        cacheDownloadThumb(outName, thumbId, art)
+        notifyDlProgress(dl)
+        downloadsDialogRefresh?.invoke()
+
         Thread {
+            val dir = cacheDir
+            val stamp = System.currentTimeMillis()
+            val vFile = java.io.File(dir, "v_$stamp.mp4")
+            val aFile = java.io.File(dir, "a_$stamp.m4a")
+            val oFile = java.io.File(dir, "m_$stamp.mp4")
+            fun cleanup() {
+                try { vFile.delete() } catch (_: Exception) { }
+                try { aFile.delete() } catch (_: Exception) { }
+                try { oFile.delete() } catch (_: Exception) { }
+            }
+            fun failAndFallback(msg: String) {
+                cleanup()
+                dl.running = false
+                dl.failed = true
+                handler.post {
+                    notifyDlProgress(dl)
+                    activeDls.remove(dl)
+                    refreshDownloadsDialogFull()
+                    if (altVideos.isNotEmpty()) {
+                        // Bu kalite olmadı → bir alt kaliteyi (1080 → 720 → 480 → 360) dene
+                        toast("Bu kalite birleşmedi, bir alt kalite deneniyor")
+                        downloadAndMerge(altVideos.first(), audioUrl, outName, progressiveFallback, videoId, altVideos.drop(1))
+                    } else if (!progressiveFallback.isNullOrBlank()) {
+                        toast("Birleştirme iptal, sesli MP4 deneniyor")
+                        startDownload(progressiveFallback, null, null, "video/mp4", outName)
+                    } else toast(msg)
+                }
+            }
             try {
-                val dir = cacheDir
-                val vFile = java.io.File(dir, "v_${System.currentTimeMillis()}.mp4")
-                val aFile = java.io.File(dir, "a_${System.currentTimeMillis()}.m4a")
-                val oFile = java.io.File(dir, "m_${System.currentTimeMillis()}.mp4")
                 val vOk = java.util.concurrent.atomic.AtomicBoolean(false)
                 val aOk = java.util.concurrent.atomic.AtomicBoolean(false)
+                val vRec = java.util.concurrent.atomic.AtomicLong(0L)
+                val aRec = java.util.concurrent.atomic.AtomicLong(0L)
+                val vTot = java.util.concurrent.atomic.AtomicLong(0L)
+                val aTot = java.util.concurrent.atomic.AtomicLong(0L)
+                val lastUi = java.util.concurrent.atomic.AtomicLong(0L)
+                fun report() {
+                    if (dl.cancelled) { vDl.cancelled = true; aDl.cancelled = true }
+                    dl.received = vRec.get() + aRec.get()
+                    if (vTot.get() > 0 && aTot.get() > 0) dl.total = vTot.get() + aTot.get()
+                    val now = System.currentTimeMillis()
+                    val prev = lastUi.get()
+                    if (now - prev > 350 && lastUi.compareAndSet(prev, now)) {
+                        handler.post {
+                            notifyDlProgress(dl)
+                            downloadsDialogRefresh?.invoke()
+                        }
+                    }
+                }
                 val latch = java.util.concurrent.CountDownLatch(2)
                 Thread {
-                    try { vOk.set(httpToFile(videoUrl, vFile) == "OK") } catch (_: Exception) { }
+                    try {
+                        vOk.set(httpToFile(videoUrl, vFile, vDl) { r, tt ->
+                            vRec.set(r); if (tt > 0) vTot.set(tt); report()
+                        } == "OK")
+                    } catch (_: Exception) { }
                     latch.countDown()
                 }.start()
                 Thread {
-                    try { aOk.set(httpToFile(audioUrl, aFile) == "OK") } catch (_: Exception) { }
+                    try {
+                        aOk.set(httpToFile(audioUrl, aFile, aDl) { r, tt ->
+                            aRec.set(r); if (tt > 0) aTot.set(tt); report()
+                        } == "OK")
+                    } catch (_: Exception) { }
                     latch.countDown()
                 }.start()
-                try { latch.await(4, java.util.concurrent.TimeUnit.MINUTES) } catch (_: Exception) { }
-                if (!vOk.get() || !aOk.get() || vFile.length() < 2048 || aFile.length() < 1024) {
-                    vFile.delete(); aFile.delete()
+                try { latch.await(10, java.util.concurrent.TimeUnit.MINUTES) } catch (_: Exception) { }
+                if (dl.cancelled) {
+                    cleanup()
+                    dl.running = false
                     handler.post {
-                        if (!progressiveFallback.isNullOrBlank()) {
-                            toast("Birleştirme iptal, sesli MP4 deneniyor")
-                            startDownload(progressiveFallback, null, null, "video/mp4", outName)
-                        } else toast("İndirme başarısız")
+                        activeDls.remove(dl)
+                        refreshDownloadsDialogFull()
                     }
                     return@Thread
+                }
+                if (!vOk.get() || !aOk.get() || vFile.length() < 2048 || aFile.length() < 1024) {
+                    failAndFallback("İndirme başarısız")
+                    return@Thread
+                }
+                // İndirme bitti, birleştiriliyor: çubuk %100'de dursun
+                if (dl.total > 0) dl.received = dl.total
+                handler.post {
+                    notifyDlProgress(dl)
+                    downloadsDialogRefresh?.invoke()
                 }
                 val ok = muxAv(vFile.absolutePath, aFile.absolutePath, oFile.absolutePath)
                 vFile.delete(); aFile.delete()
@@ -5458,13 +5557,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     } catch (_: Exception) { hasAud = false }
                 }
                 if (!ok || !hasAud) {
-                    oFile.delete()
-                    handler.post {
-                        if (!progressiveFallback.isNullOrBlank()) {
-                            toast("Ses birleşmedi, sesli MP4 indiriliyor")
-                            startDownload(progressiveFallback, null, null, "video/mp4", outName)
-                        } else toast("Birleştirme başarısız (ses yok)")
-                    }
+                    failAndFallback("Birleştirme başarısız (ses yok)")
                     return@Thread
                 }
                 val resolver = contentResolver
@@ -5493,16 +5586,22 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 oFile.delete()
                 val path = rotaPublicDir("video/mp4", outName).absolutePath + "/" + outName
+                dl.done = true
+                dl.running = false
                 handler.post {
                     prefs.addDownload(outName, videoUrl, path, "video/mp4")
+                    // Kapak henüz inmediyse tekrar dene (ağ gecikmesi / ilk deneme başarısızsa)
+                    if (!thumbFileForTitle(outName).let { it.exists() && it.length() > 1000 }) {
+                        try { thumbFileForTitle(outName).delete() } catch (_: Exception) { }
+                        cacheDownloadThumb(outName, thumbId, art)
+                    }
+                    notifyDlProgress(dl)
+                    activeDls.remove(dl)
                     toast("MP4 indirildi: $outName")
+                    refreshDownloadsDialogFull()
                 }
             } catch (_: Exception) {
-                handler.post {
-                    if (!progressiveFallback.isNullOrBlank()) {
-                        startDownload(progressiveFallback, null, null, "video/mp4", outName)
-                    } else toast("İndirme hatası")
-                }
+                failAndFallback("İndirme hatası")
             }
         }.start()
     }
@@ -5820,7 +5919,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                         .setOngoing(false)
                 }
                 dl.total > 0 -> {
-                    b.setContentText("%$pct")
+                    b.setContentText("%$pct · ${dl.received / (1024 * 1024)} / ${dl.total / (1024 * 1024)} MB")
                         .setProgress(100, pct, false)
                 }
                 else -> {
@@ -6319,29 +6418,31 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 val actions = LinearLayout(this)
                 actions.orientation = LinearLayout.HORIZONTAL
                 actions.gravity = Gravity.END
-                if (dl.paused || dl.failed) {
-                    actions.addView(
-                        pillBtn("Devam et", cAccent, Color.WHITE) {
-                            dl.failed = false
-                            dl.paused = false
-                            runActiveDownload(dl, null)
-                            paintActive()
-                        },
-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                            marginEnd = dp(8)
-                        }
-                    )
-                } else {
-                    actions.addView(
-                        pillBtn("Duraklat", cField, cText) {
-                            dl.paused = true
-                            toast("Duraklatılıyor…")
-                            paintActive()
-                        },
-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                            marginEnd = dp(8)
-                        }
-                    )
+                if (!dl.merge) {
+                    if (dl.paused || dl.failed) {
+                        actions.addView(
+                            pillBtn("Devam et", cAccent, Color.WHITE) {
+                                dl.failed = false
+                                dl.paused = false
+                                runActiveDownload(dl, null)
+                                paintActive()
+                            },
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                                marginEnd = dp(8)
+                            }
+                        )
+                    } else {
+                        actions.addView(
+                            pillBtn("Duraklat", cField, cText) {
+                                dl.paused = true
+                                toast("Duraklatılıyor…")
+                                paintActive()
+                            },
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                                marginEnd = dp(8)
+                            }
+                        )
+                    }
                 }
                 actions.addView(
                     pillBtn("İptal", cField, cAccent) {
