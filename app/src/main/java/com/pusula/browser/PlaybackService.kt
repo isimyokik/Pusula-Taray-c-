@@ -220,23 +220,38 @@ class PlaybackService : Service() {
         Thread {
             for (attempt in 0..1) {
             try {
-                val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                c.connectTimeout = 5000
-                c.readTimeout = 5000
-                c.setRequestProperty("User-Agent", "Mozilla/5.0")
-                c.connect()
-                var bmp = android.graphics.BitmapFactory.decodeStream(c.inputStream)
-                c.disconnect()
+                var bmp: android.graphics.Bitmap? = null
+                val u = url.trim()
+                if (u.startsWith("/") || u.startsWith("file:")) {
+                    // Yerel kapak (indirilenler / gömülü albüm kapağı)
+                    val path = if (u.startsWith("file:")) {
+                        try { android.net.Uri.parse(u).path ?: u.removePrefix("file://") } catch (_: Exception) { u.removePrefix("file://") }
+                    } else u
+                    bmp = android.graphics.BitmapFactory.decodeFile(path)
+                } else if (u.startsWith("content:")) {
+                    try {
+                        contentResolver.openInputStream(android.net.Uri.parse(u))?.use {
+                            bmp = android.graphics.BitmapFactory.decodeStream(it)
+                        }
+                    } catch (_: Exception) { }
+                } else {
+                    val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                    c.connectTimeout = 5000
+                    c.readTimeout = 5000
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0")
+                    c.connect()
+                    bmp = android.graphics.BitmapFactory.decodeStream(c.inputStream)
+                    c.disconnect()
+                }
                 if (bmp != null) {
-                    // Ortadan kare kırp (16:9 küçük resimlerde kapak ortada olur), en fazla 512px
-                    val side = Math.min(bmp.width, bmp.height)
-                    var sq = android.graphics.Bitmap.createBitmap(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side)
+                    // Ortadan kare kırp, en fazla 512px
+                    val side = Math.min(bmp!!.width, bmp!!.height)
+                    var sq = android.graphics.Bitmap.createBitmap(bmp!!, (bmp!!.width - side) / 2, (bmp!!.height - side) / 2, side, side)
                     if (side > 512) sq = android.graphics.Bitmap.createScaledBitmap(sq, 512, 512, true)
                     bmp = sq
                 }
                 if (bmp != null && artUrl == url) {
                     artBmp = bmp
-                    // Ana thread'de bildirimi yenile
                     android.os.Handler(android.os.Looper.getMainLooper()).post { refresh() }
                 }
                 if (bmp != null) break
