@@ -193,8 +193,10 @@ class PlaybackService : Service() {
                 if (nd != -2L) duration = nd
                 val nu = intent.getStringExtra("art") ?: ""
                 if (nu.isBlank()) {
-                    // Boş gelirse (arka plana atınca olabiliyor) eski kapağı koru; yalnızca parça değiştiyse temizle
-                    if (titleChanged) { artUrl = ""; artBmp = null }
+                    // Boş art: kapağı ASLA silme (saniye başı update kapağı yok ediyordu)
+                    // Yeni parça + kapak yoksa eski bitmap kalsın; yükleme yarışı olmasın
+                } else if (nu == artUrl && artBmp != null) {
+                    // Aynı kapak zaten yüklü — tekrar indirme / titreme yok
                 } else if (nu != artUrl) {
                     artUrl = nu
                     loadArt(nu)
@@ -217,9 +219,13 @@ class PlaybackService : Service() {
         Notification.Action.Builder(Icon.createWithResource(this, res), label, p).build()
 
     private fun loadArt(url: String) {
+        if (url.isBlank()) return
+        // Zaten bu kapak yüklüyse tekrar işe girme
+        if (url == artUrl && artBmp != null) return
         Thread {
             for (attempt in 0..1) {
             try {
+                if (artUrl != url) return@Thread
                 var bmp: android.graphics.Bitmap? = null
                 val u = url.trim()
                 if (u.startsWith("/") || u.startsWith("file:")) {
