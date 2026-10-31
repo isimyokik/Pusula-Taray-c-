@@ -33,9 +33,14 @@ jobs:
             gradle assembleDebug --no-daemon --stacktrace
           fi
 
+      - name: Collect APK flat
+        run: |
+          mkdir -p artifact
+          find app/build/outputs/apk -name "*.apk" -exec cp -f {} artifact/ \;
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: app/build/outputs/apk/**/*.apk
+          path: artifact/*.apk
           if-no-files-found: warn
