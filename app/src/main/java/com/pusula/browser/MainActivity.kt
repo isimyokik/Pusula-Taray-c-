@@ -3792,9 +3792,38 @@ fun onMusicCatalog(raw: String?) {
         val low = u.lowercase()
         if (low.startsWith("http://") || low.startsWith("https://")) return false
         if (low.startsWith("file:") || low.startsWith("content:") || low.startsWith("about:")) return true
-        // WebView bazen path verir; .html yerel sayfa
+        if (low.startsWith("/") && (low.endsWith(".html") || low.endsWith(".htm"))) return true
         if (low.endsWith(".html") || low.endsWith(".htm") || ".html?" in low || ".htm?" in low) return true
         return false
+    }
+
+    /** Launcher logosu → Bitmap (MIUI harf monogramına düşmesin diye resource yerine bitmap) */
+    private fun appLauncherBitmap(size: Int = 432): Bitmap {
+        return try {
+            val d = packageManager.getApplicationIcon(packageName)
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val c = android.graphics.Canvas(bmp)
+            d.setBounds(0, 0, size, size)
+            d.draw(c)
+            bmp
+        } catch (_: Exception) {
+            try {
+                val d = getDrawable(R.drawable.ic_launcher)
+                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val c = android.graphics.Canvas(bmp)
+                if (d != null) {
+                    d.setBounds(0, 0, size, size)
+                    d.draw(c)
+                } else {
+                    c.drawColor(0xFF4C8DFF.toInt())
+                }
+                bmp
+            } catch (_: Exception) {
+                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                android.graphics.Canvas(bmp).drawColor(0xFF4C8DFF.toInt())
+                bmp
+            }
+        }
     }
 
     /** Yeni sekme “Hızlı erişim” kutularına site ekler (kalıcı). */
@@ -3853,17 +3882,26 @@ fun onMusicCatalog(raw: String?) {
 
 private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
         try {
-            // Yerel HTML/dosya: her zaman uygulama logosu (G harfi değil)
+            // Yerel HTML: uygulama logosu bitmap (resource değil — MIUI harf üretmesin)
             val forceApp = isLocalPinUrl(url)
-            val shaped = if (forceApp) null else icon?.let {
-                try { toShortcutBitmap(it) } catch (_: Exception) { null }
+            val appBmp = try { appLauncherBitmap(432) } catch (_: Exception) { null }
+            val shaped: Bitmap? = when {
+                forceApp -> appBmp
+                icon != null -> try { toShortcutBitmap(icon) } catch (_: Exception) { appBmp }
+                else -> appBmp
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val sm = getSystemService(ShortcutManager::class.java)
                 if (sm != null && sm.isRequestPinShortcutSupported) {
                     val id = "rota_" + Integer.toHexString(url.hashCode())
-                    val ic = if (shaped != null) Icon.createWithAdaptiveBitmap(shaped)
-                    else Icon.createWithResource(this, R.drawable.ic_launcher)
+                    val ic = when {
+                        shaped != null -> try {
+                            Icon.createWithAdaptiveBitmap(shaped)
+                        } catch (_: Exception) {
+                            Icon.createWithBitmap(shaped)
+                        }
+                        else -> Icon.createWithResource(this, R.drawable.ic_launcher)
+                    }
                     val info = ShortcutInfo.Builder(this, id)
                         .setShortLabel(title.take(25))
                         .setLongLabel(title)
@@ -3881,7 +3919,10 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, launch)
                 add.putExtra(Intent.EXTRA_SHORTCUT_NAME, title.take(25))
                 if (shaped != null) {
-                    add.putExtra(Intent.EXTRA_SHORTCUT_ICON, Bitmap.createScaledBitmap(shaped, 192, 192, true))
+                    add.putExtra(
+                        Intent.EXTRA_SHORTCUT_ICON,
+                        Bitmap.createScaledBitmap(shaped, 192, 192, true)
+                    )
                 } else {
                     add.putExtra(
                         Intent.EXTRA_SHORTCUT_ICON_RESOURCE,
