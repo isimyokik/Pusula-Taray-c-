@@ -3684,23 +3684,13 @@ fun onMusicCatalog(raw: String?) {
 
     private fun addCurrentToHomeScreen() {
         val t = tabs.getOrNull(cur) ?: return
-        val url = (t.web.url?.takeIf {
-            it.isNotBlank() && !it.equals("about:blank", true)
-        } ?: t.url).trim()
-        val local = isLocalPinUrl(url)
-        if (!url.startsWith("http") && !local) {
+        val url = t.url
+        if (!url.startsWith("http")) {
             toast("Önce bir sayfa aç")
             return
         }
-        val title = (if (t.title.isBlank()) {
-            if (local) {
-                try {
-                    val n = Uri.parse(url).lastPathSegment ?: "Dosya"
-                    n.substringBeforeLast('.').ifBlank { n }
-                } catch (_: Exception) { "Dosya" }
-            } else shownUrl(url)
-        } else t.title)
-            .replace(Regex("\s+"), " ")
+        val title = (if (t.title.isBlank()) shownUrl(url) else t.title)
+            .replace(Regex("\\s+"), " ")
             .trim()
             .ifBlank { "Rota" }
             .take(40)
@@ -3712,11 +3702,6 @@ fun onMusicCatalog(raw: String?) {
             flags = Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
                 Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
                 Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        // Yerel HTML: harf favicon YOK → uygulama logosu (ekrandaki G sorunu)
-        if (local) {
-            pinShortcut(url, title, launch, null)
-            return
         }
         val iconJs = """(function(){var best='',bs=-1;var ls=document.querySelectorAll('link[rel~="apple-touch-icon"],link[rel~="apple-touch-icon-precomposed"],link[rel~="icon"],link[rel="shortcut icon"]');for(var i=0;i<ls.length;i++){var l=ls[i];var sz=parseInt((l.getAttribute('sizes')||'0').split('x')[0],10)||0;if(/apple/.test(l.rel||''))sz+=1000;if(l.href&&sz>=bs){bs=sz;best=l.href;}}return best;})();"""
         try {
@@ -3853,17 +3838,12 @@ fun onMusicCatalog(raw: String?) {
 
 private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
         try {
-            // Yerel HTML/dosya: her zaman uygulama logosu (G harfi değil)
-            val forceApp = isLocalPinUrl(url)
-            val shaped = if (forceApp) null else icon?.let {
-                try { toShortcutBitmap(it) } catch (_: Exception) { null }
-            }
+            val shaped = icon?.let { try { toShortcutBitmap(it) } catch (_: Exception) { null } }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val sm = getSystemService(ShortcutManager::class.java)
                 if (sm != null && sm.isRequestPinShortcutSupported) {
                     val id = "rota_" + Integer.toHexString(url.hashCode())
-                    val ic = if (shaped != null) Icon.createWithAdaptiveBitmap(shaped)
-                    else Icon.createWithResource(this, R.drawable.ic_launcher)
+                    val ic = if (shaped != null) Icon.createWithAdaptiveBitmap(shaped) else Icon.createWithResource(this, R.drawable.ic_launcher)
                     val info = ShortcutInfo.Builder(this, id)
                         .setShortLabel(title.take(25))
                         .setLongLabel(title)
@@ -3901,8 +3881,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         val t = tabs.getOrNull(cur) ?: return
         val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
         val onYt = (t.url.contains("youtube.com") || t.url.contains("youtu.be")) && !t.url.contains("music.youtube.com")
-        val canHome = t.url.startsWith("http") ||
-            isLocalPinUrl(t.url) || isLocalPinUrl(t.web.url ?: "")
+        val canHome = t.url.startsWith("http")
         // Zaten açıksa kapat (gesture tekrar)
         if (menuDialog?.isShowing == true) {
             try { menuDialog?.dismiss() } catch (_: Exception) {}
