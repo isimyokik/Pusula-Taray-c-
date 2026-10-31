@@ -70,6 +70,8 @@ class MediaPlayerActivity : AppCompatActivity() {
     private var isAudio = false
     private var controlRegistered = false
     private var pipEntering = false
+    private var currentArtPath: String = ""
+    private val artCache = HashMap<String, String>()
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -254,6 +256,8 @@ class MediaPlayerActivity : AppCompatActivity() {
         p.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 titleView.text = mediaItem?.mediaMetadata?.title ?: ""
+                currentArtPath = ""
+                refreshArtForCurrent()
                 pushNotif()
                 updatePipActions()
             }
@@ -297,6 +301,7 @@ class MediaPlayerActivity : AppCompatActivity() {
         p.playWhenReady = true
         playerView.player = p
         player = p
+        refreshArtForCurrent()
         titleView.text = titles.getOrElse(start) { File(paths[start]).name }
 
         val gd = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
@@ -433,6 +438,53 @@ class MediaPlayerActivity : AppCompatActivity() {
         } catch (_: Exception) { }
     }
 
+
+    /** Dosyadan gömülü kapak çıkar → cache dosyası yolu */
+    private fun artForPath(mediaPath: String): String {
+        artCache[mediaPath]?.let { if (File(it).exists()) return it }
+        return try {
+            val r = android.media.MediaMetadataRetriever()
+            r.setDataSource(mediaPath)
+            val bytes = r.embeddedPicture
+            r.release()
+            if (bytes == null || bytes.isEmpty()) return ""
+            val dir = File(cacheDir, "media_art").apply { mkdirs() }
+            val out = File(dir, "art_" + mediaPath.hashCode().toUInt().toString(16) + ".jpg")
+            if (!out.exists() || out.length() == 0L) {
+                out.outputStream().use { it.write(bytes) }
+            }
+            val p = out.absolutePath
+            artCache[mediaPath] = p
+            p
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun refreshArtForCurrent() {
+        val p = player ?: return
+        val idx = p.currentMediaItemIndex
+        val path = try {
+            p.currentMediaItem?.localConfiguration?.uri?.path
+                ?: p.currentMediaItem?.localConfiguration?.uri?.toString()
+        } catch (_: Exception) { null }
+        // EXTRA paths üzerinden de dene
+        val filePath = when {
+            path != null && path.startsWith("/") && File(path).exists() -> path
+            else -> {
+                val uri = p.currentMediaItem?.localConfiguration?.uri
+                val s = uri?.toString() ?: ""
+                when {
+                    s.startsWith("file:") -> {
+                        try { Uri.parse(s).path } catch (_: Exception) { null }
+                    }
+                    else -> null
+                }
+            }
+        }
+        currentArtPath = if (!filePath.isNullOrBlank()) artForPath(filePath) else ""
+    }
+
     private fun pushNotif() {
         val p = player ?: return
         val title = (p.currentMediaItem?.mediaMetadata?.title?.toString()
@@ -440,6 +492,7 @@ class MediaPlayerActivity : AppCompatActivity() {
             ?: "Rota").ifBlank { "Rota" }
         val pos = p.currentPosition.coerceAtLeast(0L)
         val dur = if (p.duration != C.TIME_UNSET && p.duration > 0) p.duration else -1L
+        if (currentArtPath.isBlank()) refreshArtForCurrent()
         try {
             PlaybackService.update(
                 this,
@@ -449,7 +502,7 @@ class MediaPlayerActivity : AppCompatActivity() {
                 isInPictureInPictureMode,
                 pos,
                 dur,
-                ""
+                currentArtPath
             )
         } catch (_: Exception) { }
     }
