@@ -1,6 +1,9 @@
 package com.pusula.browser
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -119,6 +122,29 @@ class DocumentViewerActivity : AppCompatActivity() {
         top.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
             leftMargin = dp(4); rightMargin = dp(8)
         })
+
+        // Yerel HTML dosyası: ana ekrana kısayol ekle (zaten kısayoldan açıldıysa gösterme)
+        val localPath = filePath
+        val isHtmlLocal = localPath != null && localPath.lowercase().let { it.endsWith(".html") || it.endsWith(".htm") } &&
+            !localPath.contains("/pinned_html/")
+        if (isHtmlLocal) {
+            val pinBtn = TextView(this).apply {
+                text = "🏠 Ana ekran"
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                val bg = GradientDrawable()
+                bg.setColor(cAccent)
+                bg.cornerRadius = dp(22).toFloat()
+                background = bg
+                contentDescription = "Ana ekrana ekle"
+                setOnClickListener { pinHtmlShortcut() }
+            }
+            top.addView(pinBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply {
+                rightMargin = dp(6)
+            })
+        }
 
         // Yerel dosya zaten indirilmiş; indir düğmesi yalnızca uzak adreste görünür.
         if (filePath == null) {
@@ -321,6 +347,60 @@ class DocumentViewerActivity : AppCompatActivity() {
                 page.close()
             }
         }
+    }
+
+    /**
+     * HTML dosyasını kalıcı klasöre kopyalar (önbellek temizlenebilir) ve ana ekrana, dosyayı bu görüntüleyiciyle
+     * doğrudan açan bir kısayol ekler.
+     */
+    @SuppressLint("NewApi")
+    private fun pinHtmlShortcut() {
+        val src = filePath?.let { File(it) }
+        if (src == null || !src.exists()) { toast("Dosya bulunamadı"); return }
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) { toast("Bu Android sürümünde desteklenmiyor"); return }
+            val sm = getSystemService(ShortcutManager::class.java)
+            if (sm == null || !sm.isRequestPinShortcutSupported) { toast("Bu cihazda kısayol desteklenmiyor"); return }
+            val dir = File(filesDir, "pinned_html").apply { mkdirs() }
+            val safe = src.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val dst = File(dir, Integer.toHexString(fileName.hashCode()) + "_" + safe)
+            if (src.absolutePath != dst.absolutePath) src.copyTo(dst, overwrite = true)
+            val title = fileName.substringBeforeLast('.').trim().ifBlank { "HTML" }.take(40)
+            val launch = Intent(this, DocumentViewerActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                putExtra(EXTRA_PATH, dst.absolutePath)
+                putExtra(EXTRA_NAME, fileName)
+                putExtra(EXTRA_MIME, "text/html")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val info = ShortcutInfo.Builder(this, "html_" + Integer.toHexString(dst.absolutePath.hashCode()))
+                .setShortLabel(title.take(25))
+                .setLongLabel(title)
+                .setIcon(htmlShortcutIcon(title))
+                .setIntent(launch)
+                .build()
+            sm.requestPinShortcut(info, null)
+            toast("Ana ekran isteği gönderildi")
+        } catch (e: Exception) {
+            toast("Ana ekrana eklenemedi")
+        }
+    }
+
+    /** Dosya adının ilk harfiyle mavi zemin üzerine basit bir simge çizer. */
+    @SuppressLint("NewApi")
+    private fun htmlShortcutIcon(title: String): android.graphics.drawable.Icon {
+        val size = 432
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(bmp)
+        c.drawColor(Color.parseColor("#2F6BFF"))
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = Color.WHITE
+        p.textSize = size * 0.42f
+        p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        p.textAlign = android.graphics.Paint.Align.CENTER
+        val ch = title.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "H"
+        c.drawText(ch, size / 2f, size / 2f - (p.descent() + p.ascent()) / 2f, p)
+        return android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
     }
 
     private fun downloadFile(prefs: Prefs) {
