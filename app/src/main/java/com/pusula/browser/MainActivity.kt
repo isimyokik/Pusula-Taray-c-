@@ -83,6 +83,7 @@ import androidx.webkit.WebViewFeature
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private val posBridge by lazy { PosBridge(applicationContext) }
@@ -3085,7 +3086,74 @@ fun onMusicCatalog(raw: String?) {
             name.endsWith(".md") || name.endsWith(".json") || name.endsWith(".log") || name.endsWith(".xml")
     }
 
-        private fun handleIncomingViewIntent(intent: Intent?): Boolean {
+        /** content:// / file:// → uygulama önbelleğinde gerçek dosya (WebView ACCESS_DENIED olmasın) */
+    private fun materializeUriToCache(uri: Uri, mime: String?): File? {
+        return try {
+            val dir = File(cacheDir, "incoming").apply { mkdirs() }
+            var name = try {
+                contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (i >= 0) c.getString(i) else null
+                    } else null
+                }
+            } catch (_: Exception) { null }
+            if (name.isNullOrBlank()) {
+                name = uri.lastPathSegment?.substringAfterLast('/') ?: "file_${System.currentTimeMillis()}"
+            }
+            name = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            if (!name.contains('.')) {
+                val ext = when {
+                    (mime ?: "").contains("pdf") -> ".pdf"
+                    (mime ?: "").contains("html") -> ".html"
+                    (mime ?: "").contains("json") -> ".json"
+                    (mime ?: "").startsWith("image/") -> ".jpg"
+                    (mime ?: "").startsWith("text/") -> ".txt"
+                    else -> ""
+                }
+                name += ext
+            }
+            val out = File(dir, name)
+            contentResolver.openInputStream(uri)?.use { ins ->
+                out.outputStream().use { outs -> ins.copyTo(outs) }
+            } ?: return null
+            if (!out.exists() || out.length() <= 0L) return null
+            out
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun loadUriInBrowserTab(uri: Uri, mime: String?) {
+        val scheme = (uri.scheme ?: "").lowercase()
+        val target: String = if (scheme == "content" || scheme == "file") {
+            val f = materializeUriToCache(uri, mime)
+            if (f != null) {
+                try { f.toURI().toString() } catch (_: Exception) { "file://${f.absolutePath}" }
+            } else {
+                toast("Dosya okunamadı")
+                return
+            }
+        } else {
+            uri.toString()
+        }
+        handler.post {
+            try {
+                val tab = tabs.getOrNull(cur)
+                if (tab != null) {
+                    try { tab.web.settings.allowFileAccess = true } catch (_: Exception) { }
+                    try { tab.web.settings.allowContentAccess = true } catch (_: Exception) { }
+                    tab.web.loadUrl(target)
+                } else {
+                    openTab(target)
+                }
+            } catch (_: Exception) {
+                openTab(target)
+            }
+        }
+    }
+
+    private fun handleIncomingViewIntent(intent: Intent?): Boolean {
         if (intent == null) return false
         val act = intent.action ?: return false
         val uri: Uri? = when (act) {
@@ -3104,60 +3172,33 @@ fun onMusicCatalog(raw: String?) {
         if (uri == null) return false
         val scheme = (uri.scheme ?: "").lowercase()
         if (scheme != "content" && scheme != "file" && scheme != "http" && scheme != "https") return false
-        try {
-            if (scheme == "content") {
-                try { grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
-            }
-        } catch (_: Exception) { }
         val mime = (intent.type ?: try { contentResolver.getType(uri) } catch (_: Exception) { null } ?: "").lowercase()
-        val url = uri.toString()
         val pathLow = try { (uri.lastPathSegment ?: uri.path ?: "").lowercase() } catch (_: Exception) { "" }
         val isLocalFile = scheme == "content" || scheme == "file"
-        if (!isLocalFile && !mime.startsWith("image/") && !isViewableDocument(url, mime, null) &&
+        if (!isLocalFile && !mime.startsWith("image/") && !isViewableDocument(uri.toString(), mime, null) &&
             !mime.contains("pdf") && !mime.startsWith("text/")) {
             return false
         }
-        if (mime.contains("text/html") || mime.contains("xhtml") ||
-            pathLow.endsWith(".html") || pathLow.endsWith(".htm")) {
-            handler.post {
-                try {
-                    val tab = tabs.getOrNull(cur)
-                    if (tab != null) tab.web.loadUrl(url) else openTab(url)
-                } catch (_: Exception) { openTab(url) }
-            }
-            return true
-        }
-        if (mime.startsWith("image/") || pathLow.endsWith(".jpg") || pathLow.endsWith(".jpeg") ||
-            pathLow.endsWith(".png") || pathLow.endsWith(".gif") || pathLow.endsWith(".webp") ||
-            pathLow.endsWith(".bmp") || pathLow.endsWith(".svg")) {
-            handler.post {
-                try {
-                    val tab = tabs.getOrNull(cur)
-                    if (tab != null) tab.web.loadUrl(url) else openTab(url)
-                } catch (_: Exception) { openTab(url) }
-            }
-            return true
-        }
-        if (isViewableDocument(url, mime, null) || mime.contains("pdf") || mime.contains("officedocument") ||
+        // PDF / Office → önce cache'e al, DocumentViewer'a file/content ver
+        if (isViewableDocument(uri.toString(), mime, null) || mime.contains("pdf") || mime.contains("officedocument") ||
             mime.contains("msword") || mime.contains("ms-excel") || mime.contains("ms-powerpoint") ||
-            mime.startsWith("text/") || pathLow.endsWith(".pdf") || pathLow.endsWith(".doc") ||
-            pathLow.endsWith(".docx") || pathLow.endsWith(".xls") || pathLow.endsWith(".xlsx") ||
-            pathLow.endsWith(".ppt") || pathLow.endsWith(".pptx") || pathLow.endsWith(".txt") ||
-            pathLow.endsWith(".csv") || pathLow.endsWith(".rtf") || pathLow.endsWith(".json") ||
-            pathLow.endsWith(".xml")) {
-            handler.post { openDocumentViewer(url, mime.ifBlank { null }, null) }
-            return true
-        }
-        if (isLocalFile) {
+            pathLow.endsWith(".pdf") || pathLow.endsWith(".doc") || pathLow.endsWith(".docx") ||
+            pathLow.endsWith(".xls") || pathLow.endsWith(".xlsx") || pathLow.endsWith(".ppt") ||
+            pathLow.endsWith(".pptx") || pathLow.endsWith(".rtf") || pathLow.endsWith(".txt") ||
+            pathLow.endsWith(".csv") || pathLow.endsWith(".json") || pathLow.endsWith(".xml") ||
+            (mime.startsWith("text/") && !mime.contains("html"))) {
             handler.post {
-                try {
-                    val tab = tabs.getOrNull(cur)
-                    if (tab != null) tab.web.loadUrl(url) else openTab(url)
-                } catch (_: Exception) { openTab(url) }
+                val local = if (isLocalFile) materializeUriToCache(uri, mime) else null
+                val openUrl = local?.let {
+                    try { it.toURI().toString() } catch (_: Exception) { "file://${it.absolutePath}" }
+                } ?: uri.toString()
+                openDocumentViewer(openUrl, mime.ifBlank { null }, null)
             }
             return true
         }
-        return false
+        // HTML / resim / diğer → WebView (content ise cache kopyası)
+        loadUriInBrowserTab(uri, mime)
+        return true
     }
 
     private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
