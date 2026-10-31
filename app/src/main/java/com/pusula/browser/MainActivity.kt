@@ -1301,7 +1301,6 @@ fun onMusicCatalog(raw: String?) {
         bars.isAppearanceLightStatusBars = !dark
         bars.isAppearanceLightNavigationBars = !dark
 
-        normalizeLocalShortcutIntent(intent)
         startUrl = intent?.dataString
         startAppMode = intent?.getBooleanExtra("pusula_app", false) == true
         // content:// / file:// adresleri WebView'a doğrudan verilemez (ERR_ACCESS_DENIED): önce önbelleğe kopyalanıp açılır
@@ -1354,7 +1353,6 @@ fun onMusicCatalog(raw: String?) {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        normalizeLocalShortcutIntent(intent)
         setIntent(intent)
         try { if (handleIncomingViewIntent(intent)) return } catch (_: Exception) { }
         if (intent.getBooleanExtra("open_newtab", false) && intent.dataString.isNullOrBlank()) {
@@ -1365,19 +1363,6 @@ fun onMusicCatalog(raw: String?) {
         if (isLocalUriString(u)) return
         val app = intent.getBooleanExtra("pusula_app", false)
         openTab(u, appMode = app)
-    }
-
-    /** Ana ekran kısayolundan gelen yerel dosya isteğini normal VIEW intent'ine çevirir. */
-    private fun normalizeLocalShortcutIntent(i: Intent?) {
-        try {
-            if (i?.action == "com.pusula.browser.OPEN_LOCAL") {
-                val u = i.getStringExtra("pusula_local")
-                if (!u.isNullOrBlank()) {
-                    i.action = Intent.ACTION_VIEW
-                    i.data = Uri.parse(u)
-                }
-            }
-        } catch (_: Exception) { }
     }
 
     private fun isLocalUriString(s: String?): Boolean {
@@ -3720,14 +3705,8 @@ fun onMusicCatalog(raw: String?) {
             .ifBlank { "Rota" }
             .take(40)
         val launch = Intent(this, MainActivity::class.java).apply {
-            if (local) {
-                // Yerel dosya: data/VIEW yok → MIUI dosya kısayoluna harf ikonu üretmesin
-                action = "com.pusula.browser.OPEN_LOCAL"
-                putExtra("pusula_local", url)
-            } else {
-                action = Intent.ACTION_VIEW
-                data = Uri.parse(url)
-            }
+            action = Intent.ACTION_VIEW
+            data = Uri.parse(url)
             putExtra("pusula_app", true)
             // Son uygulamalarda Rota'tan ayrı bir "uygulama" gibi görünsün
             flags = Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
@@ -3820,19 +3799,31 @@ fun onMusicCatalog(raw: String?) {
 
     /** Launcher logosu → Bitmap (MIUI harf monogramına düşmesin diye resource yerine bitmap) */
     private fun appLauncherBitmap(size: Int = 432): Bitmap {
-        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val c = android.graphics.Canvas(out)
-        c.drawColor(0xFF0E1426.toInt()) // opak zemin (şeffaf bitmap → MIUI harf monogramı)
-        try {
+        return try {
             val d = packageManager.getApplicationIcon(packageName)
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val c = android.graphics.Canvas(bmp)
             d.setBounds(0, 0, size, size)
             d.draw(c)
+            bmp
         } catch (_: Exception) {
             try {
-                getDrawable(R.drawable.ic_launcher)?.let { it.setBounds(0, 0, size, size); it.draw(c) }
-            } catch (_: Exception) { }
+                val d = getDrawable(R.drawable.ic_launcher)
+                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val c = android.graphics.Canvas(bmp)
+                if (d != null) {
+                    d.setBounds(0, 0, size, size)
+                    d.draw(c)
+                } else {
+                    c.drawColor(0xFF4C8DFF.toInt())
+                }
+                bmp
+            } catch (_: Exception) {
+                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                android.graphics.Canvas(bmp).drawColor(0xFF4C8DFF.toInt())
+                bmp
+            }
         }
-        return out
     }
 
     /** Yeni sekme “Hızlı erişim” kutularına site ekler (kalıcı). */
@@ -3892,7 +3883,7 @@ fun onMusicCatalog(raw: String?) {
 private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
         try {
             // Yerel HTML: uygulama logosu bitmap (resource değil — MIUI harf üretmesin)
-            val forceApp = !url.startsWith("http", true)
+            val forceApp = isLocalPinUrl(url)
             val appBmp = try { appLauncherBitmap(432) } catch (_: Exception) { null }
             val shaped: Bitmap? = when {
                 forceApp -> appBmp
@@ -3902,10 +3893,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val sm = getSystemService(ShortcutManager::class.java)
                 if (sm != null && sm.isRequestPinShortcutSupported) {
-                    val id = "rota_" + Integer.toHexString(url.hashCode()) +
-                        (if (forceApp) "_" + (System.currentTimeMillis() / 1000) else "")
+                    val id = "rota_" + Integer.toHexString(url.hashCode())
                     val ic = when {
-                        shaped != null && forceApp -> Icon.createWithBitmap(shaped)
                         shaped != null -> try {
                             Icon.createWithAdaptiveBitmap(shaped)
                         } catch (_: Exception) {
@@ -4487,20 +4476,31 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 !audioOnly -> {
                     val prog = bestProgressive()
-                    // 1080 → 720 → 480 → 360 → 240 (önce H.264; hepsi birleştirme)
-                    val cands = videoCandidates(links)
                     when {
-                        audio != null && cands.isNotEmpty() ->
-                            downloadAndMerge(cands[0], audio, "$base.mp4", prog, id, cands.drop(1))
+                        // Sadece gerçekten sesli progressive — V:720 asla tek başına
                         prog != null && !isVideoOnly("", prog) -> {
                             toast("İndiriliyor…")
                             cacheDownloadThumb("$base.mp4", id, lastArtUrl.ifBlank { null })
                             startDownload(prog, null, null, "video/mp4", "$base.mp4")
                         }
-                        else -> toast(
-                            "İndirme linki alınamadı (" +
-                                links.joinToString(",") { it.first.take(8) + "#" + itagOf(it.second) }.take(160) + ")"
-                        )
+                        // Adaptive video + ses birleştir (sessiz indirme olmasın)
+                        adaptive(720) != null && audio != null ->
+                            downloadAndMerge(adaptive(720)!!, audio, "$base.mp4", prog)
+                        adaptive(1080) != null && audio != null ->
+                            downloadAndMerge(adaptive(1080)!!, audio, "$base.mp4", prog)
+                        adaptive(480) != null && audio != null ->
+                            downloadAndMerge(adaptive(480)!!, audio, "$base.mp4", prog)
+                        adaptive(360) != null && audio != null ->
+                            downloadAndMerge(adaptive(360)!!, audio, "$base.mp4", prog)
+                        // Son çare: herhangi V:* + ses
+                        audio != null -> {
+                            val anyV = links.firstOrNull {
+                                it.first.startsWith("V:") || isVideoOnly(it.first, it.second)
+                            }?.second
+                            if (anyV != null) downloadAndMerge(anyV, audio, "$base.mp4", prog)
+                            else toast("İndirme linki alınamadı")
+                        }
+                        else -> toast("İndirme linki alınamadı")
                     }
                 }
                 else -> toast("İndirme linki alınamadı")
@@ -4940,10 +4940,15 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     advance()
                 }
                 !playlistAudioOnly -> {
-                    val cands = videoCandidates(links)
+                    val v1080 = adaptive(1080)
+                    val v720 = adaptive(720)
                     when {
-                        cands.isNotEmpty() && audio != null -> {
-                            downloadAndMerge(cands[0], audio, "$base.mp4", prog, id, cands.drop(1))
+                        v1080 != null && audio != null -> {
+                            downloadAndMerge(v1080, audio, "$base.mp4")
+                            advance()
+                        }
+                        v720 != null && audio != null -> {
+                            downloadAndMerge(v720, audio, "$base.mp4")
                             advance()
                         }
                         prog != null -> {
@@ -5240,7 +5245,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     }
                 } catch (_: Exception) { }
             }
-            fun isAvc(u: String): Boolean = isMp4Avc(u)
+            fun isAvc(u: String): Boolean {
+                val x = u.lowercase()
+                return "avc1" in x || "mime=video%2fmp4" in x || "mime=video/mp4" in x ||
+                    "itag=137" in x || "itag=136" in x || "itag=135" in x || "itag=298" in x || "itag=399" in x
+            }
             val best = LinkedHashMap<String, String>()
             for ((lab, u) in links) {
                 val prev = best[lab]
@@ -5440,59 +5449,19 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         d.show()
     }
 
-    /** Yalnızca MediaMuxer'ın güvenle birleştirebildiği H.264 (AVC) mp4 video itag'leri */
-    private fun isMp4Avc(url: String): Boolean {
-        val itag = Regex("""[?&]itag=(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
-        if (itag in listOf(133, 134, 135, 136, 137, 160, 298, 299)) return true
-        val u = url.lowercase()
-        val av1 = itag in 394..402 || itag in 694..702 || itag == 571
-        return !av1 && (u.contains("mime=video%2fmp4") || u.contains("mime=video/mp4")) && !u.contains("av01")
-    }
-
-    /** Birleştirilecek video adayları: önce H.264 (yüksekten alta 1080→240), sonra diğer kodekler (son çare). */
-    private fun videoCandidates(links: List<Pair<String, String>>): List<String> {
-        val vs = links.mapNotNull { (lab, u) ->
-            if (!lab.startsWith("V:")) return@mapNotNull null
-            val h = lab.removePrefix("V:").toIntOrNull() ?: return@mapNotNull null
-            if (h < 240 || h > 1080) null else Triple(h, u, isMp4Avc(u))
-        }
-        val avc = vs.filter { it.third }.sortedByDescending { it.first }.map { it.second }
-        val other = vs.filter { !it.third }.sortedByDescending { it.first }.map { it.second }
-        return (avc + other).distinct()
-    }
-
     private fun downloadAndMerge(
         videoUrl: String,
         audioUrl: String,
         outName: String,
-        progressiveFallback: String? = null,
-        videoId: String? = null,
-        altVideos: List<String> = emptyList()
+        progressiveFallback: String? = null
     ) {
         toast("Birleştirerek indiriliyor…")
         Thread {
-            // Başarısızlıkta: bir alt kaliteye geç → yoksa sesli progressive → yoksa hata
-            fun giveUp(msg: String) {
-                handler.post {
-                    when {
-                        altVideos.isNotEmpty() -> {
-                            toast("Daha düşük kaliteye geçiliyor…")
-                            downloadAndMerge(altVideos[0], audioUrl, outName, progressiveFallback, videoId, altVideos.drop(1))
-                        }
-                        !progressiveFallback.isNullOrBlank() -> {
-                            toast(msg)
-                            startDownload(progressiveFallback, null, null, "video/mp4", outName)
-                        }
-                        else -> toast("İndirme başarısız")
-                    }
-                }
-            }
             try {
                 val dir = cacheDir
-                val stamp = System.currentTimeMillis()
-                val vFile = java.io.File(dir, "v_$stamp.mp4")
-                val aFile = java.io.File(dir, "a_$stamp.m4a")
-                val oFile = java.io.File(dir, "m_$stamp.mp4")
+                val vFile = java.io.File(dir, "v_${System.currentTimeMillis()}.mp4")
+                val aFile = java.io.File(dir, "a_${System.currentTimeMillis()}.m4a")
+                val oFile = java.io.File(dir, "m_${System.currentTimeMillis()}.mp4")
                 val vOk = java.util.concurrent.atomic.AtomicBoolean(false)
                 val aOk = java.util.concurrent.atomic.AtomicBoolean(false)
                 val latch = java.util.concurrent.CountDownLatch(2)
@@ -5504,10 +5473,15 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     try { aOk.set(httpToFile(audioUrl, aFile) == "OK") } catch (_: Exception) { }
                     latch.countDown()
                 }.start()
-                try { latch.await(6, java.util.concurrent.TimeUnit.MINUTES) } catch (_: Exception) { }
+                try { latch.await(4, java.util.concurrent.TimeUnit.MINUTES) } catch (_: Exception) { }
                 if (!vOk.get() || !aOk.get() || vFile.length() < 2048 || aFile.length() < 1024) {
                     vFile.delete(); aFile.delete()
-                    giveUp("Birleştirme iptal, sesli MP4 deneniyor")
+                    handler.post {
+                        if (!progressiveFallback.isNullOrBlank()) {
+                            toast("Birleştirme iptal, sesli MP4 deneniyor")
+                            startDownload(progressiveFallback, null, null, "video/mp4", outName)
+                        } else toast("İndirme başarısız")
+                    }
                     return@Thread
                 }
                 val ok = muxAv(vFile.absolutePath, aFile.absolutePath, oFile.absolutePath)
@@ -5526,11 +5500,14 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 if (!ok || !hasAud) {
                     oFile.delete()
-                    giveUp("Ses birleşmedi, sesli MP4 indiriliyor")
+                    handler.post {
+                        if (!progressiveFallback.isNullOrBlank()) {
+                            toast("Ses birleşmedi, sesli MP4 indiriliyor")
+                            startDownload(progressiveFallback, null, null, "video/mp4", outName)
+                        } else toast("Birleştirme başarısız (ses yok)")
+                    }
                     return@Thread
                 }
-                // Kapak resmi (diğer indirmelerdeki gibi)
-                cacheDownloadThumb(outName, videoId, if (videoId == null) lastArtUrl.ifBlank { null } else null)
                 val resolver = contentResolver
                 val values = android.content.ContentValues().apply {
                     put(android.provider.MediaStore.Downloads.DISPLAY_NAME, outName)
@@ -5549,7 +5526,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 if (uri != null && Build.VERSION.SDK_INT >= 29) {
                     resolver.openOutputStream(uri)?.use { out ->
-                        oFile.inputStream().use { it.copyTo(out, 512 * 1024) }
+                        oFile.inputStream().use { it.copyTo(out) }
                     }
                     values.clear()
                     values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
@@ -5560,10 +5537,13 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 handler.post {
                     prefs.addDownload(outName, videoUrl, path, "video/mp4")
                     toast("MP4 indirildi: $outName")
-                    try { refreshDownloadsDialogFull() } catch (_: Exception) { }
                 }
             } catch (_: Exception) {
-                giveUp("İndirme hatası, sesli MP4 deneniyor")
+                handler.post {
+                    if (!progressiveFallback.isNullOrBlank()) {
+                        startDownload(progressiveFallback, null, null, "video/mp4", outName)
+                    } else toast("İndirme hatası")
+                }
             }
         }.start()
     }
@@ -5957,7 +5937,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             val aTrack = muxer!!.addTrack(aFmt!!)
             muxer!!.start()
 
-            val vBuf = java.nio.ByteBuffer.allocate(8 * 1024 * 1024)
+            val vBuf = java.nio.ByteBuffer.allocate(2 * 1024 * 1024)
             val aBuf = java.nio.ByteBuffer.allocate(256 * 1024)
             val vInfo = android.media.MediaCodec.BufferInfo()
             val aInfo = android.media.MediaCodec.BufferInfo()
