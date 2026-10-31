@@ -3550,8 +3550,13 @@ fun onMusicCatalog(raw: String?) {
                 val guessed = URLUtil.guessFileName(url, cd, mime)
                 val base = mediaFileBase()
                 val ext = when {
+                    // Kullanıcı MP3 seçtiyse / audio/mpeg → her zaman .mp3 (YouTube akışı AAC olsa bile)
+                    mime?.contains("mpeg") == true || mime == "audio/mp3" -> "mp3"
                     mime?.contains("audio") == true || guessed.endsWith(".mp3", true) || guessed.endsWith(".m4a", true) ->
-                        if (guessed.contains(".")) guessed.substringAfterLast('.') else "mp3"
+                        if (mime?.contains("mpeg") == true) "mp3"
+                        else if (guessed.endsWith(".mp3", true)) "mp3"
+                        else if (guessed.contains(".")) guessed.substringAfterLast('.')
+                        else "mp3"
                     mime?.contains("video") == true || guessed.endsWith(".mp4", true) || guessed.endsWith(".webm", true) ->
                         if (guessed.contains(".")) guessed.substringAfterLast('.') else "mp4"
                     guessed.contains(".") -> guessed.substringAfterLast('.')
@@ -3765,6 +3770,18 @@ fun onMusicCatalog(raw: String?) {
     }
 
     
+    /** Hızlı erişim: yerel dosya mı? (http değil) */
+    private fun isLocalPinUrl(url: String): Boolean {
+        val u = url.trim()
+        if (u.isEmpty()) return false
+        val low = u.lowercase()
+        if (low.startsWith("http://") || low.startsWith("https://")) return false
+        if (low.startsWith("file:") || low.startsWith("content:") || low.startsWith("about:")) return true
+        // WebView bazen path verir; .html yerel sayfa
+        if (low.endsWith(".html") || low.endsWith(".htm") || ".html?" in low || ".htm?" in low) return true
+        return false
+    }
+
     /** Yeni sekme “Hızlı erişim” kutularına site ekler (kalıcı). */
     private fun addToQuickPins(title: String, url: String) {
         try {
@@ -3789,10 +3806,9 @@ fun onMusicCatalog(raw: String?) {
                 } catch (_: Exception) { cleanUrl }
             }
             if (t.length > 40) t = t.take(40)
-            // Yerel HTML/dosya: e="__app__" → newtab uygulama logosunu gösterir (harf/emoji yok)
-            // Web: e boş → newtab site favicon çeker (Ana ekran kısayolu ayrı, dokunulmaz)
-            val isLocal = cleanUrl.startsWith("file:", ignoreCase = true) ||
-                cleanUrl.startsWith("content:", ignoreCase = true)
+            // Yerel HTML/dosya: e="__app__" → newtab uygulama ikonu (harf yok)
+            // Web: e boş → site favicon (Ana ekran kısayolu ayrı)
+            val isLocal = isLocalPinUrl(cleanUrl)
             arr.put(JSONObject()
                 .put("t", t)
                 .put("u", cleanUrl)
@@ -3962,7 +3978,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     t.title.isNotBlank() && !t.title.equals("Yeni Sekme", true) -> t.title
                     else -> shownUrl(t.url)
                 }
-                addToQuickPins(name, t.url)
+                // WebView.url daha güncel (file:// cache yolu)
+                val pinUrl = t.web.url?.takeIf {
+                    it.isNotBlank() && !it.equals("about:blank", true)
+                } ?: t.url
+                addToQuickPins(name, pinUrl)
             })
         }
         if (canHome) {
@@ -4315,64 +4335,106 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
         }
         fun pickAndStart(links: List<Pair<String, String>>) {
-            // pasted-text-11 mantığı: sesli progressive 720p (itag 22) öncelik — hızlı, sesli
+            // Doğrudan googlevideo: MP3=ses itag, video=sesli progressive veya birleştirme
+            fun itagOf(url: String): Int =
+                Regex("""[?&]itag=(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+            // Sadece ses (140/251…)
             fun isAudio(label: String, url: String): Boolean {
                 if (label.startsWith("A:")) return true
-                val x = "$label $url".lowercase()
-                return x.contains("mp3") || x.contains("audio") || x.contains("m4a") ||
-                    x.contains("mime=audio") || x.contains("itag=140") || x.contains("itag=251") ||
-                    x.contains("itag=139") || x.contains("itag=249") || x.contains("itag=250")
-            }
-            fun looksProgressive(url: String): Boolean {
+                val it = itagOf(url)
+                if (it in listOf(139, 140, 141, 249, 250, 251, 256, 258)) return true
                 val u = url.lowercase()
-                return u.contains("ratebypass") || u.contains("itag=18") || u.contains("itag=22") ||
-                    u.contains("itag=37") ||
-                    (u.contains("mime=video") && u.contains("audio")) ||
-                    (u.contains("videoplayback") && !u.contains("mime=video") && !u.contains("mime=audio"))
+                return u.contains("mime=audio") || (u.contains("/audio/") && !u.contains("video"))
+            }
+            // Adaptive video-only — TEK BAŞINA İNDİRİLMEZ (sessiz kalır)
+            fun isVideoOnly(label: String, url: String): Boolean {
+                if (label.startsWith("V:")) return true
+                val it = itagOf(url)
+                if (it in listOf(
+                        133, 134, 135, 136, 137, 160, 242, 243, 244, 247, 248,
+                        271, 278, 298, 299, 302, 303, 308, 313, 315, 330, 331, 332, 333, 334, 335, 336, 337
+                    )
+                ) return true
+                val u = url.lowercase()
+                if (u.contains("mime=video") && !u.contains("mp4a") && !u.contains("audio") &&
+                    !u.contains("vorbis") && !u.contains("opus")
+                ) return true
+                return false
+            }
+            // Ses + görüntü tek dosya (itag 18/22/37…)
+            fun isProgressive(label: String, url: String): Boolean {
+                if (isAudio(label, url) || isVideoOnly(label, url)) return false
+                if (label.startsWith("MP4")) return true
+                val it = itagOf(url)
+                if (it in listOf(18, 22, 37, 59, 78)) return true
+                val u = url.lowercase()
+                return (u.contains("mime=video") && (u.contains("audio") || u.contains("mp4a"))) ||
+                    (u.contains("itag=22") || u.contains("itag=18") || u.contains("itag=37"))
             }
             fun bestAudio(): String? {
                 val a = links.filter { isAudio(it.first, it.second) }
-                return a.firstOrNull { it.first == "A:M4A" }?.second
+                // itag 140 (m4a) önce — doğrudan stream, aracı yok
+                return a.firstOrNull { itagOf(it.second) == 140 }?.second
+                    ?: a.firstOrNull { it.first == "A:M4A" }?.second
+                    ?: a.firstOrNull { itagOf(it.second) == 251 }?.second
                     ?: a.firstOrNull { it.first.startsWith("A:") }?.second
-                    ?: a.maxByOrNull { it.second.length }?.second
+                    ?: a.firstOrNull()?.second
             }
             fun adaptive(h: Int): String? =
                 links.firstOrNull { it.first == "V:$h" }?.second
-                    ?: links.firstOrNull { it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h }?.second
+                    ?: links.firstOrNull {
+                        it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h
+                    }?.second
+            fun bestProgressive(): String? {
+                // 1) itag 22 = 720p sesli
+                links.firstOrNull {
+                    !isAudio(it.first, it.second) && !isVideoOnly(it.first, it.second) &&
+                        itagOf(it.second) == 22
+                }?.second?.let { return it }
+                links.firstOrNull {
+                    it.first == "MP4 720p" && isProgressive(it.first, it.second)
+                }?.second?.let { return it }
+                // 2) diğer sesli progressive (itag 18 = 360p …)
+                links.firstOrNull {
+                    isProgressive(it.first, it.second) && itagOf(it.second) in listOf(37, 59, 78, 18)
+                }?.second?.let { return it }
+                return links.firstOrNull { isProgressive(it.first, it.second) }?.second
+            }
             val audio = bestAudio()
             when {
-                audioOnly && audio != null -> {
-                    toast("İndiriliyor…")
-                    startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+                audioOnly -> {
+                    if (audio != null) {
+                        toast("İndiriliyor…")
+                        // Doğrudan googlevideo ses; aracı yok
+                        startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
+                    } else toast("Ses linki alınamadı")
                 }
                 !audioOnly -> {
-                    // 1) itag 22 / MP4 720p progressive (sesli, tek dosya)
-                    val prog720 = links.firstOrNull {
-                        !isAudio(it.first, it.second) && (
-                            it.second.lowercase().contains("itag=22") ||
-                                it.first.contains("720")
-                            ) && looksProgressive(it.second)
-                    }?.second
-                        ?: links.firstOrNull { it.first == "MP4 720p" }?.second
-                    // 2) diğer progressive
-                    val prog = prog720
-                        ?: links.firstOrNull { !isAudio(it.first, it.second) && looksProgressive(it.second) }?.second
-                        ?: links.firstOrNull {
-                            it.first.startsWith("MP4") && !isAudio(it.first, it.second)
-                        }?.second
+                    val prog = bestProgressive()
                     when {
-                        prog != null -> {
+                        // Sadece gerçekten sesli progressive — V:720 asla tek başına
+                        prog != null && !isVideoOnly("", prog) -> {
                             toast("İndiriliyor…")
                             cacheDownloadThumb("$base.mp4", id, lastArtUrl.ifBlank { null })
                             startDownload(prog, null, null, "video/mp4", "$base.mp4")
                         }
-                        // Yedek: birleştirme (11'deki sıra)
+                        // Adaptive video + ses birleştir (sessiz indirme olmasın)
                         adaptive(720) != null && audio != null ->
                             downloadAndMerge(adaptive(720)!!, audio, "$base.mp4", prog)
                         adaptive(1080) != null && audio != null ->
                             downloadAndMerge(adaptive(1080)!!, audio, "$base.mp4", prog)
                         adaptive(480) != null && audio != null ->
                             downloadAndMerge(adaptive(480)!!, audio, "$base.mp4", prog)
+                        adaptive(360) != null && audio != null ->
+                            downloadAndMerge(adaptive(360)!!, audio, "$base.mp4", prog)
+                        // Son çare: herhangi V:* + ses
+                        audio != null -> {
+                            val anyV = links.firstOrNull {
+                                it.first.startsWith("V:") || isVideoOnly(it.first, it.second)
+                            }?.second
+                            if (anyV != null) downloadAndMerge(anyV, audio, "$base.mp4", prog)
+                            else toast("İndirme linki alınamadı")
+                        }
                         else -> toast("İndirme linki alınamadı")
                     }
                 }
@@ -4809,7 +4871,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             val prog = links.firstOrNull { looksProgressive(it.first, it.second) }?.second
             when {
                 playlistAudioOnly && audio != null -> {
-                    startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+                    startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
                     advance()
                 }
                 !playlistAudioOnly -> {
@@ -4829,7 +4891,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                             advance()
                         }
                         audio != null -> {
-                            startDownload(audio, null, null, "audio/mpeg", "$base.m4a")
+                            startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
                             advance()
                         }
                         else -> {
@@ -4838,11 +4900,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                                 val sfProg = sfLinks.firstOrNull { looksProgressive(it.first, it.second) }?.second
                                 when {
                                     playlistAudioOnly && sfAudio != null ->
-                                        startDownload(sfAudio, null, null, "audio/mpeg", "$base.m4a")
+                                        startDownload(sfAudio, null, null, "audio/mpeg", "$base.mp3")
                                     sfProg != null ->
                                         startDownload(sfProg, null, null, "video/mp4", "$base.mp4")
                                     sfAudio != null ->
-                                        startDownload(sfAudio, null, null, "audio/mpeg", "$base.m4a")
+                                        startDownload(sfAudio, null, null, "audio/mpeg", "$base.mp3")
                                 }
                                 advance()
                             }
@@ -5275,7 +5337,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }
         if (bestAudio != null) {
             opts.add(Opt("MP3 / M4A") {
-                startDownload(bestAudio, null, null, "audio/mpeg", mediaFileBase() + ".m4a")
+                startDownload(bestAudio, null, null, "audio/mpeg", mediaFileBase() + ".mp3")
             })
         }
 
