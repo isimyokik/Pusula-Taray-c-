@@ -186,6 +186,14 @@ class MainActivity : AppCompatActivity() {
     private var pausedByAudioFocus = false
     private var ignoreFocusUntil = 0L
     private var audioFocusRequest: AudioFocusRequest? = null
+
+    // --- Mikrofon (başka uygulama kayıt yaparken) → müzik durursa kayıt bitince kaldığı yerden devam ---
+    private var micActive = false
+    private var micResumePending = false
+    private var micStartAt = 0L
+    private var micResumeGen = 0
+    private var lastPlayingTrueAt = 0L
+    private var recCb: AudioManager.AudioRecordingCallback? = null
     // --- Ses odağı yavaş kısma / yavaş açma ---
     /** WhatsApp sesi vb. gelince medya bu sürede yavaşça kısılıp durur. */
     private val focusFadeOutMs = 400L
@@ -363,6 +371,58 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             0
         }
+    }
+
+    /**
+     * WhatsApp sesli mesaj / Google yazma / Asistan gibi mikrofon açan uygulamalar sistemden ses odağı ister;
+     * WebView (Chromium) medyayı duraklatır ve bazen kendisi geri başlatmaz. YouTube uygulaması gibi:
+     * kayıt başlarken çalıyorduysak, kayıt bitince otomatik devam et. Kullanıcı bu arada duraklatırsa devam etme.
+     */
+    private fun registerMicWatch() {
+        if (Build.VERSION.SDK_INT < 24 || recCb != null) return
+        try {
+            val cb = object : AudioManager.AudioRecordingCallback() {
+                override fun onRecordingConfigChanged(configs: MutableList<android.media.AudioRecordingConfiguration>?) {
+                    val recording = !configs.isNullOrEmpty()
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (recording && !micActive) {
+                        micActive = true
+                        val wasPlaying = hasMedia && !pausedByAudioFocus &&
+                            (lastPlaying || now - lastPlayingTrueAt < 4000L)
+                        if (wasPlaying) {
+                            micResumePending = true
+                            micStartAt = now
+                            // Duraklasa bile bildirim/servis kapanmasın
+                            focusNotifHoldUntil = maxOf(focusNotifHoldUntil, now + 10 * 60 * 1000L)
+                        }
+                    } else if (!recording && micActive) {
+                        micActive = false
+                        if (micResumePending) {
+                            micResumePending = false
+                            if (now - micStartAt < 10 * 60 * 1000L) {
+                                val gen = micResumeGen
+                                for (delay in longArrayOf(700L, 2500L, 5000L)) {
+                                    handler.postDelayed({
+                                        if (gen != micResumeGen || micActive || pausedByAudioFocus) return@postDelayed
+                                        if (lastPlaying) return@postDelayed
+                                        try { mediaTarget()?.web?.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null) } catch (_: Exception) { }
+                                        handler.postDelayed({ pollMedia() }, 400L)
+                                    }, delay)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            audioManager.registerAudioRecordingCallback(cb, handler)
+            recCb = cb
+        } catch (_: Exception) { }
+    }
+
+    private fun unregisterMicWatch() {
+        try { recCb?.let { audioManager.unregisterAudioRecordingCallback(it) } } catch (_: Exception) { }
+        recCb = null
+        micResumeGen++
     }
 
     private fun registerExternalAudioWatch() {
@@ -863,6 +923,7 @@ private fun pollMedia() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         if (changed) mediaChangedAt = now
+        if (playing) lastPlayingTrueAt = android.os.SystemClock.elapsedRealtime()
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         if (playing || pausedByAudioFocus) acquireMediaLocks()
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
@@ -1161,6 +1222,8 @@ fun onMusicCatalog(raw: String?) {
             }
             if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
                 abortFocusPause()
+                micResumePending = false
+                micResumeGen++
             }
             val js = when (act) {
                 // PLAY = zorla oynat (toggle değil — focus/bildirim play deyince stop oluyordu)
@@ -1291,6 +1354,7 @@ fun onMusicCatalog(raw: String?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         registerExternalAudioWatch()
+        registerMicWatch()
         loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
@@ -1495,6 +1559,7 @@ fun onMusicCatalog(raw: String?) {
     override fun onDestroy() {
         try { releaseMediaLocks() } catch (_: Exception) { }
         try { unregisterExternalAudioWatch() } catch (_: Exception) { }
+        try { unregisterMicWatch() } catch (_: Exception) { }
         try { abandonMediaAudioFocus() } catch (_: Exception) { }
         try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
         handler.removeCallbacks(backgroundMediaPump)
@@ -3377,6 +3442,14 @@ fun onMusicCatalog(raw: String?) {
     }
 
     /** Sekme başlığından temiz dosya adı (videoplayback yazmasın). */
+    /** Başlıktaki "(1080p)", "[4K]", "(Yüksek kalite)", "(HD)" gibi kalite etiketlerini dosya adından çıkarır. */
+    private fun stripQualityTags(s: String): String =
+        s.replace(
+            Regex("""\s*[(\[][^)\]]*(kalite|quality|\bHD\b|\bFHD\b|\bUHD\b|\bHQ\b|\b[48]K\b|\b\d{3,4}\s*p\b)[^)\]]*[)\]]""",
+                RegexOption.IGNORE_CASE),
+            ""
+        ).replace(Regex("\\s+"), " ").trim()
+
     private fun mediaFileBase(): String {
         val t = tabs.getOrNull(cur)
         var title = t?.title?.trim().orEmpty()
@@ -3388,6 +3461,7 @@ fun onMusicCatalog(raw: String?) {
             .replace(Regex("[\\\\/:*?\"<>|]+"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
+            .let { stripQualityTags(it) }
             .take(80)
         if (title.isBlank()) title = "medya"
         return title
@@ -4864,11 +4938,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
     }
 
     private fun safeFileName(title: String, id: String): String {
-        var t = title.trim()
+        var t = stripQualityTags(title.trim()
             .replace(Regex("\\s*[-|]\\s*YouTube(\\s*Music)?\\s*$", RegexOption.IGNORE_CASE), "")
             .replace(Regex("[\\\\/:*?\"<>|]+"), " ")
             .replace(Regex("\\s+"), " ")
-            .trim()
+            .trim())
             .take(80)
         if (t.isBlank() || t == id) t = "video_$id"
         return t
@@ -5111,16 +5185,32 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         val id = videoIdOf(page) ?: page.substringAfter("v=", "").take(11).takeIf { it.length >= 8 }
         if (id == null) { onDone(emptyList()); return }
         Thread {
-            val links = ArrayList<Pair<String, String>>()
+            // İstemciler paralel çalışır → hepsi sırayla beklemez, link daha hızlı gelir
+            val links: MutableList<Pair<String, String>> =
+                java.util.Collections.synchronizedList(ArrayList<Pair<String, String>>())
             val cookie = try {
                 CookieManager.getInstance().getCookie("https://www.youtube.com") ?: ""
             } catch (_: Exception) { "" }
-            data class YtCli(val name: String, val ver: String, val clientId: String, val ua: String)
+            data class YtCli(
+                val name: String, val ver: String, val clientId: String, val ua: String,
+                val sdk: Int = 0, val deviceMake: String = "", val deviceModel: String = "",
+                val osName: String = "", val osVersion: String = "", val embed: Boolean = false
+            )
+            // Güncel istemci sürümleri (eski sürümler artık reddediliyor → "link bulunamadı").
+            // ANDROID_VR PO token gerektirmeyen en güvenilir yol; diğerleri izinli olduğu kadar format verir.
             val clients = listOf(
-                YtCli("ANDROID", "19.28.35", "3", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip"),
-                YtCli("IOS", "19.28.1", "5", "com.google.ios.youtube/19.28.1 (iPhone16,2; U; CPU iOS 17_5 like Mac OS X;)"),
-                YtCli("TVHTML5", "7.20240723.15.00", "7", "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"),
-                YtCli("ANDROID", "18.48.37", "3", "com.google.android.youtube/18.48.37 (Linux; U; Android 13) gzip")
+                YtCli("ANDROID_VR", "1.65.10", "28",
+                    "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+                    sdk = 32, deviceMake = "Oculus", deviceModel = "Quest 3", osName = "Android", osVersion = "12L"),
+                YtCli("TVHTML5", "7.20260311.12.00", "7", "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"),
+                YtCli("WEB_EMBEDDED_PLAYER", "1.20260206.01.00", "56",
+                    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                    embed = true),
+                YtCli("ANDROID", "21.03.36", "3",
+                    "com.google.android.youtube/21.03.36(Linux; U; Android 16; en_US; SM-S908E Build/TP1A.220624.014) gzip",
+                    sdk = 36),
+                YtCli("IOS", "20.11.6", "5", "com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)",
+                    deviceMake = "Apple", deviceModel = "iPhone10,4", osName = "iOS", osVersion = "16.7.7.20H330")
             )
             fun parseStreaming(sd: JSONObject) {
                 fun heightOf(f: JSONObject): Int {
@@ -5186,20 +5276,29 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 eatFormats(sd.optJSONArray("formats"))
                 eatFormats(sd.optJSONArray("adaptiveFormats"))
             }
+            val cliLatch = java.util.concurrent.CountDownLatch(clients.size)
             for (cli in clients) {
-                // Tüm istemcilerden format topla; 1080 yoksa diğerleri denensin
+              Thread {
+                // Tüm istemcilerden format topla; biri 1080 vermezse diğeri verebilir
                 try {
                     val clientObj = JSONObject()
                         .put("clientName", cli.name)
                         .put("clientVersion", cli.ver)
                         .put("hl", "tr")
                         .put("gl", "TR")
-                    if (cli.name == "ANDROID") {
-                        clientObj.put("androidSdkVersion", 33)
-                        clientObj.put("userAgent", cli.ua)
+                    if (cli.sdk > 0) clientObj.put("androidSdkVersion", cli.sdk)
+                    if (cli.name.startsWith("ANDROID")) clientObj.put("userAgent", cli.ua)
+                    if (cli.deviceMake.isNotEmpty()) clientObj.put("deviceMake", cli.deviceMake)
+                    if (cli.deviceModel.isNotEmpty()) clientObj.put("deviceModel", cli.deviceModel)
+                    if (cli.osName.isNotEmpty()) clientObj.put("osName", cli.osName)
+                    if (cli.osVersion.isNotEmpty()) clientObj.put("osVersion", cli.osVersion)
+                    val ctx = JSONObject().put("client", clientObj)
+                    if (cli.embed) {
+                        clientObj.put("clientScreen", "EMBED")
+                        ctx.put("thirdParty", JSONObject().put("embedUrl", "https://www.youtube.com/watch?v=$id"))
                     }
                     val body = JSONObject()
-                        .put("context", JSONObject().put("client", clientObj))
+                        .put("context", ctx)
                         .put("videoId", id)
                         .put("contentCheckOk", true)
                         .put("racyCheckOk", true)
@@ -5216,7 +5315,9 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     c.setRequestProperty("User-Agent", cli.ua)
                     c.setRequestProperty("X-YouTube-Client-Name", cli.clientId)
                     c.setRequestProperty("X-YouTube-Client-Version", cli.ver)
-                    if (cookie.isNotEmpty()) c.setRequestProperty("Cookie", cookie)
+                    if (cookie.isNotEmpty() && !cli.name.startsWith("ANDROID") && cli.name != "IOS") {
+                        c.setRequestProperty("Cookie", cookie)
+                    }
                     c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                     val code = c.responseCode
                     val stream = if (code in 200..299) c.inputStream else c.errorStream
@@ -5227,14 +5328,18 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                         if (sd != null) parseStreaming(sd)
                     }
                 } catch (_: Exception) { }
+                cliLatch.countDown()
+              }.start()
             }
+            try { cliLatch.await(10, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { }
             fun isAvc(u: String): Boolean {
                 val x = u.lowercase()
                 return "avc1" in x || "mime=video%2fmp4" in x || "mime=video/mp4" in x ||
                     "itag=137" in x || "itag=136" in x || "itag=135" in x || "itag=298" in x || "itag=399" in x
             }
             val best = LinkedHashMap<String, String>()
-            for ((lab, u) in links) {
+            val snapshot = synchronized(links) { ArrayList(links) }
+            for ((lab, u) in snapshot) {
                 val prev = best[lab]
                 when {
                     prev == null -> best[lab] = u
@@ -5586,6 +5691,10 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 oFile.delete()
                 val path = rotaPublicDir("video/mp4", outName).absolutePath + "/" + outName
+                // Galeri / dosya yöneticisi videoyu hemen görsün ve kare önizlemesini üretsin
+                try {
+                    android.media.MediaScannerConnection.scanFile(this, arrayOf(path), arrayOf("video/mp4"), null)
+                } catch (_: Exception) { }
                 dl.done = true
                 dl.running = false
                 handler.post {
@@ -6003,23 +6112,27 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             var aDone = false
             var vTime = 0L
             var aTime = 0L
+            // Dosya yöneticisi önizlemesi siyah çıkmasın: zaman 0'dan başlasın ve ilk video karesi anahtar kare olsun
+            val baseUs = minOf(vExt!!.sampleTime.coerceAtLeast(0L), aExt!!.sampleTime.coerceAtLeast(0L))
+            var vSawKey = false
 
             fun readV(): Boolean {
                 if (vDone) return false
-                vBuf.clear()
-                val size = vExt!!.readSampleData(vBuf, 0)
-                if (size < 0) { vDone = true; return false }
-                vInfo.offset = 0
-                vInfo.size = size
-                vInfo.presentationTimeUs = vExt!!.sampleTime.coerceAtLeast(0L)
-                vTime = vInfo.presentationTimeUs
-                var flags = 0
-                val sf = vExt!!.sampleFlags
-                if (sf and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
-                    flags = flags or android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME
+                while (true) {
+                    vBuf.clear()
+                    val size = vExt!!.readSampleData(vBuf, 0)
+                    if (size < 0) { vDone = true; return false }
+                    val isKey = vExt!!.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0
+                    // Anahtar kareden önceki kareler çözülemez → atla
+                    if (!vSawKey && !isKey) { vExt!!.advance(); continue }
+                    vSawKey = true
+                    vInfo.offset = 0
+                    vInfo.size = size
+                    vInfo.presentationTimeUs = (vExt!!.sampleTime - baseUs).coerceAtLeast(0L)
+                    vTime = vInfo.presentationTimeUs
+                    vInfo.flags = if (isKey) android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                    return true
                 }
-                vInfo.flags = flags
-                return true
             }
             fun readA(): Boolean {
                 if (aDone) return false
@@ -6028,7 +6141,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 if (size < 0) { aDone = true; return false }
                 aInfo.offset = 0
                 aInfo.size = size
-                aInfo.presentationTimeUs = aExt!!.sampleTime.coerceAtLeast(0L)
+                aInfo.presentationTimeUs = (aExt!!.sampleTime - baseUs).coerceAtLeast(0L)
                 aTime = aInfo.presentationTimeUs
                 aInfo.flags = 0
                 return true
