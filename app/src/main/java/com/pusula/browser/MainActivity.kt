@@ -1095,6 +1095,8 @@ fun onMusicCatalog(raw: String?) {
     private val mediaControlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val act = intent?.action ?: return
+            // İndirilenler oynatıcısı açıkken bildirim düğmeleri ona gitsin
+            if (MediaPlayerActivity.active && act != PlaybackService.ACTION_CLOSE) return
             if (act == PlaybackService.ACTION_CLOSE) {
                 // Bildirim ✕: tüm medya hemen durur, bildirim geri gelmez
                 mediaDismissedUntil = android.os.SystemClock.elapsedRealtime() + 4000L
