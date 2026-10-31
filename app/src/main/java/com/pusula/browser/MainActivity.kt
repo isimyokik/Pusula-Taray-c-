@@ -3434,13 +3434,13 @@ fun onMusicCatalog(raw: String?) {
                         val finalLen = tmp.length()
                         dl.received = maxOf(dl.received, finalLen)
                         if (dl.total < finalLen) dl.total = finalLen
-                        val destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + dl.name
+                        val destPath = rotaPublicDir(mime, dl.name).absolutePath + "/" + dl.name
                         val resolver = contentResolver
                         if (Build.VERSION.SDK_INT >= 29) {
                             val values = android.content.ContentValues().apply {
                                 put(android.provider.MediaStore.Downloads.DISPLAY_NAME, dl.name)
                                 put(android.provider.MediaStore.Downloads.MIME_TYPE, mime ?: "application/octet-stream")
-                                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, rotaRelativePath(mime, dl.name))
                                 put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
                             }
                             val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
@@ -3455,10 +3455,7 @@ fun onMusicCatalog(raw: String?) {
                                 tmp.copyTo(java.io.File(destPath), true)
                             }
                         } else {
-                            val dest = java.io.File(
-                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                                dl.name
-                            )
+                            val dest = java.io.File(rotaPublicDir(mime, dl.name), dl.name)
                             tmp.copyTo(dest, true)
                         }
                         try { tmp.delete() } catch (_: Exception) {}
@@ -3507,6 +3504,43 @@ fun onMusicCatalog(raw: String?) {
             }
         }.start()
     }
+
+    /** Download/Rota alt klasörü: Videolar | Müzikler | Resimler | Belgeler */
+    private fun rotaSubFolder(mime: String?, name: String): String {
+        val n = name.lowercase()
+        val m = (mime ?: "").lowercase()
+        return when {
+            m.contains("video") ||
+                n.endsWith(".mp4") || n.endsWith(".webm") || n.endsWith(".mkv") ||
+                n.endsWith(".avi") || n.endsWith(".mov") || n.endsWith(".3gp") -> "Videolar"
+            m.contains("audio") ||
+                n.endsWith(".mp3") || n.endsWith(".m4a") || n.endsWith(".aac") ||
+                n.endsWith(".ogg") || n.endsWith(".opus") || n.endsWith(".flac") ||
+                n.endsWith(".wav") || n.endsWith(".weba") -> "Müzikler"
+            m.contains("image") ||
+                n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") ||
+                n.endsWith(".gif") || n.endsWith(".webp") || n.endsWith(".bmp") ||
+                n.endsWith(".heic") || n.endsWith(".svg") -> "Resimler"
+            else -> "Belgeler"
+        }
+    }
+
+    /** MediaStore / DownloadManager: Download/Rota/Videolar */
+    private fun rotaRelativePath(mime: String?, name: String): String =
+        Environment.DIRECTORY_DOWNLOADS + "/Rota/" + rotaSubFolder(mime, name)
+
+    /** Dosya sistemi yolu (API < 29 veya kopya hedefi) */
+    private fun rotaPublicDir(mime: String?, name: String): java.io.File {
+        val dir = java.io.File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "Rota/" + rotaSubFolder(mime, name)
+        )
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    private fun rotaSubPath(mime: String?, name: String): String =
+        "Rota/" + rotaSubFolder(mime, name) + "/" + name
 
     private fun startDownload(url: String, ua: String?, cd: String?, mime: String?, forcedName: String? = null) {
         if (!url.startsWith("http")) return
@@ -3562,12 +3596,13 @@ fun onMusicCatalog(raw: String?) {
                 DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE
             )
             val destPath: String
+            val subPath = rotaSubPath(mime, finalName)
             if (Build.VERSION.SDK_INT >= 29) {
-                req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, finalName)
-                destPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + finalName
+                req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, subPath)
+                destPath = rotaPublicDir(mime, finalName).absolutePath + "/" + finalName
             } else {
-                req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, finalName)
-                destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + finalName
+                req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, subPath)
+                destPath = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/" + subPath
             }
             val dlId = (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
             try { DownloadNotifier.track(this, dlId, finalName) } catch (_: Exception) { }
@@ -5348,17 +5383,14 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     put(android.provider.MediaStore.Downloads.DISPLAY_NAME, outName)
                     put(android.provider.MediaStore.Downloads.MIME_TYPE, "video/mp4")
                     if (Build.VERSION.SDK_INT >= 29) {
-                        put(android.provider.MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                        put(android.provider.MediaStore.Downloads.RELATIVE_PATH, rotaRelativePath("video/mp4", outName))
                         put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
                     }
                 }
                 val uri = if (Build.VERSION.SDK_INT >= 29) {
                     resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 } else {
-                    val dest = java.io.File(
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                        outName
-                    )
+                    val dest = java.io.File(rotaPublicDir("video/mp4", outName), outName)
                     oFile.copyTo(dest, true)
                     android.net.Uri.fromFile(dest)
                 }
@@ -5371,7 +5403,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     resolver.update(uri, values, null, null)
                 }
                 oFile.delete()
-                val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/" + outName
+                val path = rotaPublicDir("video/mp4", outName).absolutePath + "/" + outName
                 handler.post {
                     prefs.addDownload(outName, videoUrl, path, "video/mp4")
                     toast("MP4 indirildi: $outName")
