@@ -159,8 +159,10 @@
 
         <activity
             android:name=".MediaPlayerActivity"
-        android:supportsPictureInPicture="true"
             android:exported="false"
+            android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
             android:theme="@style/Theme.Pusula" />
     </application>
