@@ -8491,8 +8491,6 @@ if(isYt){
             "});},800);" +
             "}catch(e){}})();"
 
-            "}catch(e){}})();"
-
         const val BACKGROUND_MEDIA_JS =
             "(function(){try{" +
                 "if(window.__rotaDuck){document.querySelectorAll('video,audio').forEach(function(m){try{m.volume=0;}catch(x){}});return;}" +
