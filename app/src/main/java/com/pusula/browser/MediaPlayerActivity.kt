@@ -341,8 +341,8 @@ class MediaPlayerActivity : AppCompatActivity() {
     }
 
     private fun buildPipParams(): PictureInPictureParams {
-        // Her zaman yatay 16:9 (dikey telefon oranını kullanma)
-        val ratio = Rational(16, 9)
+        // Yatay ve daha küçük yükseklik (16:9 tam ekrana yakın büyük açılabiliyor)
+        val ratio = Rational(2, 1)
         val b = PictureInPictureParams.Builder().setAspectRatio(ratio)
         if (Build.VERSION.SDK_INT >= 26) {
             val acts = ArrayList<RemoteAction>()
