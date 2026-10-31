@@ -1302,6 +1302,7 @@ fun onMusicCatalog(raw: String?) {
 
         startUrl = intent?.dataString
         startAppMode = intent?.getBooleanExtra("pusula_app", false) == true
+        try { handleIncomingViewIntent(intent) } catch (_: Exception) { }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { handleBack() }
@@ -1345,6 +1346,7 @@ fun onMusicCatalog(raw: String?) {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        try { if (handleIncomingViewIntent(intent)) return } catch (_: Exception) { }
         if (intent.getBooleanExtra("open_newtab", false) && intent.dataString.isNullOrBlank()) {
             openTab(null)
             return
@@ -1910,8 +1912,8 @@ fun onMusicCatalog(raw: String?) {
                 }
                 WebView.HitTestResult.SRC_ANCHOR_TYPE -> {
                     val link = hr.extra
-                    if (!link.isNullOrBlank() && isViewableDocument(link, null, null)) {
-                        openDocumentViewer(link, null, null)
+                    if (!link.isNullOrBlank() && (link.startsWith("http") || link.startsWith("https"))) {
+                        showLinkContextMenu(link, tab)
                         true
                     } else false
                 }
@@ -3083,7 +3085,58 @@ fun onMusicCatalog(raw: String?) {
             name.endsWith(".md") || name.endsWith(".json") || name.endsWith(".log") || name.endsWith(".xml")
     }
 
-    private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
+        private fun handleIncomingViewIntent(intent: Intent?): Boolean {
+        if (intent == null) return false
+        val act = intent.action ?: return false
+        val uri: Uri? = when (act) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> {
+                @Suppress("DEPRECATION")
+                if (Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+                }
+            }
+            else -> null
+        }
+        if (uri == null) return false
+        val scheme = (uri.scheme ?: "").lowercase()
+        if (scheme != "content" && scheme != "file" && scheme != "http" && scheme != "https") return false
+        try {
+            if (scheme == "content" || scheme == "file") {
+                try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            }
+        } catch (_: Exception) { }
+        val mime = intent.type ?: try { contentResolver.getType(uri) } catch (_: Exception) { null }
+        val url = uri.toString()
+        val m = (mime ?: "").lowercase()
+        // Sadece dosya/content veya belge mime — normal http sayfa gezinmesini çalma
+        val isFileish = scheme == "content" || scheme == "file" ||
+            isViewableDocument(url, mime, null) || m.startsWith("image/") ||
+            m.contains("pdf") || m.contains("officedocument") || m.contains("msword") ||
+            m.contains("ms-excel") || m.contains("ms-powerpoint") || m.startsWith("text/")
+        if (!isFileish) return false
+        if (m.startsWith("image/") || Regex(".*\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$", RegexOption.IGNORE_CASE).matches(url)) {
+            handler.post {
+                val tab = tabs.getOrNull(cur)
+                if (tab != null) {
+                    try { tab.web.loadUrl(url) } catch (_: Exception) { openTab(url, true, tab.incognito) }
+                } else openTab(url)
+            }
+            return true
+        }
+        if (isViewableDocument(url, mime, null) || m.contains("pdf") || m.contains("officedocument") ||
+            m.contains("msword") || m.contains("ms-excel") || m.contains("ms-powerpoint") ||
+            m.startsWith("text/")) {
+            handler.post { openDocumentViewer(url, mime, null) }
+            return true
+        }
+        return false
+    }
+
+private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
         val name = URLUtil.guessFileName(url, cd, mime)
         val i = Intent(this, DocumentViewerActivity::class.java)
             .putExtra(DocumentViewerActivity.EXTRA_URL, url)
@@ -6447,6 +6500,29 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
         t.background = g
         t.setOnClickListener { onClick() }
         return t
+    }
+
+    private fun showLinkContextMenu(link: String, tab: BTab) {
+        val items = mutableListOf(
+            "Yeni sekmede aç",
+            "Bağlantıyı kopyala"
+        )
+        if (isViewableDocument(link, null, null)) items.add("Belge olarak aç")
+        items.add("İndir")
+        AlertDialog.Builder(this)
+            .setItems(items.toTypedArray()) { _, which ->
+                when (items[which]) {
+                    "Yeni sekmede aç" -> openTab(link, true, tab.incognito)
+                    "Bağlantıyı kopyala" -> {
+                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("url", link))
+                        toast("Bağlantı kopyalandı")
+                    }
+                    "Belge olarak aç" -> openDocumentViewer(link, null, null)
+                    "İndir" -> promptDownload(link, null, null, null)
+                }
+            }
+            .show()
     }
 
     private fun showTabs() {
