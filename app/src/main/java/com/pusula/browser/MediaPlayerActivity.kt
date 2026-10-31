@@ -148,12 +148,27 @@ class MediaPlayerActivity : AppCompatActivity() {
             override fun onTracksChanged(tracks: Tracks) {
                 if (tracks.groups.isNotEmpty()) setAudioMode(!tracks.isTypeSelected(C.TRACK_TYPE_VIDEO))
             }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) {
+                    // Tek öğe / kenar durum: tekrar başlat
+                    try {
+                        if (p.mediaItemCount > 0) {
+                            p.seekToNextMediaItem()
+                            p.playWhenReady = true
+                            p.play()
+                        }
+                    } catch (_: Exception) {
+                        try { p.seekTo(0, 0L); p.playWhenReady = true; p.play() } catch (_: Exception) { }
+                    }
+                }
+            }
             override fun onPlayerError(error: PlaybackException) {
                 Toast.makeText(this@MediaPlayerActivity, "Oynatılamadı: " + (error.message ?: "hata"), Toast.LENGTH_LONG).show()
             }
         })
         p.setMediaItems(items, start, 0L)
-        p.repeatMode = Player.REPEAT_MODE_OFF
+        // Liste bitince başa sar; kullanıcı kapatana kadar çalmaya devam
+        p.repeatMode = Player.REPEAT_MODE_ALL
         p.prepare()
         p.playWhenReady = true
         playerView.player = p
@@ -222,7 +237,7 @@ class MediaPlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        player?.pause()
+        // Kilit / arka plan: durdurma. Kullanıcı ✕ ile çıkana kadar çalsın.
     }
 
     override fun onDestroy() {
