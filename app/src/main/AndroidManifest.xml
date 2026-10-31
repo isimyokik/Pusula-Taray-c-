@@ -159,6 +159,7 @@
 
         <activity
             android:name=".MediaPlayerActivity"
+        android:supportsPictureInPicture="true"
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
             android:theme="@style/Theme.Pusula" />
