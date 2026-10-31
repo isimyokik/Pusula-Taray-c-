@@ -4430,6 +4430,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     if (audio != null) {
                         toast("İndiriliyor…")
                         // Kapak (video thumb) + doğrudan googlevideo ses — MP4 ile aynı httpToFile
+                        cacheDownloadThumb("$base.mp3", id, lastArtUrl.ifBlank { null })
                         startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
                     } else toast("Ses linki alınamadı")
                 }
@@ -6098,42 +6099,32 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }.start()
     }
 
-    /** İndirilenler: ses dosyası için net "MP3" rozeti (kapak/nota yok — videoyla karışmasın) */
-    private fun makeMp3LabelThumb(): android.graphics.Bitmap {
+    /** İndirilenler listesi: MP3 için nota kapak görseli */
+    private fun makeMusicNoteThumb(): android.graphics.Bitmap {
         val size = 256
         val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(bmp)
-        // Koyu nötr zemin (mor gradient / nota yok)
-        val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        bg.color = 0xFF1A2338.toInt()
-        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 40f, 40f, bg)
-        // İnce çerçeve
-        val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        stroke.style = android.graphics.Paint.Style.STROKE
-        stroke.strokeWidth = 3f
-        stroke.color = 0xFF3D4F73.toInt()
-        c.drawRoundRect(6f, 6f, size - 6f, size - 6f, 36f, 36f, stroke)
-        // "MP3" yazısı
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        p.color = 0xFFE8EEF9.toInt()
-        p.textAlign = android.graphics.Paint.Align.CENTER
-        p.typeface = android.graphics.Typeface.create(
-            android.graphics.Typeface.DEFAULT,
-            android.graphics.Typeface.BOLD
+        val g = android.graphics.LinearGradient(
+            0f, 0f, size.toFloat(), size.toFloat(),
+            intArrayOf(0xFF4C8DFF.toInt(), 0xFF8A5CFF.toInt(), 0xFF36D1FF.toInt()),
+            floatArrayOf(0f, 0.55f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
         )
-        p.textSize = 72f
-        p.letterSpacing = 0.08f
+        val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        bg.shader = g
+        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 48f, 48f, bg)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = android.graphics.Color.WHITE
+        p.textAlign = android.graphics.Paint.Align.CENTER
+        p.textSize = 140f
+        p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        val note = "♪"
         val fm = p.fontMetrics
-        c.drawText("MP3", size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, p)
+        c.drawText(note, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, p)
         return bmp
     }
 
     private fun loadDownloadThumb(title: String, path: String): android.graphics.Bitmap? {
-        val isAudEarly = title.endsWith(".mp3", true) || title.endsWith(".m4a", true) ||
-            title.endsWith(".aac", true) || title.endsWith(".opus", true) || title.endsWith(".ogg", true) ||
-            path.endsWith(".mp3", true) || path.endsWith(".m4a", true)
-        // Ses: kayıtlı video kapağını kullanma
-        if (isAudEarly) return makeMp3LabelThumb()
         try {
             val f = thumbFileForTitle(title)
             if (f.exists() && f.length() > 500) {
@@ -6160,11 +6151,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
             }
         } catch (_: Exception) { }
-        // MP3 / ses: kapak yok — net "MP3" yazısı (videoyla karışmasın)
+        // MP3 / ses: güzel nota ikonu
         val isAud = title.endsWith(".mp3", true) || title.endsWith(".m4a", true) ||
             title.endsWith(".aac", true) || title.endsWith(".opus", true) || title.endsWith(".ogg", true) ||
             path.endsWith(".mp3", true) || path.endsWith(".m4a", true)
-        if (isAud) return makeMp3LabelThumb()
+        if (isAud) return makeMusicNoteThumb()
         return null
     }
 
@@ -6391,7 +6382,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 val fallback = TextView(this)
                 fallback.text = when {
                     e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
-                    e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") || e.title.lowercase().endsWith(".m4a") -> "MP3"
+                    e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") || e.title.lowercase().endsWith(".m4a") -> "🎵"
                     e.mime.startsWith("image") -> "🖼️"
                     e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
                     else -> "📁"
@@ -6663,7 +6654,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             val icon = TextView(this)
             icon.text = when {
                 e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
-                e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") -> "MP3"
+                e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") -> "🎵"
                 e.mime.startsWith("image") -> "🖼️"
                 e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
                 else -> "📁"
