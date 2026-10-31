@@ -323,29 +323,57 @@
     tryNext();
   }
 
-  // Yerel HTML (file/content): uygulama logosu — isim tahmini / harf yok
+  // Yerel HTML (file/content): uygulama ikonu — harf yok, isim tahmini yok
   function isLocalUrl(u){
+    u = String(u || "");
+    var low = u.toLowerCase();
+    if (low.indexOf("http://") === 0 || low.indexOf("https://") === 0) return false;
+    if (low.indexOf("file:") === 0 || low.indexOf("content:") === 0 || low.indexOf("about:") === 0) return true;
+    if (/\.html?(?:\?|#|$)/i.test(u)) return true;
     try {
       var x = new URL(u, location.href);
-      return x.protocol === "file:" || x.protocol === "content:" || x.protocol === "about:";
-    } catch (e) {
-      return !u || (String(u).indexOf("http://") !== 0 && String(u).indexOf("https://") !== 0);
-    }
+      if (x.protocol === "file:" || x.protocol === "content:" || x.protocol === "about:") return true;
+    } catch (e) {}
+    return false;
   }
   function applyAppIcon(a){
     var box = a.querySelector("i");
     if (!box || box.querySelector("img")) return;
+    function paintCanvas(){
+      try {
+        var c = document.createElement("canvas");
+        c.width = 128; c.height = 128;
+        var ctx = c.getContext("2d");
+        var g = ctx.createLinearGradient(0, 0, 128, 128);
+        g.addColorStop(0, "#4c8dff"); g.addColorStop(1, "#8a5cff");
+        ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 64px system-ui,sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("R", 64, 70);
+        var img = new Image();
+        img.onload = function(){
+          box.textContent = "";
+          box.style.background = "transparent";
+          img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:19px";
+          box.appendChild(img);
+        };
+        img.src = c.toDataURL("image/png");
+      } catch (e) {
+        box.textContent = "R";
+        box.style.fontSize = "28px";
+      }
+    }
+    // Önce assets logosu; yoksa Rota "R" ikonu (harf/başlık değil)
     var img = new Image();
     img.onload = function(){
+      if (img.naturalWidth < 8) { paintCanvas(); return; }
       box.textContent = "";
       box.style.background = "#fff";
       img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:19px";
       box.appendChild(img);
     };
-    img.onerror = function(){
-      box.textContent = "📄";
-      box.style.fontSize = "28px";
-    };
+    img.onerror = paintCanvas;
     img.src = "https://appassets.androidplatform.net/assets/ic_launcher.png";
   }
 
