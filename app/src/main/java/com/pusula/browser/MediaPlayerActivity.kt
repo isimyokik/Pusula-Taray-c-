@@ -83,6 +83,8 @@ class MediaPlayerActivity : AppCompatActivity() {
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val p = player ?: return
+            // Bildirim şu an web medyasına aitse (YouTube vb.) oynatıcı komutları yok sayar
+            if (owner != "player") return
             when (intent?.action) {
                 PlaybackService.ACTION_PLAY -> {
                     p.playWhenReady = true
@@ -213,7 +215,7 @@ class MediaPlayerActivity : AppCompatActivity() {
         close.gravity = Gravity.CENTER
         close.setOnClickListener {
             try { player?.pause() } catch (_: Exception) { }
-            PlaybackService.stop(this)
+            if (owner == "player") PlaybackService.stop(this)
             finish()
         }
         topBar.addView(close, LinearLayout.LayoutParams(dp(52), dp(44)))
@@ -302,11 +304,13 @@ class MediaPlayerActivity : AppCompatActivity() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
         val p = ExoPlayer.Builder(this)
-            .setAudioAttributes(attrs, true)
+            .setAudioAttributes(attrs, false)
             .setHandleAudioBecomingNoisy(true)
             .setSeekBackIncrementMs(10000)
             .setSeekForwardIncrementMs(10000)
             .build()
+        // Kilit ekranında / arka planda CPU uyumasın: şarkılar kesintisiz sürsün
+        try { p.setWakeMode(C.WAKE_MODE_LOCAL) } catch (_: Exception) { }
         val items = buildItems(paths, titles)
         p.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -323,7 +327,15 @@ class MediaPlayerActivity : AppCompatActivity() {
                 } catch (_: Exception) { }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                try { pushNotif(); updatePipActions() } catch (_: Exception) { }
+                try {
+                    if (isPlaying) {
+                        playStartAt = android.os.SystemClock.elapsedRealtime()
+                        extBaseline = -1
+                        if (owner != "player") claimOwner()
+                        handler.postDelayed(extCheck, 1500L)
+                    }
+                    pushNotif(); updatePipActions()
+                } catch (_: Exception) { }
             }
             override fun onTracksChanged(tracks: Tracks) {
                 try {
@@ -409,7 +421,13 @@ class MediaPlayerActivity : AppCompatActivity() {
         })
         playerView.setOnTouchListener { _, ev -> gd.onTouchEvent(ev); false }
 
+        pauseHook = {
+            try { player?.pause() } catch (_: Exception) { }
+            try { updatePipActions() } catch (_: Exception) { }
+        }
+        claimOwner()
         registerControls()
+        registerDuckWatchers()
         pushNotif()
         handler.post(progressTick)
         applyBars()
@@ -440,6 +458,7 @@ class MediaPlayerActivity : AppCompatActivity() {
         if (paths.isEmpty()) return
         val p = player ?: return
         val start = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, paths.size - 1)
+        claimOwner()
         try {
             p.setMediaItems(buildItems(paths, titles), start, 0L)
             p.prepare()
@@ -495,6 +514,18 @@ class MediaPlayerActivity : AppCompatActivity() {
      * @param goHome true ise küçük pencere açılınca arkadaki uygulama ana ekrana çekilir
      * (YouTube küçük penceresindeki gibi: arkada uygulama açık kalmaz). Ana ekrana basınca zaten böyle olur.
      */
+    private var pendingGoHome = false
+
+    private fun goHomeNow() {
+        try {
+            startActivity(
+                Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_HOME)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: Exception) { }
+    }
+
     private fun enterPip(goHome: Boolean = false) {
         if (Build.VERSION.SDK_INT < 26) {
             Toast.makeText(this, "Bu cihazda küçük pencere yok", Toast.LENGTH_SHORT).show()
@@ -513,17 +544,11 @@ class MediaPlayerActivity : AppCompatActivity() {
             handler.postDelayed(pipEnteringReset, 400)
         }
         if (goHome && entered) {
-            handler.postDelayed({
-                try {
-                    if (isInPictureInPictureMode) {
-                        startActivity(
-                            Intent(Intent.ACTION_MAIN)
-                                .addCategory(Intent.CATEGORY_HOME)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    }
-                } catch (_: Exception) { }
-            }, 250)
+            pendingGoHome = true
+            // PiP'e geçiş bitince (onPipUi) ve yedek olarak gecikmeli: arkadaki uygulama ana ekrana çekilsin
+            for (d in longArrayOf(250L, 700L)) {
+                handler.postDelayed({ if (isInPictureInPictureMode && pendingGoHome) goHomeNow() }, d)
+            }
         }
     }
 
@@ -551,6 +576,8 @@ class MediaPlayerActivity : AppCompatActivity() {
     }
 
     private fun onPipUi(pip: Boolean) {
+        if (pip && pendingGoHome) { goHomeNow() }
+        if (!pip) pendingGoHome = false
         topBar.visibility = if (pip) View.GONE else View.VISIBLE
         if (pip) {
             try { playerView.hideController() } catch (_: Exception) { }
@@ -670,6 +697,7 @@ class MediaPlayerActivity : AppCompatActivity() {
 
     private fun pushNotif() {
         val p = player ?: return
+        if (owner != "player") return // bildirim şu an web medyasının
         val title = (p.currentMediaItem?.mediaMetadata?.title?.toString()
             ?: titleView.text?.toString()
             ?: "Rota").ifBlank { "Rota" }
@@ -754,6 +782,175 @@ class MediaPlayerActivity : AppCompatActivity() {
         return b
     }
 
+    // ================= Ses kısma: WhatsApp sesi / mikrofon / arama (web medyasıyla aynı davranış) =================
+    private val am: android.media.AudioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager }
+    private var duckLevel = 1.0
+    private var ducked = false
+    private var duckRunnable: Runnable? = null
+    private var duckSince = 0L
+    private var extBaseline = -1
+    private var extPeak = 1
+    private var extSeenSince = 0L
+    private var extQuietSince = 0L
+    private var playStartAt = 0L
+    private var micActive = false
+    private var recCb: android.media.AudioManager.AudioRecordingCallback? = null
+    private var playCb: android.media.AudioManager.AudioPlaybackCallback? = null
+    private val extCheck = Runnable { evalExternal() }
+    /** Dış sese/kayda göre sesi bu sürelerde yumuşakça kıs / aç. */
+    private val duckFadeOutMs = 1000L
+    private val duckFadeInMs = 1500L
+
+    /** Bildirimi ve sesi bu oynatıcı devralır; web medyası durur, sekmeler uyur. */
+    private fun claimOwner() {
+        owner = "player"
+        try { takeoverHook?.invoke() } catch (_: Exception) { }
+    }
+
+    private fun usageCounts(u: Int): Boolean = when (u) {
+        android.media.AudioAttributes.USAGE_ALARM,
+        android.media.AudioAttributes.USAGE_NOTIFICATION,
+        android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
+        android.media.AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST,
+        android.media.AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT,
+        android.media.AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_DELAYED,
+        android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT,
+        android.media.AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY,
+        android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE,
+        android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
+        android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING -> false
+        else -> true
+    }
+
+    private fun audioCount(): Int {
+        if (Build.VERSION.SDK_INT < 26) return 0
+        return try {
+            am.activePlaybackConfigurations.count { usageCounts(it.audioAttributes.usage) }
+        } catch (_: Exception) { 0 }
+    }
+
+    private fun runDuck(target: Double, ms: Long, done: () -> Unit = {}) {
+        duckRunnable?.let { handler.removeCallbacks(it) }
+        val start = duckLevel
+        val t0 = android.os.SystemClock.uptimeMillis()
+        val r = object : Runnable {
+            override fun run() {
+                val t = ((android.os.SystemClock.uptimeMillis() - t0).toDouble() / ms.toDouble()).coerceIn(0.0, 1.0)
+                val e = 0.5 - 0.5 * Math.cos(Math.PI * t)
+                duckLevel = (start + (target - start) * e).coerceIn(0.0, 1.0)
+                try { player?.volume = duckLevel.toFloat() } catch (_: Exception) { }
+                if (t >= 1.0) {
+                    duckRunnable = null
+                    duckLevel = target
+                    try { player?.volume = target.toFloat() } catch (_: Exception) { }
+                    done()
+                } else handler.postDelayed(this, 50L)
+            }
+        }
+        duckRunnable = r
+        handler.post(r)
+    }
+
+    private fun beginDuck() {
+        if (ducked || owner != "player") return
+        ducked = true
+        duckSince = android.os.SystemClock.elapsedRealtime()
+        extQuietSince = 0L
+        extPeak = audioCount().coerceAtLeast(1)
+        runDuck(0.0, duckFadeOutMs)
+        handler.removeCallbacks(extCheck)
+        handler.postDelayed(extCheck, 600L)
+    }
+
+    private fun endDuck() {
+        if (!ducked) return
+        ducked = false
+        runDuck(1.0, duckFadeInMs) {
+            extBaseline = -1
+            extSeenSince = 0L
+            handler.removeCallbacks(extCheck)
+            handler.postDelayed(extCheck, 100L)
+        }
+    }
+
+    private fun evalExternal() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val n = audioCount()
+        val inCall = try { am.mode != android.media.AudioManager.MODE_NORMAL } catch (_: Exception) { false }
+        if (ducked) {
+            if (micActive || inCall) { handler.postDelayed(extCheck, 500L); return }
+            if (now - duckSince < 2000L) { handler.postDelayed(extCheck, 500L); return }
+            if (n >= extPeak) { extQuietSince = 0L; handler.postDelayed(extCheck, 500L); return }
+            if (extQuietSince == 0L) {
+                extQuietSince = now
+                handler.postDelayed(extCheck, 600L)
+            } else if (now - extQuietSince >= 700L) {
+                extQuietSince = 0L
+                endDuck()
+            } else handler.postDelayed(extCheck, 400L)
+            return
+        }
+        val playing = try { player?.isPlaying == true } catch (_: Exception) { false }
+        if (!playing || duckRunnable != null || owner != "player") { extBaseline = -1; extSeenSince = 0L; return }
+        if (inCall) { beginDuck(); return }
+        // Kendi sesimizin oturduğu taban: çalmaya başladıktan 1,5 sn sonra ölçülür
+        if (now - playStartAt < 1500L) { handler.postDelayed(extCheck, 600L); return }
+        if (n >= 1 && (extBaseline < 0 || n < extBaseline)) extBaseline = n
+        if (extBaseline >= 1 && n > extBaseline) {
+            if (extSeenSince == 0L) {
+                extSeenSince = now
+                handler.postDelayed(extCheck, 250L)
+            } else if (now - extSeenSince >= 250L) {
+                extSeenSince = 0L
+                beginDuck()
+            }
+        } else extSeenSince = 0L
+    }
+
+    private fun registerDuckWatchers() {
+        if (Build.VERSION.SDK_INT >= 26 && playCb == null) {
+            try {
+                val cb = object : android.media.AudioManager.AudioPlaybackCallback() {
+                    override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
+                        handler.removeCallbacks(extCheck)
+                        handler.postDelayed(extCheck, 60L)
+                    }
+                }
+                am.registerAudioPlaybackCallback(cb, handler)
+                playCb = cb
+            } catch (_: Exception) { }
+        }
+        if (Build.VERSION.SDK_INT >= 24 && recCb == null) {
+            try {
+                val cb = object : android.media.AudioManager.AudioRecordingCallback() {
+                    override fun onRecordingConfigChanged(configs: MutableList<android.media.AudioRecordingConfiguration>?) {
+                        val rec = !configs.isNullOrEmpty()
+                        if (rec && !micActive) {
+                            micActive = true
+                            handler.postDelayed({
+                                if (micActive && !ducked && player?.isPlaying == true) beginDuck()
+                            }, 250L)
+                        } else if (!rec && micActive) {
+                            micActive = false
+                            handler.postDelayed({ if (!micActive && ducked) endDuck() }, 500L)
+                        }
+                    }
+                }
+                am.registerAudioRecordingCallback(cb, handler)
+                recCb = cb
+            } catch (_: Exception) { }
+        }
+    }
+
+    private fun unregisterDuckWatchers() {
+        try { playCb?.let { am.unregisterAudioPlaybackCallback(it) } } catch (_: Exception) { }
+        try { recCb?.let { am.unregisterAudioRecordingCallback(it) } } catch (_: Exception) { }
+        playCb = null; recCb = null
+        duckRunnable?.let { handler.removeCallbacks(it) }
+        duckRunnable = null
+        handler.removeCallbacks(extCheck)
+    }
+
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
 
     override fun onStop() {
@@ -767,11 +964,15 @@ class MediaPlayerActivity : AppCompatActivity() {
             try { unregisterReceiver(controlReceiver) } catch (_: Exception) { }
             controlRegistered = false
         }
+        unregisterDuckWatchers()
         try { playerView.player = null } catch (_: Exception) { }
         player?.release()
         player = null
         active = false
-        try { PlaybackService.stop(this) } catch (_: Exception) { }
+        pauseHook = null
+        val wasOwner = owner == "player"
+        owner = "web"
+        if (wasOwner) { try { PlaybackService.stop(this) } catch (_: Exception) { } }
         super.onDestroy()
     }
 
@@ -780,5 +981,11 @@ class MediaPlayerActivity : AppCompatActivity() {
         const val EXTRA_TITLES = "titles"
         const val EXTRA_INDEX = "index"
         @Volatile var active = false
+        /** Bildirimin/sesin sahibi: "player" (bu oynatıcı) ya da "web" (YouTube, YT Music …). Aynı anda tek sahip. */
+        @Volatile var owner: String = "web"
+        /** MainActivity: oynatıcı devralınca web medyasını durdurup sekmeleri uyutur. */
+        @Volatile var takeoverHook: (() -> Unit)? = null
+        /** MainActivity: web medyası devralınca oynatıcıyı duraklatır. */
+        @Volatile var pauseHook: (() -> Unit)? = null
     }
 }
