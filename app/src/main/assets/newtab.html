@@ -178,7 +178,6 @@
     var w = document.getElementById("wall");
     if (w) w.innerHTML = (WALLS[wall] || WALLS.orbs)(light);
   }
-  // Uygulama tarafı tema değiştirince sayfa yenilenmeden çağrılır
   window.__rotaTheme = function(){ var c = readCfg(); if (c) { for (var k in c) if (k !== "pins" && k !== "bookmarks" && k !== "history") cfg[k] = c[k]; } applyTheme(cfg); };
   applyTheme(cfg);
   if (isPrivate) {
@@ -221,7 +220,6 @@
   var saveTimer = null;
   var iconBusy = {};
   function save(){
-    // Toplu yaz — her logo için ayrı disk yazma uygulama kasmasın
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(function(){
       try {
@@ -255,7 +253,6 @@
     };
     img.src = src;
   }
-  // Kayıtlı logo varsa sadece göster; yoksa bir kez indirip kaydet. Tekrar render'da ağ yok.
   function favicon(a, pinIndex, u){
     var box = a.querySelector("i");
     if (!box || box.querySelector("img")) return;
@@ -326,12 +323,41 @@
     tryNext();
   }
 
+  // Yerel HTML (file/content): uygulama logosu — isim tahmini / harf yok
+  function isLocalUrl(u){
+    try {
+      var x = new URL(u, location.href);
+      return x.protocol === "file:" || x.protocol === "content:" || x.protocol === "about:";
+    } catch (e) {
+      return !u || (String(u).indexOf("http://") !== 0 && String(u).indexOf("https://") !== 0);
+    }
+  }
+  function applyAppIcon(a){
+    var box = a.querySelector("i");
+    if (!box || box.querySelector("img")) return;
+    var img = new Image();
+    img.onload = function(){
+      box.textContent = "";
+      box.style.background = "#fff";
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:19px";
+      box.appendChild(img);
+    };
+    img.onerror = function(){
+      box.textContent = "📄";
+      box.style.fontSize = "28px";
+    };
+    img.src = "https://appassets.androidplatform.net/assets/ic_launcher.png";
+  }
+
   function render(){
     g.innerHTML = "";
     pins.forEach(function(p, n){
-      var hasE = !!(p.e && String(p.e).trim());
-      var a = tile(p.t, p.u, hasE ? p.e : (p.t||"?").charAt(0).toUpperCase(), G[(p.g == null ? n : p.g) % G.length]);
-      if (!hasE) favicon(a, n, p.u);
+      var rawE = (p.e && String(p.e).trim()) ? String(p.e).trim() : "";
+      var useApp = rawE === "__app__" || isLocalUrl(p.u);
+      var hasE = !!(rawE && rawE !== "__app__");
+      var a = tile(p.t, p.u, hasE ? rawE : (useApp ? "" : (p.t||"?").charAt(0).toUpperCase()), G[(p.g == null ? n : p.g) % G.length]);
+      if (useApp) applyAppIcon(a);
+      else if (!hasE) favicon(a, n, p.u);
       a.dataset.n = n;
       attachDrag(a);
       g.appendChild(a);
@@ -365,16 +391,21 @@
     var o = sheet('<h3>' + (idx >= 0 ? "Kısayolu düzenle" : "Yeni kısayol") + '</h3>' +
       '<label>Ad</label><input id="fe_t" value="' + esc(p.t) + '" placeholder="Örn. Wikipedia">' +
       '<label>Adres</label><input id="fe_u" value="' + esc(p.u) + '" placeholder="Örn. tr.wikipedia.org" autocapitalize="off">' +
-      '<label>Simge (boş bırakırsan sitenin kendi logosu kullanılır)</label><input id="fe_e" value="' + esc(p.e) + '" maxlength="4" placeholder="📚">' +
+      '<label>Simge (boş bırakırsan sitenin kendi logosu kullanılır)</label><input id="fe_e" value="' + esc(p.e === "__app__" ? "" : p.e) + '" maxlength="4" placeholder="📚">' +
       '<div class="btns"><button id="fe_c">İptal</button><button class="pri" id="fe_s">Kaydet</button></div>');
     o.querySelector("#fe_c").onclick = closeSheet;
     o.querySelector("#fe_s").onclick = function(){
       var t = o.querySelector("#fe_t").value.trim();
-      var u = fixUrl(o.querySelector("#fe_u").value);
+      var uRaw = o.querySelector("#fe_u").value.trim();
       var e = o.querySelector("#fe_e").value.trim();
+      var u = uRaw;
+      // Yerel dosya yolunu https'e çevirme
+      if (/^(file:|content:)/i.test(uRaw)) u = uRaw;
+      else u = fixUrl(uRaw);
       if (!u) { o.querySelector("#fe_u").focus(); return; }
       if (!t) t = u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
-      if (idx >= 0) { pins[idx].t = t; pins[idx].u = u; pins[idx].e = e; }
+      if (isLocalUrl(u) && !e) e = "__app__";
+      if (idx >= 0) { pins[idx].t = t; pins[idx].u = u; pins[idx].e = e; delete pins[idx].i; }
       else pins.push({t:t,u:u,e:e,g:Math.floor(Math.random()*G.length)});
       save(); closeSheet(); render();
     };
@@ -461,6 +492,7 @@
     });
   }
 })();
+
 </script>
 </body>
 </html>
