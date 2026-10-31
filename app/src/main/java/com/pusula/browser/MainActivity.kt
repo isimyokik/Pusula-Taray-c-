@@ -3118,7 +3118,19 @@ fun onMusicCatalog(raw: String?) {
             m.contains("pdf") || m.contains("officedocument") || m.contains("msword") ||
             m.contains("ms-excel") || m.contains("ms-powerpoint") || m.startsWith("text/")
         if (!isFileish) return false
-        if (m.startsWith("image/") || Regex(".*\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$", RegexOption.IGNORE_CASE).matches(url)) {
+        if (m.startsWith("image/")) {
+            handler.post {
+                val tab = tabs.getOrNull(cur)
+                if (tab != null) {
+                    try { tab.web.loadUrl(url) } catch (_: Exception) { openTab(url, true, tab.incognito) }
+                } else openTab(url)
+            }
+            return true
+        }
+        val pathLow = try { (uri.path ?: url).lowercase() } catch (_: Exception) { url.lowercase() }
+        if (pathLow.endsWith(".jpg") || pathLow.endsWith(".jpeg") || pathLow.endsWith(".png") ||
+            pathLow.endsWith(".gif") || pathLow.endsWith(".webp") || pathLow.endsWith(".bmp") ||
+            pathLow.endsWith(".svg")) {
             handler.post {
                 val tab = tabs.getOrNull(cur)
                 if (tab != null) {
