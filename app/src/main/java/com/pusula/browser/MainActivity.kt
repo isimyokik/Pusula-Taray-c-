@@ -80,6 +80,9 @@ import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.yausername.ffmpeg.FFmpeg
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -186,6 +189,14 @@ class MainActivity : AppCompatActivity() {
     private var pausedByAudioFocus = false
     private var ignoreFocusUntil = 0L
     private var audioFocusRequest: AudioFocusRequest? = null
+
+    // --- Mikrofon (başka uygulama kayıt yaparken) → müzik durursa kayıt bitince kaldığı yerden devam ---
+    private var micActive = false
+    private var micResumePending = false
+    private var micStartAt = 0L
+    private var micResumeGen = 0
+    private var lastPlayingTrueAt = 0L
+    private var recCb: AudioManager.AudioRecordingCallback? = null
     // --- Ses odağı yavaş kısma / yavaş açma ---
     /** WhatsApp sesi vb. gelince medya bu sürede yavaşça kısılıp durur. */
     private val focusFadeOutMs = 400L
@@ -363,6 +374,58 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             0
         }
+    }
+
+    /**
+     * WhatsApp sesli mesaj / Google yazma / Asistan gibi mikrofon açan uygulamalar sistemden ses odağı ister;
+     * WebView (Chromium) medyayı duraklatır ve bazen kendisi geri başlatmaz. YouTube uygulaması gibi:
+     * kayıt başlarken çalıyorduysak, kayıt bitince otomatik devam et. Kullanıcı bu arada duraklatırsa devam etme.
+     */
+    private fun registerMicWatch() {
+        if (Build.VERSION.SDK_INT < 24 || recCb != null) return
+        try {
+            val cb = object : AudioManager.AudioRecordingCallback() {
+                override fun onRecordingConfigChanged(configs: MutableList<android.media.AudioRecordingConfiguration>?) {
+                    val recording = !configs.isNullOrEmpty()
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (recording && !micActive) {
+                        micActive = true
+                        val wasPlaying = hasMedia && !pausedByAudioFocus &&
+                            (lastPlaying || now - lastPlayingTrueAt < 4000L)
+                        if (wasPlaying) {
+                            micResumePending = true
+                            micStartAt = now
+                            // Duraklasa bile bildirim/servis kapanmasın
+                            focusNotifHoldUntil = maxOf(focusNotifHoldUntil, now + 10 * 60 * 1000L)
+                        }
+                    } else if (!recording && micActive) {
+                        micActive = false
+                        if (micResumePending) {
+                            micResumePending = false
+                            if (now - micStartAt < 10 * 60 * 1000L) {
+                                val gen = micResumeGen
+                                for (delay in longArrayOf(700L, 2500L, 5000L)) {
+                                    handler.postDelayed({
+                                        if (gen != micResumeGen || micActive || pausedByAudioFocus) return@postDelayed
+                                        if (lastPlaying) return@postDelayed
+                                        try { mediaTarget()?.web?.evaluateJavascript(MEDIA_FORCE_PLAY_JS, null) } catch (_: Exception) { }
+                                        handler.postDelayed({ pollMedia() }, 400L)
+                                    }, delay)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            audioManager.registerAudioRecordingCallback(cb, handler)
+            recCb = cb
+        } catch (_: Exception) { }
+    }
+
+    private fun unregisterMicWatch() {
+        try { recCb?.let { audioManager.unregisterAudioRecordingCallback(it) } } catch (_: Exception) { }
+        recCb = null
+        micResumeGen++
     }
 
     private fun registerExternalAudioWatch() {
@@ -884,6 +947,7 @@ private fun pollMedia() {
         val playChanged = playing != lastPlaying
         val changed = !hasMedia || playChanged || title != lastTitle || artist != lastArtist || artUrl != lastArtUrl || dur != lastDur || jumped
         if (changed) mediaChangedAt = now
+        if (playing) lastPlayingTrueAt = android.os.SystemClock.elapsedRealtime()
         hasMedia = true; lastPlaying = playing; lastTitle = title; lastArtist = artist; lastArtUrl = artUrl; lastDur = dur
         if (playing || pausedByAudioFocus) acquireMediaLocks()
         // Ses odağı: biz çalarken tut; başka uygulama gelince sistem LOSS verir
@@ -1184,6 +1248,8 @@ fun onMusicCatalog(raw: String?) {
             }
             if (act == PlaybackService.ACTION_PLAY || act == PlaybackService.ACTION_TOGGLE || act == PlaybackService.ACTION_PAUSE) {
                 abortFocusPause()
+                micResumePending = false
+                micResumeGen++
             }
             val js = when (act) {
                 // PLAY = zorla oynat (toggle değil — focus/bildirim play deyince stop oluyordu)
@@ -1314,6 +1380,9 @@ fun onMusicCatalog(raw: String?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         registerExternalAudioWatch()
+        registerMicWatch()
+        // yt-dlp'yi arka planda hazırla / güncelle (12 saatte bir)
+        handler.postDelayed({ if (ytdlEnabled) ytdlUpdateIfNeeded() }, 6000L)
         loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
@@ -1538,6 +1607,7 @@ fun onMusicCatalog(raw: String?) {
     override fun onDestroy() {
         try { releaseMediaLocks() } catch (_: Exception) { }
         try { unregisterExternalAudioWatch() } catch (_: Exception) { }
+        try { unregisterMicWatch() } catch (_: Exception) { }
         try { abandonMediaAudioFocus() } catch (_: Exception) { }
         try { unregisterReceiver(mediaControlReceiver) } catch (_: Exception) { }
         handler.removeCallbacks(backgroundMediaPump)
@@ -3420,6 +3490,14 @@ fun onMusicCatalog(raw: String?) {
     }
 
     /** Sekme başlığından temiz dosya adı (videoplayback yazmasın). */
+    /** Başlıktaki "(1080p)", "[4K]", "(Yüksek kalite)", "(HD)" gibi kalite etiketlerini dosya adından çıkarır. */
+    private fun stripQualityTags(s: String): String =
+        s.replace(
+            Regex("""\s*[(\[][^)\]]*(kalite|quality|\bHD\b|\bFHD\b|\bUHD\b|\bHQ\b|\b[48]K\b|\b\d{3,4}\s*p\b)[^)\]]*[)\]]""",
+                RegexOption.IGNORE_CASE),
+            ""
+        ).replace(Regex("\\s+"), " ").trim()
+
     private fun mediaFileBase(): String {
         val t = tabs.getOrNull(cur)
         var title = t?.title?.trim().orEmpty()
@@ -3431,6 +3509,7 @@ fun onMusicCatalog(raw: String?) {
             .replace(Regex("[\\\\/:*?\"<>|]+"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
+            .let { stripQualityTags(it) }
             .take(80)
         if (title.isBlank()) title = "medya"
         return title
@@ -4382,7 +4461,234 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }.start()
     }
 
+    // ===================== yt-dlp (youtubedl-android) =====================
+    /** Kapatmak için false yap: eski indirme yolu aynen çalışır. */
+    private val ytdlEnabled = true
+    private val ytdlLock = Any()
+    @Volatile private var ytdlReady = false
+    @Volatile private var ytdlInitFailed = false
+
+    private fun ensureYtdl(): Boolean {
+        if (ytdlReady) return true
+        if (ytdlInitFailed) return false
+        synchronized(ytdlLock) {
+            if (ytdlReady) return true
+            if (ytdlInitFailed) return false
+            return try {
+                YoutubeDL.getInstance().init(application)
+                try { FFmpeg.getInstance().init(application) } catch (_: Throwable) { }
+                ytdlReady = true
+                true
+            } catch (_: Throwable) {
+                ytdlInitFailed = true
+                false
+            }
+        }
+    }
+
+    /** UpdateChannel adı sürüme göre değişebildiği için yansıma ile NIGHTLY (yoksa STABLE) bulunur. */
+    private fun ytdlUpdateChannel(): Any? {
+        val classNames = listOf(
+            "com.yausername.youtubedl_android.YoutubeDL\$UpdateChannel",
+            "com.yausername.youtubedl_android.UpdateChannel"
+        )
+        for (cn in classNames) {
+            try {
+                val cls = Class.forName(cn)
+                for (n in listOf("NIGHTLY", "_NIGHTLY", "STABLE", "_STABLE")) {
+                    try { return cls.getField(n).get(null) } catch (_: Throwable) { }
+                }
+                val comp = cls.getField("Companion").get(null)
+                for (n in listOf("getNIGHTLY", "get_NIGHTLY", "getSTABLE", "get_STABLE")) {
+                    try { return comp.javaClass.getMethod(n).invoke(comp) } catch (_: Throwable) { }
+                }
+            } catch (_: Throwable) { }
+        }
+        return null
+    }
+
+    /** yt-dlp'yi günceller; YouTube değişince uygulamayı yeniden derlemeden düzelir. */
+    private fun ytdlUpdateNow(): Boolean {
+        return try {
+            if (!ensureYtdl()) return false
+            val ch = ytdlUpdateChannel() ?: return false
+            val m = YoutubeDL::class.java.methods.firstOrNull {
+                it.name == "updateYoutubeDL" && it.parameterTypes.size == 2
+            } ?: return false
+            m.invoke(YoutubeDL.getInstance(), application, ch)
+            getSharedPreferences("ytdl", MODE_PRIVATE).edit().putLong("upd", System.currentTimeMillis()).apply()
+            true
+        } catch (_: Throwable) { false }
+    }
+
+    private fun ytdlUpdateIfNeeded() {
+        Thread {
+            try {
+                val last = getSharedPreferences("ytdl", MODE_PRIVATE).getLong("upd", 0L)
+                if (System.currentTimeMillis() - last < 12 * 3600 * 1000L) return@Thread
+                ytdlUpdateNow()
+            } catch (_: Throwable) { }
+        }.start()
+    }
+
+    /** İndirilen dosyayı Download/Rota klasörüne yazar (MediaStore), galeriye taratır; yolu döner. */
+    private fun saveToPublicDownloads(src: java.io.File, name: String, mime: String): String {
+        val path = rotaPublicDir(mime, name).absolutePath + "/" + name
+        if (Build.VERSION.SDK_INT >= 29) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mime)
+                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, rotaRelativePath(mime, name))
+                put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            if (uri != null) {
+                contentResolver.openOutputStream(uri)?.use { out -> src.inputStream().use { it.copyTo(out) } }
+                values.clear()
+                values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+            } else {
+                src.copyTo(java.io.File(path), true)
+            }
+        } else {
+            src.copyTo(java.io.File(rotaPublicDir(mime, name), name), true)
+        }
+        try { android.media.MediaScannerConnection.scanFile(this, arrayOf(path), arrayOf(mime), null) } catch (_: Exception) { }
+        return path
+    }
+
+    /**
+     * YouTube'u yt-dlp ile indirir (1080p'ye kadar en iyi, sesli, MP4; ya da MP3). Listede yüzde/MB ve bildirim gösterir.
+     * Herhangi bir sorunda [onFallback] ile eski indirme yoluna düşer.
+     */
+    private fun downloadViaYtdlp(watch: String, id: String, base: String, audioOnly: Boolean, onFallback: () -> Unit) {
+        val ext = if (audioOnly) "mp3" else "mp4"
+        val mime = if (audioOnly) "audio/mpeg" else "video/mp4"
+        val outName = "$base.$ext"
+        val dl = ActiveDl(id = activeDlSeq++, name = outName, url = watch, kind = if (audioOnly) "MP3" else "MP4", merge = true)
+        dl.running = true
+        activeDls.add(0, dl)
+        toast("${dl.kind} indiriliyor: $outName")
+        cacheDownloadThumb(outName, id, null)
+        notifyDlProgress(dl)
+        downloadsDialogRefresh?.invoke()
+        val procId = "rota_ytdl_${dl.id}"
+
+        Thread {
+            val work = java.io.File(cacheDir, "ytdl_${dl.id}")
+            fun cleanup() { try { work.deleteRecursively() } catch (_: Exception) { } }
+            fun giveUp(toLegacy: Boolean) {
+                cleanup()
+                dl.running = false
+                dl.failed = true
+                handler.post {
+                    notifyDlProgress(dl)
+                    activeDls.remove(dl)
+                    refreshDownloadsDialogFull()
+                    if (toLegacy && !dl.cancelled) {
+                        toast("Eski yöntemle deneniyor…")
+                        onFallback()
+                    }
+                }
+            }
+            try {
+                cleanup()
+                work.mkdirs()
+                if (!ensureYtdl()) { giveUp(true); return@Thread }
+                // İlk kullanımda en güncel yt-dlp'yi al (paketle gelen sürüm eski olabilir)
+                if (getSharedPreferences("ytdl", MODE_PRIVATE).getLong("upd", 0L) == 0L) ytdlUpdateNow()
+
+                val req = YoutubeDLRequest(watch)
+                req.addOption("-o", java.io.File(work, "%(id)s.%(ext)s").absolutePath)
+                req.addOption("--no-playlist")
+                req.addOption("--no-mtime")
+                req.addOption("--no-cache-dir")
+                req.addOption("-N", "4")
+                if (audioOnly) {
+                    req.addOption("-f", "ba[ext=m4a]/ba/b")
+                    req.addOption("-x")
+                    req.addOption("--audio-format", "mp3")
+                    req.addOption("--audio-quality", "0")
+                } else {
+                    // 1080 → 720 → 480 → 360: yt-dlp ≤1080 içinde en iyiyi seçer; ses her zaman dahil
+                    req.addOption("-f", "bv*[height<=1080][vcodec^=avc1]+ba[acodec^=mp4a]/bv*[height<=1080]+ba/b[height<=1080]/b")
+                    req.addOption("--merge-output-format", "mp4")
+                }
+                val lastUi = java.util.concurrent.atomic.AtomicLong(0L)
+                YoutubeDL.getInstance().execute(req, procId) { p, _, line ->
+                    if (dl.cancelled) {
+                        try { YoutubeDL.getInstance().destroyProcessById(procId) } catch (_: Throwable) { }
+                    }
+                    val pct = p.toDouble().coerceIn(0.0, 100.0)
+                    var total = dl.total
+                    val m = Regex("""of\s+~?\s*([\d.]+)\s*([KMG])iB""").find(line.toString())
+                    if (m != null) {
+                        val v = m.groupValues[1].toDoubleOrNull() ?: 0.0
+                        val mult = when (m.groupValues[2]) { "K" -> 1024.0; "M" -> 1048576.0; else -> 1073741824.0 }
+                        if (v > 0.0) total = (v * mult).toLong()
+                    }
+                    if (total <= 0L) total = 10000L
+                    dl.total = total
+                    dl.received = (pct / 100.0 * total).toLong()
+                    val now = System.currentTimeMillis()
+                    val prev = lastUi.get()
+                    if (now - prev > 350 && lastUi.compareAndSet(prev, now)) {
+                        handler.post {
+                            notifyDlProgress(dl)
+                            downloadsDialogRefresh?.invoke()
+                        }
+                    }
+                }
+                if (dl.cancelled) {
+                    cleanup()
+                    dl.running = false
+                    handler.post { activeDls.remove(dl); refreshDownloadsDialogFull() }
+                    return@Thread
+                }
+                val out = work.listFiles()
+                    ?.filter { it.isFile && it.length() > 4096 && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
+                    ?.let { files -> files.firstOrNull { it.extension.equals(ext, true) } ?: files.maxByOrNull { it.length() } }
+                if (out == null) { giveUp(true); return@Thread }
+                dl.received = dl.total
+                handler.post { notifyDlProgress(dl); downloadsDialogRefresh?.invoke() }
+                val path = saveToPublicDownloads(out, outName, mime)
+                cleanup()
+                dl.done = true
+                dl.running = false
+                handler.post {
+                    prefs.addDownload(outName, watch, path, mime)
+                    if (!thumbFileForTitle(outName).let { it.exists() && it.length() > 1000 }) {
+                        try { thumbFileForTitle(outName).delete() } catch (_: Exception) { }
+                        cacheDownloadThumb(outName, id, null)
+                    }
+                    notifyDlProgress(dl)
+                    activeDls.remove(dl)
+                    toast("${dl.kind} indirildi: $outName")
+                    refreshDownloadsDialogFull()
+                }
+            } catch (_: Throwable) {
+                if (dl.cancelled) {
+                    cleanup()
+                    dl.running = false
+                    handler.post { activeDls.remove(dl); refreshDownloadsDialogFull() }
+                } else giveUp(true)
+            }
+        }.start()
+    }
+
+    /** Önce yt-dlp; olmazsa eski (kendi InnerTube/SaveFrom) yol. */
     private fun downloadSingleTitled(page: String, audioOnly: Boolean, id: String, ytTitle: String?) {
+        if (!ytdlEnabled) { downloadSingleTitledLegacy(page, audioOnly, id, ytTitle); return }
+        val title = ytTitle?.takeIf {
+            it.isNotBlank() && !it.equals("YouTube", true) && !it.equals("YouTube Music", true)
+        } ?: "video_$id"
+        val base = safeFileName(title, id)
+        downloadViaYtdlp("https://www.youtube.com/watch?v=$id", id, base, audioOnly) {
+            downloadSingleTitledLegacy(page, audioOnly, id, ytTitle)
+        }
+    }
+
+    private fun downloadSingleTitledLegacy(page: String, audioOnly: Boolean, id: String, ytTitle: String?) {
         val title = ytTitle?.takeIf {
             it.isNotBlank() && !it.equals("YouTube", true) && !it.equals("YouTube Music", true)
         } ?: "video_$id"
@@ -4454,6 +4760,20 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     ?: links.firstOrNull {
                         it.first.startsWith("V:") && it.first.removePrefix("V:").toIntOrNull() == h
                     }?.second
+            // Aynı yükseklikte birden çok akış varsa H.264 (birleştirilebilen) olanı seç; VP9/AV1 MP4'e birleşmez
+            fun adaptiveAvc(h: Int): String? {
+                val avc = when (h) {
+                    1080 -> listOf(137, 299)
+                    720 -> listOf(136, 298)
+                    480 -> listOf(135)
+                    360 -> listOf(134)
+                    else -> emptyList()
+                }
+                val cands = links.filter { it.first == "V:$h" }
+                return cands.firstOrNull { itagOf(it.second) in avc }?.second
+                    ?: cands.firstOrNull()?.second
+                    ?: adaptive(h)
+            }
             fun bestProgressive(): String? {
                 // 1) itag 22 = 720p sesli
                 links.firstOrNull {
@@ -4481,6 +4801,14 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 !audioOnly -> {
                     val prog = bestProgressive()
                     when {
+                        // 1080p + ses: 720p ile aynı hızlı yol (paralel parça indirme + birleştirme).
+                        // Birleşmezse sırayla 720 → 480 → 360, en sonda sesli progressive.
+                        adaptiveAvc(1080) != null && audio != null -> {
+                            val progOk = prog?.takeIf { !isVideoOnly("", it) }
+                            val alts: List<String> = if (progOk != null && itagOf(progOk) == 22) emptyList<String>()
+                                else listOf(720, 480, 360).mapNotNull { adaptiveAvc(it) }
+                            downloadAndMerge(adaptiveAvc(1080)!!, audio, "$base.mp4", progOk, id, alts)
+                        }
                         // Sadece gerçekten sesli progressive — V:720 asla tek başına
                         prog != null && !isVideoOnly("", prog) -> {
                             toast("İndiriliyor…")
@@ -4885,11 +5213,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
     }
 
     private fun safeFileName(title: String, id: String): String {
-        var t = title.trim()
+        var t = stripQualityTags(title.trim()
             .replace(Regex("\\s*[-|]\\s*YouTube(\\s*Music)?\\s*$", RegexOption.IGNORE_CASE), "")
             .replace(Regex("[\\\\/:*?\"<>|]+"), " ")
             .replace(Regex("\\s+"), " ")
-            .trim()
+            .trim())
             .take(80)
         if (t.isBlank() || t == id) t = "video_$id"
         return t
@@ -5458,7 +5786,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         audioUrl: String,
         outName: String,
         progressiveFallback: String? = null,
-        videoId: String? = null
+        videoId: String? = null,
+        altVideos: List<String> = emptyList()
     ) {
         // Listede + bildirimde görünsün: yüzde ve MB (video + ses toplamı)
         val dl = ActiveDl(id = activeDlSeq++, name = outName, url = videoUrl, kind = "MP4", merge = true)
@@ -5494,7 +5823,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     notifyDlProgress(dl)
                     activeDls.remove(dl)
                     refreshDownloadsDialogFull()
-                    if (!progressiveFallback.isNullOrBlank()) {
+                    if (altVideos.isNotEmpty()) {
+                        // Bu kalite olmadı → bir alt kaliteyi (1080 → 720 → 480 → 360) dene
+                        toast("Bu kalite birleşmedi, bir alt kalite deneniyor")
+                        downloadAndMerge(altVideos.first(), audioUrl, outName, progressiveFallback, videoId, altVideos.drop(1))
+                    } else if (!progressiveFallback.isNullOrBlank()) {
                         toast("Birleştirme iptal, sesli MP4 deneniyor")
                         startDownload(progressiveFallback, null, null, "video/mp4", outName)
                     } else toast(msg)
@@ -5602,6 +5935,10 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 oFile.delete()
                 val path = rotaPublicDir("video/mp4", outName).absolutePath + "/" + outName
+                // Galeri / dosya yöneticisi videoyu hemen görsün ve kare önizlemesini üretsin
+                try {
+                    android.media.MediaScannerConnection.scanFile(this, arrayOf(path), arrayOf("video/mp4"), null)
+                } catch (_: Exception) { }
                 dl.done = true
                 dl.running = false
                 handler.post {
@@ -6019,23 +6356,27 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             var aDone = false
             var vTime = 0L
             var aTime = 0L
+            // Dosya yöneticisi önizlemesi siyah çıkmasın: zaman 0'dan başlasın ve ilk video karesi anahtar kare olsun
+            val baseUs = minOf(vExt!!.sampleTime.coerceAtLeast(0L), aExt!!.sampleTime.coerceAtLeast(0L))
+            var vSawKey = false
 
             fun readV(): Boolean {
                 if (vDone) return false
-                vBuf.clear()
-                val size = vExt!!.readSampleData(vBuf, 0)
-                if (size < 0) { vDone = true; return false }
-                vInfo.offset = 0
-                vInfo.size = size
-                vInfo.presentationTimeUs = vExt!!.sampleTime.coerceAtLeast(0L)
-                vTime = vInfo.presentationTimeUs
-                var flags = 0
-                val sf = vExt!!.sampleFlags
-                if (sf and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
-                    flags = flags or android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME
+                while (true) {
+                    vBuf.clear()
+                    val size = vExt!!.readSampleData(vBuf, 0)
+                    if (size < 0) { vDone = true; return false }
+                    val isKey = vExt!!.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0
+                    // Anahtar kareden önceki kareler çözülemez → atla
+                    if (!vSawKey && !isKey) { vExt!!.advance(); continue }
+                    vSawKey = true
+                    vInfo.offset = 0
+                    vInfo.size = size
+                    vInfo.presentationTimeUs = (vExt!!.sampleTime - baseUs).coerceAtLeast(0L)
+                    vTime = vInfo.presentationTimeUs
+                    vInfo.flags = if (isKey) android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                    return true
                 }
-                vInfo.flags = flags
-                return true
             }
             fun readA(): Boolean {
                 if (aDone) return false
@@ -6044,7 +6385,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 if (size < 0) { aDone = true; return false }
                 aInfo.offset = 0
                 aInfo.size = size
-                aInfo.presentationTimeUs = aExt!!.sampleTime.coerceAtLeast(0L)
+                aInfo.presentationTimeUs = (aExt!!.sampleTime - baseUs).coerceAtLeast(0L)
                 aTime = aInfo.presentationTimeUs
                 aInfo.flags = 0
                 return true
