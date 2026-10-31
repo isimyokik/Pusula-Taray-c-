@@ -3137,6 +3137,13 @@ fun onMusicCatalog(raw: String?) {
             if (!name.contains('.')) {
                 val ext = when {
                     (mime ?: "").contains("pdf") -> ".pdf"
+                    (mime ?: "").contains("wordprocessingml") -> ".docx"
+                    (mime ?: "").contains("spreadsheetml") -> ".xlsx"
+                    (mime ?: "").contains("presentationml") -> ".pptx"
+                    (mime ?: "").contains("msword") -> ".doc"
+                    (mime ?: "").contains("ms-excel") -> ".xls"
+                    (mime ?: "").contains("ms-powerpoint") -> ".ppt"
+                    (mime ?: "").contains("rtf") -> ".rtf"
                     (mime ?: "").contains("html") -> ".html"
                     (mime ?: "").contains("json") -> ".json"
                     (mime ?: "").startsWith("image/") -> ".jpg"
@@ -3236,6 +3243,21 @@ fun onMusicCatalog(raw: String?) {
     }
 
     private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
+        // Cihazdaki (önbelleğe alınmış) dosya: yerel yoldan aç. Adres olarak verilirse görüntüleyici dosyayı internetteki
+        // bir belge gibi Google'a gönderiyor ve "400 That's an error" çıkıyor.
+        if (url.startsWith("file:")) {
+            val p = try { Uri.parse(url).path } catch (_: Exception) { null }
+            val lf = if (p != null) File(p) else null
+            if (lf != null && lf.exists() && lf.length() > 0L) {
+                val li = Intent(this, DocumentViewerActivity::class.java)
+                    .putExtra(DocumentViewerActivity.EXTRA_PATH, lf.absolutePath)
+                    .putExtra(DocumentViewerActivity.EXTRA_NAME, lf.name)
+                    .putExtra(DocumentViewerActivity.EXTRA_MIME, mime)
+                    .putExtra(DocumentViewerActivity.EXTRA_URL, url)
+                try { startActivity(li) } catch (_: Exception) { toast("Dosya açılamadı") }
+                return
+            }
+        }
         val name = URLUtil.guessFileName(url, cd, mime)
         val i = Intent(this, DocumentViewerActivity::class.java)
         try {
