@@ -13,6 +13,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "2.1"
+
+        // yt-dlp (Python + ffmpeg) yalnızca telefon işlemcileri için paketlenir; APK küçük kalır
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -28,6 +33,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // yt-dlp'nin yerel dosyaları (python, ffmpeg) çalışabilmesi için gerekli
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -37,4 +49,8 @@ dependencies {
     implementation("androidx.media:media:1.7.0")
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
+
+    // yt-dlp (YouTube indirme motoru)
+    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 }
