@@ -3105,55 +3105,75 @@ fun onMusicCatalog(raw: String?) {
         val scheme = (uri.scheme ?: "").lowercase()
         if (scheme != "content" && scheme != "file" && scheme != "http" && scheme != "https") return false
         try {
-            if (scheme == "content" || scheme == "file") {
-                try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            if (scheme == "content") {
+                try { grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
             }
         } catch (_: Exception) { }
-        val mime = intent.type ?: try { contentResolver.getType(uri) } catch (_: Exception) { null }
+        val mime = (intent.type ?: try { contentResolver.getType(uri) } catch (_: Exception) { null } ?: "").lowercase()
         val url = uri.toString()
-        val m = (mime ?: "").lowercase()
-        // Sadece dosya/content veya belge mime — normal http sayfa gezinmesini çalma
-        val isFileish = scheme == "content" || scheme == "file" ||
-            isViewableDocument(url, mime, null) || m.startsWith("image/") ||
-            m.contains("pdf") || m.contains("officedocument") || m.contains("msword") ||
-            m.contains("ms-excel") || m.contains("ms-powerpoint") || m.startsWith("text/")
-        if (!isFileish) return false
-        if (m.startsWith("image/")) {
+        val pathLow = try { (uri.lastPathSegment ?: uri.path ?: "").lowercase() } catch (_: Exception) { "" }
+        val isLocalFile = scheme == "content" || scheme == "file"
+        if (!isLocalFile && !mime.startsWith("image/") && !isViewableDocument(url, mime, null) &&
+            !mime.contains("pdf") && !mime.startsWith("text/")) {
+            return false
+        }
+        if (mime.contains("text/html") || mime.contains("xhtml") ||
+            pathLow.endsWith(".html") || pathLow.endsWith(".htm")) {
             handler.post {
-                val tab = tabs.getOrNull(cur)
-                if (tab != null) {
-                    try { tab.web.loadUrl(url) } catch (_: Exception) { openTab(url, true, tab.incognito) }
-                } else openTab(url)
+                try {
+                    val tab = tabs.getOrNull(cur)
+                    if (tab != null) tab.web.loadUrl(url) else openTab(url)
+                } catch (_: Exception) { openTab(url) }
             }
             return true
         }
-        val pathLow = try { (uri.path ?: url).lowercase() } catch (_: Exception) { url.lowercase() }
-        if (pathLow.endsWith(".jpg") || pathLow.endsWith(".jpeg") || pathLow.endsWith(".png") ||
-            pathLow.endsWith(".gif") || pathLow.endsWith(".webp") || pathLow.endsWith(".bmp") ||
-            pathLow.endsWith(".svg")) {
+        if (mime.startsWith("image/") || pathLow.endsWith(".jpg") || pathLow.endsWith(".jpeg") ||
+            pathLow.endsWith(".png") || pathLow.endsWith(".gif") || pathLow.endsWith(".webp") ||
+            pathLow.endsWith(".bmp") || pathLow.endsWith(".svg")) {
             handler.post {
-                val tab = tabs.getOrNull(cur)
-                if (tab != null) {
-                    try { tab.web.loadUrl(url) } catch (_: Exception) { openTab(url, true, tab.incognito) }
-                } else openTab(url)
+                try {
+                    val tab = tabs.getOrNull(cur)
+                    if (tab != null) tab.web.loadUrl(url) else openTab(url)
+                } catch (_: Exception) { openTab(url) }
             }
             return true
         }
-        if (isViewableDocument(url, mime, null) || m.contains("pdf") || m.contains("officedocument") ||
-            m.contains("msword") || m.contains("ms-excel") || m.contains("ms-powerpoint") ||
-            m.startsWith("text/")) {
-            handler.post { openDocumentViewer(url, mime, null) }
+        if (isViewableDocument(url, mime, null) || mime.contains("pdf") || mime.contains("officedocument") ||
+            mime.contains("msword") || mime.contains("ms-excel") || mime.contains("ms-powerpoint") ||
+            mime.startsWith("text/") || pathLow.endsWith(".pdf") || pathLow.endsWith(".doc") ||
+            pathLow.endsWith(".docx") || pathLow.endsWith(".xls") || pathLow.endsWith(".xlsx") ||
+            pathLow.endsWith(".ppt") || pathLow.endsWith(".pptx") || pathLow.endsWith(".txt") ||
+            pathLow.endsWith(".csv") || pathLow.endsWith(".rtf") || pathLow.endsWith(".json") ||
+            pathLow.endsWith(".xml")) {
+            handler.post { openDocumentViewer(url, mime.ifBlank { null }, null) }
+            return true
+        }
+        if (isLocalFile) {
+            handler.post {
+                try {
+                    val tab = tabs.getOrNull(cur)
+                    if (tab != null) tab.web.loadUrl(url) else openTab(url)
+                } catch (_: Exception) { openTab(url) }
+            }
             return true
         }
         return false
     }
 
-private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
+    private fun openDocumentViewer(url: String, mime: String?, cd: String?) {
         val name = URLUtil.guessFileName(url, cd, mime)
         val i = Intent(this, DocumentViewerActivity::class.java)
-            .putExtra(DocumentViewerActivity.EXTRA_URL, url)
-            .putExtra(DocumentViewerActivity.EXTRA_NAME, name)
-            .putExtra(DocumentViewerActivity.EXTRA_MIME, mime)
+        try {
+            val u = Uri.parse(url)
+            val sch = (u.scheme ?: "").lowercase()
+            if (sch == "content" || sch == "file") {
+                i.setDataAndType(u, mime ?: "*/*")
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } catch (_: Exception) { }
+        i.putExtra(DocumentViewerActivity.EXTRA_URL, url)
+        i.putExtra(DocumentViewerActivity.EXTRA_NAME, name)
+        i.putExtra(DocumentViewerActivity.EXTRA_MIME, mime)
         try { startActivity(i) } catch (_: Exception) { startDownload(url, null, cd, mime) }
     }
 
@@ -6514,13 +6534,22 @@ private fun showEntries(title: String, list: List<Prefs.Entry>, onDelete: (Prefs
         return t
     }
 
-    private fun showLinkContextMenu(link: String, tab: BTab) {
-        val items = mutableListOf(
-            "Yeni sekmede aç",
-            "Bağlantıyı kopyala"
+    private fun isDownloadableLink(link: String): Boolean {
+        val path = try {
+            (Uri.parse(link).lastPathSegment ?: Uri.parse(link).path ?: link).lowercase()
+        } catch (_: Exception) { link.lowercase() }
+        val exts = listOf(
+            ".pdf", ".zip", ".rar", ".7z", ".apk", ".doc", ".docx", ".xls", ".xlsx",
+            ".ppt", ".pptx", ".rtf", ".csv", ".mp3", ".mp4", ".m4a", ".webm", ".ogg",
+            ".epub", ".txt", ".json", ".xml", ".gz", ".tar"
         )
+        return exts.any { path.endsWith(it) }
+    }
+
+    private fun showLinkContextMenu(link: String, tab: BTab) {
+        val items = mutableListOf("Yeni sekmede aç", "Bağlantıyı kopyala")
         if (isViewableDocument(link, null, null)) items.add("Belge olarak aç")
-        items.add("İndir")
+        if (isDownloadableLink(link)) items.add("İndir")
         AlertDialog.Builder(this)
             .setItems(items.toTypedArray()) { _, which ->
                 when (items[which]) {
