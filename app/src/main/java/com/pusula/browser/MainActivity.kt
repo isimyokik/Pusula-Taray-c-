@@ -6069,7 +6069,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }
     }
 
-    /** İndirilen video / müziği yeni ExoPlayer oynatıcısında açar (aynı türdeki indirilenler liste olur). */
+    /** İndirilen tüm medya (mp3/mp4/…) tek listede; PDF vb. belgeler yok. */
     private fun openMediaPlayer(file: java.io.File, title: String, audio: Boolean) {
         // Yerel oynatıcı kendi ses odağını alsın; WebView medyasını yavaşça bırak
         try {
@@ -6078,16 +6078,30 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             }
             abandonMediaAudioFocus()
         } catch (_: Exception) { }
-        for (t in tabs) { try { t.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
-        val want = if (audio) "audio" else "video"
-        val same = prefs.downloads().filter {
-            mediaKindOf(it.title, it.mime) == want && java.io.File(it.path).exists()
+        for (tab in tabs) { try { tab.web.evaluateJavascript(MEDIA_PAUSE_JS, null) } catch (_: Exception) { } }
+        val media = prefs.downloads().filter {
+            mediaKindOf(it.title, it.mime) != null && java.io.File(it.path).exists()
         }
         val paths = ArrayList<String>()
         val titles = ArrayList<String>()
-        for (e in same) { paths.add(e.path); titles.add(e.title) }
-        var idx = paths.indexOf(file.absolutePath)
-        if (idx < 0) { paths.add(0, file.absolutePath); titles.add(0, title); idx = 0 }
+        for (e in media) {
+            paths.add(e.path)
+            titles.add(e.title)
+        }
+        val abs = try { file.canonicalPath } catch (_: Exception) { file.absolutePath }
+        var idx = paths.indexOf(abs)
+        if (idx < 0) idx = paths.indexOf(file.absolutePath)
+        if (idx < 0) {
+            // path eşleşmesi farklı yazılmış olabilir
+            idx = paths.indexOfFirst {
+                try { java.io.File(it).canonicalPath == abs } catch (_: Exception) { it == file.absolutePath || it == abs }
+            }
+        }
+        if (idx < 0) {
+            paths.add(0, abs)
+            titles.add(0, title)
+            idx = 0
+        }
         val i = Intent(this, MediaPlayerActivity::class.java)
             .putStringArrayListExtra(MediaPlayerActivity.EXTRA_PATHS, paths)
             .putStringArrayListExtra(MediaPlayerActivity.EXTRA_TITLES, titles)
