@@ -835,6 +835,22 @@ private fun pollMedia() {
             if (!playing) playing = true
         }
         if (android.os.SystemClock.elapsedRealtime() < mediaDismissedUntil) return
+        // Şarkı bitti: sıradakine geç, bildirimi tut
+        run {
+            val nowX = android.os.SystemClock.elapsedRealtime()
+            val nearEnd = has && dur > 3000L && pos >= dur - 3500L
+            if (lastPlaying && !playing && !pausedByAudioFocus && nearEnd) {
+                focusNotifHoldUntil = nowX + 25_000L
+                focusResumePlayUntil = nowX + 20_000L
+                try {
+                    mediaTarget()?.web?.evaluateJavascript(YT_AUTO_NEXT_JS, null)
+                } catch (_: Exception) { }
+                try {
+                    tabs.getOrNull(cur)?.web?.evaluateJavascript(YT_AUTO_NEXT_JS, null)
+                } catch (_: Exception) { }
+                playing = true
+            }
+        }
         if (!has) {
             val now0 = android.os.SystemClock.elapsedRealtime()
             // Focus / devam penceresinde servisi ASLA durdurma
@@ -7922,45 +7938,68 @@ fun themedMessage(message: String, onDismiss: () -> Unit = {}) {
                 "if(window.__rotaKeepPlaying)return;window.__rotaKeepPlaying=1;" +
                 "Object.defineProperty(document,'hidden',{get:function(){return false},configurable:true});" +
                 "Object.defineProperty(document,'visibilityState',{get:function(){return 'visible'},configurable:true});" +
-                "document.addEventListener('visibilitychange',function(e){" +
-                "document.querySelectorAll('video,audio').forEach(function(m){" +
-                "if(!m.paused&&!m.ended)m.dataset.pusulaWasPlaying='1';" +
-                "});" +
-                "e.stopImmediatePropagation();},true);" +
+                "document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);" +
                 "function rotaClickNext(){try{" +
-                "var sels=['ytmusic-player-bar #next-button','#next-button','.next-button','.ytp-next-button'," +
-                "'button[aria-label*=\"Next\"]','button[aria-label*=\"Sonraki\"]','button[aria-label*=\"next\"]'," +
-                "'.ytm-next-button','tp-yt-paper-icon-button#next-button'];" +
-                "for(var i=0;i<sels.length;i++){var n=document.querySelector(sels[i]);if(n){n.click();return true;}}" +
+                "var sels=[" +
+                "'ytmusic-player-bar #next-button'," +
+                "'ytmusic-player-bar .next-button'," +
+                "'#next-button'," +
+                "'.next-button'," +
+                "'.ytp-next-button'," +
+                "'a.ytp-next-button'," +
+                "'.ytm-next-button'," +
+                "'tp-yt-paper-icon-button#next-button'," +
+                "'button[aria-label=\"Next\"]'," +
+                "'button[aria-label=\"Sonraki\"]'," +
+                "'button[aria-label=\"Next song\"]'," +
+                "'button[aria-label=\"Sonraki şarkı\"]'" +
+                "];" +
+                "for(var i=0;i<sels.length;i++){var n=document.querySelector(sels[i]);if(n){try{n.click();return true;}catch(z){}}}" +
+                "try{var pl=document.getElementById('movie_player');if(pl){if(typeof pl.nextVideo==='function'){pl.nextVideo();return true;}if(typeof pl.playVideo==='function'){}}}" +
+                "catch(z){}" +
                 "}catch(z){}return false;}" +
-                // Parça bitti: kullanıcı durdurmadıysa sıradakine geç, çalmaya devam et
-                "document.addEventListener('ended',function(e){try{" +
+                "function rotaKickPlay(){try{" +
+                "document.querySelectorAll('video,audio').forEach(function(m){" +
+                "if(m.ended)return;" +
+                "m.dataset.pusulaWasPlaying='1';" +
+                "if(m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+                "});" +
+                "}catch(z){}}" +
+                "function rotaOnTrackEnd(){try{" +
                 "if(window.__userPause)return;" +
+                "if(window.__rotaNextLock&&Date.now()-window.__rotaNextLock<4000)return;" +
+                "window.__rotaNextLock=Date.now();" +
+                "rotaClickNext();" +
+                "setTimeout(rotaKickPlay,600);" +
+                "setTimeout(rotaKickPlay,1500);" +
+                "setTimeout(rotaKickPlay,3000);" +
+                "}catch(z){}}" +
+                "document.addEventListener('ended',function(e){try{" +
                 "var m=e.target;if(!m||!m.tagName)return;" +
                 "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
                 "m.dataset.pusulaWasPlaying='';" +
-                "window.__rotaEnded=false;" +
-                "rotaClickNext();" +
-                "setTimeout(function(){try{" +
-                "document.querySelectorAll('video,audio').forEach(function(m2){" +
-                "if(m2.ended)return;" +
-                "m2.dataset.pusulaWasPlaying='1';" +
-                "if(m2.paused){var p=m2.play();if(p&&p.catch)p.catch(function(){});}" +
-                "});" +
-                "}catch(z){}},500);" +
+                "rotaOnTrackEnd();" +
                 "}catch(z){}},true);" +
-                // Kullanıcı bilinçli durdurduysa arka planda zorla başlatma
-                "document.addEventListener('pause',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                // Arka planda ended bazen gelmez — süre sonuna yaklaşınca sıradakine
+                "document.addEventListener('timeupdate',function(e){try{" +
+                "if(window.__userPause)return;" +
+                "var m=e.target;if(!m||(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO'))return;" +
+                "var d=m.duration,c=m.currentTime;" +
+                "if(!isFinite(d)||d<3)return;" +
+                "if(c>=d-1.25)rotaOnTrackEnd();" +
+                "}catch(z){}},true);" +
+                "document.addEventListener('pause',function(e){try{" +
+                "var m=e.target;if(!m||!m.tagName)return;" +
                 "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
                 "if(window.__pipBlock&&!window.__userPause)return;" +
-                "if(m.ended)return;" +
+                "if(m.ended){rotaOnTrackEnd();return;}" +
                 "if(window.__userPause)m.dataset.pusulaWasPlaying='';" +
                 "}catch(z){}},true);" +
-                "document.addEventListener('play',function(e){try{var m=e.target;if(!m||!m.tagName)return;" +
+                "document.addEventListener('play',function(e){try{" +
+                "var m=e.target;if(!m||!m.tagName)return;" +
                 "if(m.tagName!=='VIDEO'&&m.tagName!=='AUDIO')return;" +
-                "window.__rotaEnded=false;" +
                 "m.dataset.pusulaWasPlaying='1';" +
-                "if(!window.__userPause)window.__userPause=false;" +
+                "window.__rotaNextLock=0;" +
                 "}catch(z){}},true);" +
                 "}catch(e){}})();"
 
@@ -8439,24 +8478,41 @@ if(isYt){
             "setInterval(capsOff,400);" +
             "})();"
 
+        const val YT_AUTO_NEXT_JS =
+            "(function(){try{" +
+            "if(window.__userPause)return;" +
+            "if(window.__rotaNextLock&&Date.now()-window.__rotaNextLock<3500)return;" +
+            "window.__rotaNextLock=Date.now();" +
+            "var sels=['ytmusic-player-bar #next-button','ytmusic-player-bar .next-button','#next-button','.next-button','.ytp-next-button','tp-yt-paper-icon-button#next-button'];" +
+            "for(var i=0;i<sels.length;i++){var n=document.querySelector(sels[i]);if(n){try{n.click();break;}catch(z){}}}" +
+            "try{var pl=document.getElementById('movie_player');if(pl&&typeof pl.nextVideo==='function')pl.nextVideo();}catch(z){}" +
+            "setTimeout(function(){document.querySelectorAll('video,audio').forEach(function(m){" +
+            "if(!m.ended&&m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
+            "});},800);" +
+            "}catch(e){}})();"
+
+            "}catch(e){}})();"
+
         const val BACKGROUND_MEDIA_JS =
             "(function(){try{" +
                 "if(window.__rotaDuck){document.querySelectorAll('video,audio').forEach(function(m){try{m.volume=0;}catch(x){}});return;}" +
                 "if(window.__userPause||window.__rotaFocusPaused)return;" +
                 "function clickNext(){try{" +
-                "var n=document.querySelector('ytmusic-player-bar #next-button,#next-button,.next-button,.ytp-next-button,'+" +
-                "'button[aria-label*='Next'],button[aria-label*='Sonraki'],button[aria-label*='next']');" +
-                "if(n){n.click();return true;}" +
+                "var sels=['ytmusic-player-bar #next-button','ytmusic-player-bar .next-button','#next-button','.next-button','.ytp-next-button','tp-yt-paper-icon-button#next-button'];" +
+                "for(var i=0;i<sels.length;i++){var n=document.querySelector(sels[i]);if(n){n.click();return true;}}" +
+                "try{var pl=document.getElementById('movie_player');if(pl&&typeof pl.nextVideo==='function'){pl.nextVideo();return true;}}catch(z){}" +
                 "}catch(z){}return false;}" +
                 "var list=document.querySelectorAll('video,audio');" +
                 "var anyLive=false;" +
+                "list.forEach(function(m){if(!m.ended&&!m.paused)anyLive=true;});" +
                 "list.forEach(function(m){" +
-                "if(!m.ended&&!m.paused)anyLive=true;" +
-                "});" +
-                "list.forEach(function(m){" +
-                "if(m.ended){" +
+                "var d=m.duration,c=m.currentTime;" +
+                "if(m.ended||(isFinite(d)&&d>3&&c>=d-1.2)){" +
                 "m.dataset.pusulaWasPlaying='';" +
-                "if(!window.__userPause&&!anyLive){clickNext();}" +
+                "if(!anyLive){clickNext();setTimeout(function(){" +
+                "document.querySelectorAll('video,audio').forEach(function(m2){" +
+                "if(!m2.ended&&m2.paused){var p=m2.play();if(p&&p.catch)p.catch(function(){});}" +
+                "});},700);}" +
                 "return;" +
                 "}" +
                 "if(m.dataset.pusulaWasPlaying==='1' && m.paused){var p=m.play();if(p&&p.catch)p.catch(function(){});}" +
