@@ -280,8 +280,34 @@ class PlaybackService : Service() {
         }.start()
     }
 
+    /**
+     * startForegroundService ile başlatıldık ama oturum yok (kapatma sırasında yarışan bir güncelleme):
+     * 5 sn içinde startForeground çağrılmazsa sistem uygulamayı çökertir. Görünmez bir bildirimle sözleşmeyi
+     * yerine getirip hemen kapanırız.
+     */
+    private fun satisfyForegroundThenStop() {
+        try {
+            val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL_QUIET)
+                else @Suppress("DEPRECATION") Notification.Builder(this)
+            b.setSmallIcon(R.drawable.ic_notif).setContentTitle("Rota")
+            val n = b.build()
+            if (Build.VERSION.SDK_INT >= 29) {
+                ServiceCompat.startForeground(this, NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(NOTIF_ID, n)
+            }
+            stopForeground(Service.STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) { }
+        foregroundStarted = false
+        stopSelf()
+    }
+
     private fun refresh() {
-        val s = session ?: return
+        val s = session
+        if (s == null) {
+            if (!foregroundStarted) satisfyForegroundThenStop()
+            return
+        }
         val shownTitle = if (title.isBlank()) "Rota" else title
         val mb = MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, shownTitle)
