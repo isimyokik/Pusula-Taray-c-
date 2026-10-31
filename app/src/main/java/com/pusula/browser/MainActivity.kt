@@ -1381,8 +1381,6 @@ fun onMusicCatalog(raw: String?) {
         prefs = Prefs(this)
         registerExternalAudioWatch()
         registerMicWatch()
-        // yt-dlp'yi arka planda hazırla / güncelle (12 saatte bir)
-        handler.postDelayed({ if (ytdlEnabled) ytdlUpdateIfNeeded() }, 6000L)
         loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
@@ -4521,11 +4519,12 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         } catch (_: Throwable) { false }
     }
 
-    private fun ytdlUpdateIfNeeded() {
+    /** Uygulama açılışında çalışmaz (kapat-aç yaparken yük bindirmesin); indirme bittikten/başarısız olunca çağrılır. */
+    private fun ytdlUpdateIfNeeded(minAgeMs: Long = 12 * 3600 * 1000L) {
         Thread {
             try {
                 val last = getSharedPreferences("ytdl", MODE_PRIVATE).getLong("upd", 0L)
-                if (System.currentTimeMillis() - last < 12 * 3600 * 1000L) return@Thread
+                if (System.currentTimeMillis() - last < minAgeMs) return@Thread
                 ytdlUpdateNow()
             } catch (_: Throwable) { }
         }.start()
@@ -4581,6 +4580,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 cleanup()
                 dl.running = false
                 dl.failed = true
+                // Başarısızlık çoğu zaman eski yt-dlp'dendir: en az 1 saat aralıkla arka planda güncelle
+                ytdlUpdateIfNeeded(3600 * 1000L)
                 handler.post {
                     notifyDlProgress(dl)
                     activeDls.remove(dl)
@@ -4655,6 +4656,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 cleanup()
                 dl.done = true
                 dl.running = false
+                ytdlUpdateIfNeeded()
                 handler.post {
                     prefs.addDownload(outName, watch, path, mime)
                     if (!thumbFileForTitle(outName).let { it.exists() && it.length() > 1000 }) {
