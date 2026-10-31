@@ -76,6 +76,9 @@ class MediaPlayerActivity : AppCompatActivity() {
     private var repeatModeUi = 1
     private var currentArtPath: String = ""
     private val artCache = HashMap<String, String>()
+    /** Ağır kapak çıkarma (gömülü resim / video karesi) her dosya için yalnızca bir kez denenir. */
+    private val artTried = HashSet<String>()
+    private val hideFlash = Runnable { flash.visibility = View.GONE }
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -264,7 +267,7 @@ class MediaPlayerActivity : AppCompatActivity() {
         pipBtn.setTextColor(Color.WHITE)
         pipBtn.gravity = Gravity.CENTER
         pipBtn.contentDescription = "Küçük pencere"
-        pipBtn.setOnClickListener { enterPip() }
+        pipBtn.setOnClickListener { enterPip(goHome = true) }
         topBar.addView(pipBtn, LinearLayout.LayoutParams(dp(52), dp(44)))
 
         root.addView(
@@ -304,14 +307,7 @@ class MediaPlayerActivity : AppCompatActivity() {
             .setSeekBackIncrementMs(10000)
             .setSeekForwardIncrementMs(10000)
             .build()
-        val items = paths.mapIndexed { i, path ->
-            MediaItem.Builder()
-                .setUri(Uri.fromFile(File(path)))
-                .setMediaMetadata(
-                    MediaMetadata.Builder().setTitle(titles.getOrElse(i) { File(path).name }).build()
-                )
-                .build()
-        }
+        val items = buildItems(paths, titles)
         p.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 try {
@@ -422,6 +418,41 @@ class MediaPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun buildItems(paths: List<String>, titles: List<String>): List<MediaItem> =
+        paths.mapIndexed { i, path ->
+            MediaItem.Builder()
+                .setUri(Uri.fromFile(File(path)))
+                .setMediaMetadata(
+                    MediaMetadata.Builder().setTitle(titles.getOrElse(i) { File(path).name }).build()
+                )
+                .build()
+        }
+
+    /**
+     * Oynatıcı zaten açıkken (arka planda ya da küçük pencerede) yeni bir medya seçilirse
+     * ikinci bir oynatıcı açılmaz; liste mevcut oynatıcıya yüklenir.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val paths = intent.getStringArrayListExtra(EXTRA_PATHS) ?: return
+        val titles = intent.getStringArrayListExtra(EXTRA_TITLES) ?: arrayListOf()
+        if (paths.isEmpty()) return
+        val p = player ?: return
+        val start = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, paths.size - 1)
+        try {
+            p.setMediaItems(buildItems(paths, titles), start, 0L)
+            p.prepare()
+            p.playWhenReady = true
+            p.play()
+            currentArtPath = ""
+            titleView.text = titles.getOrElse(start) { File(paths[start]).name }
+            refreshArtForCurrent()
+            pushNotif()
+            updatePipActions()
+        } catch (_: Exception) { }
+    }
+
     private fun pipAction(code: Int, icon: Int, label: String, action: String): RemoteAction {
         val pi = PendingIntent.getBroadcast(
             this, code,
@@ -458,20 +489,41 @@ class MediaPlayerActivity : AppCompatActivity() {
         try { setPictureInPictureParams(buildPipParams()) } catch (_: Exception) { }
     }
 
-    private fun enterPip() {
+    private val pipEnteringReset = Runnable { pipEntering = false }
+
+    /**
+     * @param goHome true ise küçük pencere açılınca arkadaki uygulama ana ekrana çekilir
+     * (YouTube küçük penceresindeki gibi: arkada uygulama açık kalmaz). Ana ekrana basınca zaten böyle olur.
+     */
+    private fun enterPip(goHome: Boolean = false) {
         if (Build.VERSION.SDK_INT < 26) {
             Toast.makeText(this, "Bu cihazda küçük pencere yok", Toast.LENGTH_SHORT).show()
             return
         }
         if (isInPictureInPictureMode || pipEntering) return
         pipEntering = true
+        var entered = false
         try {
             setPictureInPictureParams(buildPipParams())
-            enterPictureInPictureMode(buildPipParams())
+            entered = enterPictureInPictureMode(buildPipParams())
         } catch (_: Exception) {
-            try { enterPictureInPictureMode() } catch (_: Exception) { }
+            try { enterPictureInPictureMode(); entered = true } catch (_: Exception) { }
         } finally {
-            handler.postDelayed({ pipEntering = false }, 400)
+            handler.removeCallbacks(pipEnteringReset)
+            handler.postDelayed(pipEnteringReset, 400)
+        }
+        if (goHome && entered) {
+            handler.postDelayed({
+                try {
+                    if (isInPictureInPictureMode) {
+                        startActivity(
+                            Intent(Intent.ACTION_MAIN)
+                                .addCategory(Intent.CATEGORY_HOME)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                } catch (_: Exception) { }
+            }, 250)
         }
     }
 
@@ -530,50 +582,90 @@ class MediaPlayerActivity : AppCompatActivity() {
     }
 
 
-    /** Dosyadan gömülü kapak çıkar → cache dosyası yolu */
+    /** İndirilenler listesinde kayıtlı kapak (dosya adına göre) – hızlı, ağ/çözümleme yok. */
+    private fun thumbForTitle(title: String): String {
+        if (title.isBlank()) return ""
+        return try {
+            val safe = title.replace(Regex("[\\\\/:*?\"<>|]+"), "_").take(80)
+            val f = File(File(cacheDir, "thumbs"), "$safe.jpg")
+            if (f.exists() && f.length() > 500) f.absolutePath else ""
+        } catch (_: Exception) { "" }
+    }
+
+    /** Dosyadan gömülü kapak, yoksa (video ise) bir kare çıkar → cache dosyası yolu. Arka plan iş parçacığında çağrılır. */
     private fun artForPath(mediaPath: String): String {
         artCache[mediaPath]?.let { if (File(it).exists()) return it }
         return try {
-            val r = android.media.MediaMetadataRetriever()
-            r.setDataSource(mediaPath)
-            val bytes = r.embeddedPicture
-            r.release()
-            if (bytes == null || bytes.isEmpty()) return ""
             val dir = File(cacheDir, "media_art").apply { mkdirs() }
             val out = File(dir, "art_" + mediaPath.hashCode().toUInt().toString(16) + ".jpg")
-            if (!out.exists() || out.length() == 0L) {
-                out.outputStream().use { it.write(bytes) }
+            if (out.exists() && out.length() > 0L) {
+                artCache[mediaPath] = out.absolutePath
+                return out.absolutePath
             }
-            val p = out.absolutePath
-            artCache[mediaPath] = p
-            p
-        } catch (_: Exception) {
+            val r = android.media.MediaMetadataRetriever()
+            try {
+                r.setDataSource(mediaPath)
+                val bytes = r.embeddedPicture
+                if (bytes != null && bytes.isNotEmpty()) {
+                    out.outputStream().use { it.write(bytes) }
+                } else {
+                    val ext = File(mediaPath).extension.lowercase()
+                    if (ext in listOf("mp4", "mkv", "webm", "mov", "3gp")) {
+                        val bmp = r.getFrameAtTime(1_000_000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            ?: r.getFrameAtTime(0)
+                        if (bmp != null) {
+                            out.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+                        }
+                    }
+                }
+            } finally {
+                try { r.release() } catch (_: Exception) { }
+            }
+            if (out.exists() && out.length() > 0L) {
+                artCache[mediaPath] = out.absolutePath
+                out.absolutePath
+            } else ""
+        } catch (_: Throwable) {
             ""
         }
     }
 
+    private fun currentFilePath(): String? {
+        val p = player ?: return null
+        val uri = try { p.currentMediaItem?.localConfiguration?.uri } catch (_: Exception) { null } ?: return null
+        val path = try { uri.path } catch (_: Exception) { null }
+        if (!path.isNullOrBlank() && path.startsWith("/")) return path
+        return try {
+            val s = uri.toString()
+            if (s.startsWith("file:")) Uri.parse(s).path else null
+        } catch (_: Exception) { null }
+    }
+
     private fun refreshArtForCurrent() {
         val p = player ?: return
-        val idx = p.currentMediaItemIndex
-        val path = try {
-            p.currentMediaItem?.localConfiguration?.uri?.path
-                ?: p.currentMediaItem?.localConfiguration?.uri?.toString()
-        } catch (_: Exception) { null }
-        // EXTRA paths üzerinden de dene
-        val filePath = when {
-            path != null && path.startsWith("/") && File(path).exists() -> path
-            else -> {
-                val uri = p.currentMediaItem?.localConfiguration?.uri
-                val s = uri?.toString() ?: ""
-                when {
-                    s.startsWith("file:") -> {
-                        try { Uri.parse(s).path } catch (_: Exception) { null }
+        val title = try { p.currentMediaItem?.mediaMetadata?.title?.toString() ?: "" } catch (_: Exception) { "" }
+        // 1) İndirilenler listesindeki kapak (bildirimde de aynısı görünsün)
+        val th = thumbForTitle(title)
+        if (th.isNotBlank()) { currentArtPath = th; return }
+        val filePath = currentFilePath()
+        if (filePath.isNullOrBlank()) { currentArtPath = ""; return }
+        // 2) Daha önce çıkarılmışsa
+        val cached = artCache[filePath]
+        if (cached != null && File(cached).exists()) { currentArtPath = cached; return }
+        currentArtPath = ""
+        // 3) Gömülü kapak / video karesi: arayüzü kilitlemesin diye arka planda, dosya başına bir kez
+        if (!artTried.add(filePath)) return
+        Thread {
+            val r = artForPath(filePath)
+            if (r.isNotBlank()) {
+                handler.post {
+                    if (currentFilePath() == filePath) {
+                        currentArtPath = r
+                        try { pushNotif() } catch (_: Exception) { }
                     }
-                    else -> null
                 }
             }
-        }
-        currentArtPath = if (!filePath.isNullOrBlank()) artForPath(filePath) else ""
+        }.start()
     }
 
     private fun pushNotif() {
@@ -641,9 +733,8 @@ class MediaPlayerActivity : AppCompatActivity() {
     private fun flashMsg(s: String) {
         flash.text = s
         flash.visibility = View.VISIBLE
-        handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({ flash.visibility = View.GONE }, 700)
-        handler.post(progressTick)
+        handler.removeCallbacks(hideFlash)
+        handler.postDelayed(hideFlash, 700)
     }
 
     private fun makeArt(): Bitmap {
