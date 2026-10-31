@@ -386,21 +386,10 @@ class DocumentViewerActivity : AppCompatActivity() {
         }
     }
 
-    /** Dosya adının ilk harfiyle mavi zemin üzerine basit bir simge çizer. */
+    /** Kısayol simgesi: uygulamanın (Rota) kendi logosu. */
     @SuppressLint("NewApi")
-    private fun htmlShortcutIcon(title: String): android.graphics.drawable.Icon {
-        val size = 432
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val c = android.graphics.Canvas(bmp)
-        c.drawColor(Color.parseColor("#2F6BFF"))
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        p.color = Color.WHITE
-        p.textSize = size * 0.42f
-        p.typeface = android.graphics.Typeface.DEFAULT_BOLD
-        p.textAlign = android.graphics.Paint.Align.CENTER
-        val ch = title.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "H"
-        c.drawText(ch, size / 2f, size / 2f - (p.descent() + p.ascent()) / 2f, p)
-        return android.graphics.drawable.Icon.createWithAdaptiveBitmap(bmp)
+    private fun htmlShortcutIcon(@Suppress("UNUSED_PARAMETER") title: String): android.graphics.drawable.Icon {
+        return android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher)
     }
 
     private fun downloadFile(prefs: Prefs) {
