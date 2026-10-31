@@ -3808,12 +3808,15 @@ fun onMusicCatalog(raw: String?) {
             if (t.length > 40) t = t.take(40)
             // Yerel HTML/dosya: e="__app__" → newtab uygulama ikonu (harf yok)
             // Web: e boş → site favicon (Ana ekran kısayolu ayrı)
-            val isLocal = isLocalPinUrl(cleanUrl)
-            arr.put(JSONObject()
+            val isLocal = isLocalPinUrl(cleanUrl) ||
+                t.endsWith(".html", true) || t.endsWith(".htm", true) ||
+                (!cleanUrl.startsWith("http", true) && (cleanUrl.contains(".htm", true)))
+            val obj = JSONObject()
                 .put("t", t)
                 .put("u", cleanUrl)
                 .put("e", if (isLocal) "__app__" else "")
-                .put("g", (0..6).random()))
+                .put("g", (0..6).random())
+            arr.put(obj)
             val json = arr.toString()
             prefs.pins = json
             try {
@@ -4405,7 +4408,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 audioOnly -> {
                     if (audio != null) {
                         toast("İndiriliyor…")
-                        // Doğrudan googlevideo ses; aracı yok
+                        // Kapak (video thumb) + doğrudan googlevideo ses — MP4 ile aynı httpToFile
+                        cacheDownloadThumb("$base.mp3", id, lastArtUrl.ifBlank { null })
                         startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
                     } else toast("Ses linki alınamadı")
                 }
@@ -5509,6 +5513,10 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 conn.setRequestProperty("Referer", "https://www.youtube.com/")
                 conn.setRequestProperty("Origin", "https://www.youtube.com")
                 conn.setRequestProperty("Accept-Encoding", "identity")
+                conn.setRequestProperty("Connection", "keep-alive")
+                // Ses ve video aynı hız: büyük okuma tamponu
+                try { conn.setReadTimeout(180000) } catch (_: Exception) { }
+                try { conn.setRequestProperty("Accept", "*/*") } catch (_: Exception) { }
                 if (existing > 0) {
                     conn.setRequestProperty("Range", "bytes=$existing-")
                 }
@@ -5553,7 +5561,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
                 conn.inputStream.use { input ->
                     outStream.buffered(512 * 1024).use { output ->
-                        val buf = ByteArray(256 * 1024)
+                        val buf = ByteArray(512 * 1024)
                         while (true) {
                             if (dl?.cancelled == true) {
                                 conn.disconnect()
@@ -5923,6 +5931,31 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }.start()
     }
 
+    /** İndirilenler listesi: MP3 için nota kapak görseli */
+    private fun makeMusicNoteThumb(): android.graphics.Bitmap {
+        val size = 256
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(bmp)
+        val g = android.graphics.LinearGradient(
+            0f, 0f, size.toFloat(), size.toFloat(),
+            intArrayOf(0xFF4C8DFF.toInt(), 0xFF8A5CFF.toInt(), 0xFF36D1FF.toInt()),
+            floatArrayOf(0f, 0.55f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        bg.shader = g
+        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 48f, 48f, bg)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = android.graphics.Color.WHITE
+        p.textAlign = android.graphics.Paint.Align.CENTER
+        p.textSize = 140f
+        p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        val note = "♪"
+        val fm = p.fontMetrics
+        c.drawText(note, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, p)
+        return bmp
+    }
+
     private fun loadDownloadThumb(title: String, path: String): android.graphics.Bitmap? {
         try {
             val f = thumbFileForTitle(title)
@@ -5933,7 +5966,9 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         // Yerel videodan kare
         try {
             val vf = java.io.File(path)
-            if (vf.exists() && (title.endsWith(".mp4", true) || path.endsWith(".mp4", true))) {
+            if (vf.exists() && (title.endsWith(".mp4", true) || path.endsWith(".mp4", true) ||
+                    path.endsWith(".webm", true) || title.endsWith(".webm", true))
+            ) {
                 val r = android.media.MediaMetadataRetriever()
                 r.setDataSource(vf.absolutePath)
                 val bmp = r.getFrameAtTime(1_000_000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
@@ -5948,6 +5983,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
             }
         } catch (_: Exception) { }
+        // MP3 / ses: güzel nota ikonu
+        val isAud = title.endsWith(".mp3", true) || title.endsWith(".m4a", true) ||
+            title.endsWith(".aac", true) || title.endsWith(".opus", true) || title.endsWith(".ogg", true) ||
+            path.endsWith(".mp3", true) || path.endsWith(".m4a", true)
+        if (isAud) return makeMusicNoteThumb()
         return null
     }
 
