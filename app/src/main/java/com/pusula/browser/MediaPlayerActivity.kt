@@ -70,6 +70,10 @@ class MediaPlayerActivity : AppCompatActivity() {
     private var isAudio = false
     private var controlRegistered = false
     private var pipEntering = false
+    private lateinit var repeatBtn: TextView
+    private lateinit var shuffleBtn: TextView
+    /** 0=sırayla (off), 1=liste tekrarı, 2=tek parça */
+    private var repeatModeUi = 1
     private var currentArtPath: String = ""
     private val artCache = HashMap<String, String>()
 
@@ -94,21 +98,27 @@ class MediaPlayerActivity : AppCompatActivity() {
                     updatePipActions()
                 }
                 PlaybackService.ACTION_NEXT -> {
-                    if (p.hasNextMediaItem()) p.seekToNextMediaItem()
-                    else if (p.mediaItemCount > 0) p.seekTo(0, 0L)
-                    p.playWhenReady = true
-                    p.play()
+                    try {
+                        if (p.hasNextMediaItem()) p.seekToNextMediaItem()
+                        else if (p.mediaItemCount > 0) p.seekTo(0, 0L)
+                        p.prepare()
+                        p.playWhenReady = true
+                        p.play()
+                    } catch (_: Exception) { }
                     pushNotif()
                     updatePipActions()
                 }
                 PlaybackService.ACTION_PREVIOUS -> {
-                    if (p.currentPosition > 3000L || !p.hasPreviousMediaItem()) {
-                        p.seekTo(0L)
-                    } else {
-                        p.seekToPreviousMediaItem()
-                    }
-                    p.playWhenReady = true
-                    p.play()
+                    try {
+                        if (p.currentPosition > 3000L || !p.hasPreviousMediaItem()) {
+                            p.seekTo(0L)
+                        } else {
+                            p.seekToPreviousMediaItem()
+                        }
+                        p.prepare()
+                        p.playWhenReady = true
+                        p.play()
+                    } catch (_: Exception) { }
                     pushNotif()
                     updatePipActions()
                 }
@@ -162,6 +172,23 @@ class MediaPlayerActivity : AppCompatActivity() {
         playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
         playerView.setDefaultArtwork(BitmapDrawable(resources, makeArt()))
         playerView.setShutterBackgroundColor(Color.BLACK)
+        // İngilizce ses/stereo/track menüsü vs. kapalı
+        try { playerView.setShowSubtitleButton(false) } catch (_: Exception) { }
+        try { playerView.setShowVrButton(false) } catch (_: Exception) { }
+        try { playerView.setShowShuffleButton(false) } catch (_: Exception) { }
+        try {
+            val m = playerView.javaClass.getMethod("setShowAudioTrackSelectionButton", Boolean::class.javaPrimitiveType)
+            m.invoke(playerView, false)
+        } catch (_: Exception) { }
+        try {
+            val m = playerView.javaClass.getMethod("setShowSettingsButton", Boolean::class.javaPrimitiveType)
+            m.invoke(playerView, false)
+        } catch (_: Exception) { }
+        try {
+            // Media3: tekrar tuşu kontrol çubuğunda istenirse kapalı (üstte bizimki var)
+            val m = playerView.javaClass.getMethod("setRepeatToggleModes", Int::class.javaPrimitiveType)
+            m.invoke(playerView, 0)
+        } catch (_: Exception) { }
         root.addView(
             playerView,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -197,6 +224,38 @@ class MediaPlayerActivity : AppCompatActivity() {
             titleView,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(8) }
         )
+
+        fun chip(label: String): TextView {
+            val tv = TextView(this)
+            tv.text = label
+            tv.textSize = 13f
+            tv.setTextColor(Color.WHITE)
+            tv.gravity = Gravity.CENTER
+            tv.setPadding(dp(8), 0, dp(8), 0)
+            return tv
+        }
+        shuffleBtn = chip("🔀")
+        shuffleBtn.contentDescription = "Karışık"
+        shuffleBtn.setOnClickListener {
+            val pl = player ?: return@setOnClickListener
+            pl.shuffleModeEnabled = !pl.shuffleModeEnabled
+            syncModeButtons()
+        }
+        topBar.addView(shuffleBtn, LinearLayout.LayoutParams(dp(44), dp(44)))
+
+        repeatBtn = chip("🔁")
+        repeatBtn.contentDescription = "Tekrar"
+        repeatBtn.setOnClickListener {
+            val pl = player ?: return@setOnClickListener
+            repeatModeUi = (repeatModeUi + 1) % 3
+            pl.repeatMode = when (repeatModeUi) {
+                1 -> Player.REPEAT_MODE_ALL
+                2 -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
+            }
+            syncModeButtons()
+        }
+        topBar.addView(repeatBtn, LinearLayout.LayoutParams(dp(44), dp(44)))
 
         // YouTube menüsündeki gibi PiP tuşu
         val pipBtn = TextView(this)
@@ -255,44 +314,72 @@ class MediaPlayerActivity : AppCompatActivity() {
         }
         p.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                titleView.text = mediaItem?.mediaMetadata?.title ?: ""
-                currentArtPath = ""
-                refreshArtForCurrent()
-                pushNotif()
-                updatePipActions()
+                try {
+                    titleView.text = mediaItem?.mediaMetadata?.title ?: ""
+                    currentArtPath = ""
+                    handler.post {
+                        try {
+                            refreshArtForCurrent()
+                            pushNotif()
+                            updatePipActions()
+                        } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                pushNotif()
-                updatePipActions()
+                try { pushNotif(); updatePipActions() } catch (_: Exception) { }
             }
             override fun onTracksChanged(tracks: Tracks) {
-                if (tracks.groups.isNotEmpty()) setAudioMode(!tracks.isTypeSelected(C.TRACK_TYPE_VIDEO))
+                try {
+                    if (tracks.groups.isEmpty()) return
+                    val hasVideo = tracks.isTypeSelected(C.TRACK_TYPE_VIDEO)
+                    handler.post {
+                        try { setAudioMode(!hasVideo) } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { }
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
-                    try {
-                        if (p.mediaItemCount > 0) {
-                            p.seekToNextMediaItem()
-                            p.playWhenReady = true
-                            p.play()
-                        }
-                    } catch (_: Exception) {
+                    handler.post {
                         try {
-                            p.seekTo(0, 0L)
-                            p.playWhenReady = true
-                            p.play()
-                        } catch (_: Exception) { }
+                            val pl = player ?: return@post
+                            if (pl.mediaItemCount <= 0) return@post
+                            if (pl.hasNextMediaItem()) {
+                                pl.seekToNextMediaItem()
+                            } else {
+                                pl.seekTo(0, 0L)
+                            }
+                            pl.playWhenReady = true
+                            pl.prepare()
+                            pl.play()
+                        } catch (_: Exception) {
+                            try {
+                                player?.seekTo(0, 0L)
+                                player?.playWhenReady = true
+                                player?.play()
+                            } catch (_: Exception) { }
+                        }
                     }
                 }
-                pushNotif()
-                updatePipActions()
+                try { pushNotif(); updatePipActions() } catch (_: Exception) { }
             }
             override fun onPlayerError(error: PlaybackException) {
-                Toast.makeText(
-                    this@MediaPlayerActivity,
-                    "Oynatılamadı: " + (error.message ?: "hata"),
-                    Toast.LENGTH_LONG
-                ).show()
+                // Çökme yok — sonraki parçaya geçmeyi dene
+                try {
+                    Toast.makeText(
+                        this@MediaPlayerActivity,
+                        "Atlandı: " + (error.message ?: "hata"),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    val pl = player
+                    if (pl != null && pl.mediaItemCount > 1) {
+                        if (pl.hasNextMediaItem()) pl.seekToNextMediaItem()
+                        else pl.seekTo(0, 0L)
+                        pl.prepare()
+                        pl.playWhenReady = true
+                        pl.play()
+                    }
+                } catch (_: Exception) { }
             }
         })
         p.setMediaItems(items, start, 0L)
@@ -301,6 +388,10 @@ class MediaPlayerActivity : AppCompatActivity() {
         p.playWhenReady = true
         playerView.player = p
         player = p
+        p.shuffleModeEnabled = false
+        repeatModeUi = 1
+        p.repeatMode = Player.REPEAT_MODE_ALL
+        syncModeButtons()
         refreshArtForCurrent()
         titleView.text = titles.getOrElse(start) { File(paths[start]).name }
 
@@ -505,6 +596,30 @@ class MediaPlayerActivity : AppCompatActivity() {
                 currentArtPath
             )
         } catch (_: Exception) { }
+    }
+
+    private fun syncModeButtons() {
+        val pl = player
+        val shuffleOn = pl?.shuffleModeEnabled == true
+        shuffleBtn.alpha = if (shuffleOn) 1f else 0.45f
+        shuffleBtn.text = if (shuffleOn) "🔀" else "🔀"
+        when (repeatModeUi) {
+            1 -> { // liste
+                repeatBtn.text = "🔁"
+                repeatBtn.alpha = 1f
+                repeatBtn.contentDescription = "Liste tekrarı"
+            }
+            2 -> { // tek
+                repeatBtn.text = "🔂"
+                repeatBtn.alpha = 1f
+                repeatBtn.contentDescription = "Tek parça tekrarı"
+            }
+            else -> { // sırayla bir kez
+                repeatBtn.text = "➡️"
+                repeatBtn.alpha = 0.45f
+                repeatBtn.contentDescription = "Sırayla (bir kez)"
+            }
+        }
     }
 
     private fun setAudioMode(audio: Boolean) {
