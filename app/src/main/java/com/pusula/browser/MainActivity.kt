@@ -3684,12 +3684,22 @@ fun onMusicCatalog(raw: String?) {
 
     private fun addCurrentToHomeScreen() {
         val t = tabs.getOrNull(cur) ?: return
-        val url = t.url
-        if (!url.startsWith("http")) {
+        val url = (t.web.url?.takeIf {
+            it.isNotBlank() && !it.equals("about:blank", true)
+        } ?: t.url).trim()
+        val local = isLocalPinUrl(url)
+        if (!url.startsWith("http") && !local) {
             toast("Önce bir sayfa aç")
             return
         }
-        val title = (if (t.title.isBlank()) shownUrl(url) else t.title)
+        val title = (if (t.title.isBlank()) {
+            if (local) {
+                try {
+                    val n = Uri.parse(url).lastPathSegment ?: "Dosya"
+                    n.substringBeforeLast('.').ifBlank { n }
+                } catch (_: Exception) { "Dosya" }
+            } else shownUrl(url)
+        } else t.title)
             .replace(Regex("\\s+"), " ")
             .trim()
             .ifBlank { "Rota" }
@@ -3702,6 +3712,11 @@ fun onMusicCatalog(raw: String?) {
             flags = Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
                 Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
                 Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        // Yerel HTML: harf favicon YOK → uygulama logosu (ekrandaki G sorunu)
+        if (local) {
+            pinShortcut(url, title, launch, null)
+            return
         }
         val iconJs = """(function(){var best='',bs=-1;var ls=document.querySelectorAll('link[rel~="apple-touch-icon"],link[rel~="apple-touch-icon-precomposed"],link[rel~="icon"],link[rel="shortcut icon"]');for(var i=0;i<ls.length;i++){var l=ls[i];var sz=parseInt((l.getAttribute('sizes')||'0').split('x')[0],10)||0;if(/apple/.test(l.rel||''))sz+=1000;if(l.href&&sz>=bs){bs=sz;best=l.href;}}return best;})();"""
         try {
@@ -3838,12 +3853,17 @@ fun onMusicCatalog(raw: String?) {
 
 private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap?) {
         try {
-            val shaped = icon?.let { try { toShortcutBitmap(it) } catch (_: Exception) { null } }
+            // Yerel HTML/dosya: her zaman uygulama logosu (G harfi değil)
+            val forceApp = isLocalPinUrl(url)
+            val shaped = if (forceApp) null else icon?.let {
+                try { toShortcutBitmap(it) } catch (_: Exception) { null }
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val sm = getSystemService(ShortcutManager::class.java)
                 if (sm != null && sm.isRequestPinShortcutSupported) {
                     val id = "rota_" + Integer.toHexString(url.hashCode())
-                    val ic = if (shaped != null) Icon.createWithAdaptiveBitmap(shaped) else Icon.createWithResource(this, R.drawable.ic_launcher)
+                    val ic = if (shaped != null) Icon.createWithAdaptiveBitmap(shaped)
+                    else Icon.createWithResource(this, R.drawable.ic_launcher)
                     val info = ShortcutInfo.Builder(this, id)
                         .setShortLabel(title.take(25))
                         .setLongLabel(title)
@@ -3881,7 +3901,8 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         val t = tabs.getOrNull(cur) ?: return
         val marked = t.url.startsWith("http") && prefs.isBookmarked(t.url)
         val onYt = (t.url.contains("youtube.com") || t.url.contains("youtu.be")) && !t.url.contains("music.youtube.com")
-        val canHome = t.url.startsWith("http")
+        val canHome = t.url.startsWith("http") ||
+            isLocalPinUrl(t.url) || isLocalPinUrl(t.web.url ?: "")
         // Zaten açıksa kapat (gesture tekrar)
         if (menuDialog?.isShowing == true) {
             try { menuDialog?.dismiss() } catch (_: Exception) {}
@@ -4409,7 +4430,6 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     if (audio != null) {
                         toast("İndiriliyor…")
                         // Kapak (video thumb) + doğrudan googlevideo ses — MP4 ile aynı httpToFile
-                        cacheDownloadThumb("$base.mp3", id, lastArtUrl.ifBlank { null })
                         startDownload(audio, null, null, "audio/mpeg", "$base.mp3")
                     } else toast("Ses linki alınamadı")
                 }
@@ -5497,34 +5517,201 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         onProgress: ((received: Long, total: Long) -> Unit)? = null
     ): String {
         return try {
+            // 1) Yönlendirmeleri çöz, son URL + boyut
+            var current = url
+            var redirects = 0
+            var totalLen = -1L
+            var supportsRange = false
+            while (redirects < 6) {
+                if (dl?.cancelled == true) return "CANCELLED"
+                val conn = java.net.URL(current).openConnection() as java.net.HttpURLConnection
+                conn.instanceFollowRedirects = false
+                conn.connectTimeout = 12000
+                conn.readTimeout = 30000
+                conn.requestMethod = "HEAD"
+                applyYtDownloadHeaders(conn, current)
+                val code = try { conn.responseCode } catch (_: Exception) { -1 }
+                if (code in 300..399) {
+                    val loc = conn.getHeaderField("Location")
+                    conn.disconnect()
+                    if (loc.isNullOrBlank()) break
+                    current = if (loc.startsWith("http")) loc else java.net.URL(java.net.URL(current), loc).toString()
+                    redirects++
+                    continue
+                }
+                if (code in 200..299) {
+                    totalLen = conn.contentLengthLong
+                    if (totalLen <= 0L) {
+                        try { totalLen = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L } catch (_: Exception) { }
+                    }
+                    val ar = (conn.getHeaderField("Accept-Ranges") ?: "").lowercase()
+                    supportsRange = ar.contains("bytes") || totalLen > 0L
+                    conn.disconnect()
+                    break
+                }
+                conn.disconnect()
+                // HEAD reddedilirse GET ile devam (aşağıda tek parça)
+                break
+            }
+            if (dl?.cancelled == true) return "CANCELLED"
+            if (dl?.paused == true) return "PAUSED"
+
+            // 2) Paralel parça indirme (MP3/MP4 aynı) — 512KB+ ve range destekliyse
+            val parts = 4
+            if (supportsRange && totalLen > 512 * 1024L && (dl?.tmpFile == null || !dest.exists() || dest.length() == 0L)) {
+                val ok = httpToFileParallel(current, dest, totalLen, parts, dl, onProgress)
+                if (ok == "OK" || ok == "CANCELLED" || ok == "PAUSED") return ok
+                // paralel başarısızsa tek akışa düş
+                try { if (dest.exists()) dest.delete() } catch (_: Exception) { }
+            }
+
+            // 3) Tek bağlantı (önceki mantık, büyük tampon)
+            httpToFileSingle(current, dest, dl, onProgress, totalLen)
+        } catch (_: Exception) {
+            "FAILED"
+        }
+    }
+
+    private fun applyYtDownloadHeaders(conn: java.net.HttpURLConnection, url: String) {
+        conn.setRequestProperty(
+            "User-Agent",
+            "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip"
+        )
+        conn.setRequestProperty("Referer", "https://www.youtube.com/")
+        conn.setRequestProperty("Origin", "https://www.youtube.com")
+        conn.setRequestProperty("Accept-Encoding", "identity")
+        conn.setRequestProperty("Connection", "keep-alive")
+        conn.setRequestProperty("Accept", "*/*")
+        try {
+            val cookie = CookieManager.getInstance().getCookie("https://www.youtube.com")
+                ?: CookieManager.getInstance().getCookie(url)
+            if (!cookie.isNullOrEmpty()) conn.setRequestProperty("Cookie", cookie)
+        } catch (_: Exception) { }
+    }
+
+    /** MP3/MP4 aynı hız: Content-Length biliniyorsa 4 paralel Range isteği */
+    private fun httpToFileParallel(
+        url: String,
+        dest: java.io.File,
+        total: Long,
+        parts: Int,
+        dl: ActiveDl?,
+        onProgress: ((received: Long, total: Long) -> Unit)?
+    ): String {
+        val n = parts.coerceIn(2, 6)
+        val chunk = total / n
+        val partFiles = Array(n) { i -> java.io.File(cacheDir, "p_${dl?.id ?: System.currentTimeMillis()}_$i") }
+        val received = LongArray(n)
+        val errors = java.util.concurrent.atomic.AtomicInteger(0)
+        val latch = java.util.concurrent.CountDownLatch(n)
+        val progressLock = Any()
+        fun report() {
+            val sum = received.sum()
+            if (dl != null) {
+                dl.received = sum
+                dl.total = total
+            }
+            onProgress?.invoke(sum, total)
+        }
+        for (i in 0 until n) {
+            val start = i * chunk
+            val end = if (i == n - 1) total - 1 else (start + chunk - 1)
+            Thread {
+                try {
+                    if (dl?.cancelled == true) return@Thread
+                    val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                    conn.instanceFollowRedirects = true
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 180000
+                    applyYtDownloadHeaders(conn, url)
+                    conn.setRequestProperty("Range", "bytes=$start-$end")
+                    val code = conn.responseCode
+                    if (code !in 200..299) {
+                        errors.incrementAndGet()
+                        conn.disconnect()
+                        return@Thread
+                    }
+                    conn.inputStream.use { input ->
+                        partFiles[i].outputStream().use { out ->
+                            val buf = ByteArray(512 * 1024)
+                            while (true) {
+                                if (dl?.cancelled == true) break
+                                if (dl?.paused == true) break
+                                val r = input.read(buf)
+                                if (r <= 0) break
+                                out.write(buf, 0, r)
+                                received[i] += r
+                                synchronized(progressLock) { report() }
+                            }
+                        }
+                    }
+                    conn.disconnect()
+                } catch (_: Exception) {
+                    errors.incrementAndGet()
+                } finally {
+                    latch.countDown()
+                }
+            }.start()
+        }
+        try { latch.await(8, java.util.concurrent.TimeUnit.MINUTES) } catch (_: Exception) { }
+        if (dl?.cancelled == true) {
+            partFiles.forEach { try { it.delete() } catch (_: Exception) { } }
+            return "CANCELLED"
+        }
+        if (dl?.paused == true) {
+            partFiles.forEach { try { it.delete() } catch (_: Exception) { } }
+            return "PAUSED"
+        }
+        if (errors.get() > 0) {
+            partFiles.forEach { try { it.delete() } catch (_: Exception) { } }
+            return "FAILED"
+        }
+        // Birleştir
+        try {
+            dest.outputStream().use { out ->
+                for (i in 0 until n) {
+                    partFiles[i].inputStream().use { it.copyTo(out, 512 * 1024) }
+                    try { partFiles[i].delete() } catch (_: Exception) { }
+                }
+            }
+            if (dest.length() < total * 9 / 10 && total > 0) {
+                try { dest.delete() } catch (_: Exception) { }
+                return "FAILED"
+            }
+            if (dl != null) {
+                dl.received = dest.length()
+                dl.total = total
+            }
+            onProgress?.invoke(dest.length(), total)
+            return "OK"
+        } catch (_: Exception) {
+            partFiles.forEach { try { it.delete() } catch (_: Exception) { } }
+            return "FAILED"
+        }
+    }
+
+    private fun httpToFileSingle(
+        url: String,
+        dest: java.io.File,
+        dl: ActiveDl?,
+        onProgress: ((received: Long, total: Long) -> Unit)?,
+        knownTotal: Long = -1L
+    ): String {
+        return try {
             var current = url
             var redirects = 0
             while (redirects < 5) {
                 if (dl?.cancelled == true) return "CANCELLED"
+                if (dl?.paused == true) return "PAUSED"
                 val existing = if (dest.exists()) dest.length() else 0L
                 val conn = java.net.URL(current).openConnection() as java.net.HttpURLConnection
                 conn.instanceFollowRedirects = false
                 conn.connectTimeout = 15000
                 conn.readTimeout = 180000
-                conn.setRequestProperty(
-                    "User-Agent",
-                    "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip"
-                )
-                conn.setRequestProperty("Referer", "https://www.youtube.com/")
-                conn.setRequestProperty("Origin", "https://www.youtube.com")
-                conn.setRequestProperty("Accept-Encoding", "identity")
-                conn.setRequestProperty("Connection", "keep-alive")
-                // Ses ve video aynı hız: büyük okuma tamponu
-                try { conn.setReadTimeout(180000) } catch (_: Exception) { }
-                try { conn.setRequestProperty("Accept", "*/*") } catch (_: Exception) { }
+                applyYtDownloadHeaders(conn, current)
                 if (existing > 0) {
                     conn.setRequestProperty("Range", "bytes=$existing-")
                 }
-                try {
-                    val cookie = CookieManager.getInstance().getCookie("https://www.youtube.com")
-                        ?: CookieManager.getInstance().getCookie(current)
-                    if (!cookie.isNullOrEmpty()) conn.setRequestProperty("Cookie", cookie)
-                } catch (_: Exception) { }
                 val code = conn.responseCode
                 if (code in 300..399) {
                     val loc = conn.getHeaderField("Location") ?: break
@@ -5533,70 +5720,50 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     redirects++
                     continue
                 }
-                // 200 = full, 206 = partial resume
                 if (code !in 200..299) {
                     conn.disconnect()
                     return "FAILED"
                 }
                 val append = code == 206 && existing > 0
                 if (!append && existing > 0) {
-                    // sunucu Range kabul etmedi — baştan
-                    dest.delete()
+                    try { dest.delete() } catch (_: Exception) { }
                 }
-                var total = -1L
-                val cl = conn.contentLengthLong.let { if (it > 0) it else conn.contentLength.toLong() }
-                if (code == 206) {
-                    val cr = conn.getHeaderField("Content-Range") // bytes a-b/total
-                    val m = cr?.let { Regex("""/(\d+)\s*$""").find(it) }
-                    total = m?.groupValues?.getOrNull(1)?.toLongOrNull() ?: (existing + cl)
-                } else if (cl > 0) {
-                    total = cl
+                var total = knownTotal
+                if (total <= 0) {
+                    total = conn.contentLengthLong
+                    if (total <= 0) total = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
+                    if (append && total > 0) total += existing
                 }
+                if (dl != null && total > 0) dl.total = total
                 var received = if (append) existing else 0L
-                var lastCb = 0L
-                val outStream = if (append) {
-                    java.io.FileOutputStream(dest, true)
-                } else {
-                    java.io.FileOutputStream(dest, false)
-                }
                 conn.inputStream.use { input ->
-                    outStream.buffered(512 * 1024).use { output ->
+                    java.io.BufferedOutputStream(
+                        java.io.FileOutputStream(dest, append),
+                        512 * 1024
+                    ).use { output ->
                         val buf = ByteArray(512 * 1024)
                         while (true) {
-                            if (dl?.cancelled == true) {
-                                conn.disconnect()
-                                return "CANCELLED"
-                            }
-                            if (dl?.paused == true) {
-                                output.flush()
-                                conn.disconnect()
-                                onProgress?.invoke(received, total)
-                                return "PAUSED"
-                            }
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            output.write(buf, 0, n)
-                            received += n
-                            val now = android.os.SystemClock.uptimeMillis()
-                            if (onProgress != null && now - lastCb >= 250L) {
-                                lastCb = now
-                                onProgress(received, total)
-                            }
+                            if (dl?.cancelled == true) return "CANCELLED"
+                            if (dl?.paused == true) return "PAUSED"
+                            val r = input.read(buf)
+                            if (r <= 0) break
+                            output.write(buf, 0, r)
+                            received += r
+                            if (dl != null) dl.received = received
+                            onProgress?.invoke(received, total)
                         }
                         output.flush()
                     }
                 }
-                onProgress?.invoke(received, total)
                 conn.disconnect()
-                return if (dest.length() > 2048) "OK" else "FAILED"
+                return "OK"
             }
             "FAILED"
         } catch (_: Exception) {
-            if (dl?.cancelled == true) "CANCELLED"
-            else if (dl?.paused == true) "PAUSED"
-            else "FAILED"
+            "FAILED"
         }
     }
+
 
     private fun ensureDlChannel() {
         if (Build.VERSION.SDK_INT < 26) return
@@ -5931,32 +6098,66 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
         }.start()
     }
 
-    /** İndirilenler listesi: MP3 için nota kapak görseli */
-    private fun makeMusicNoteThumb(): android.graphics.Bitmap {
+    /** İndirilenler: "MP3" rozeti — renkler güncel temadan (tema değişince uyumlu) */
+    private fun makeMp3LabelThumb(): android.graphics.Bitmap {
         val size = 256
         val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(bmp)
-        val g = android.graphics.LinearGradient(
+        val bgColor = if (cField != 0) cField else 0xFF1A2338.toInt()
+        val acc = if (cAccent != 0) cAccent else 0xFF4C8DFF.toInt()
+        val acc2 = if (cAccent2 != 0) cAccent2 else acc
+        val textColor = if (cText != 0) cText else 0xFFEAF0FF.toInt()
+        // Zemin: tema field
+        val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        bg.color = bgColor
+        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 40f, 40f, bg)
+        // Accent soft geçiş (temanın ana renkleri)
+        val ov = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val a1 = android.graphics.Color.argb(
+            48,
+            android.graphics.Color.red(acc),
+            android.graphics.Color.green(acc),
+            android.graphics.Color.blue(acc)
+        )
+        val a2 = android.graphics.Color.argb(
+            72,
+            android.graphics.Color.red(acc2),
+            android.graphics.Color.green(acc2),
+            android.graphics.Color.blue(acc2)
+        )
+        ov.shader = android.graphics.LinearGradient(
             0f, 0f, size.toFloat(), size.toFloat(),
-            intArrayOf(0xFF4C8DFF.toInt(), 0xFF8A5CFF.toInt(), 0xFF36D1FF.toInt()),
-            floatArrayOf(0f, 0.55f, 1f),
+            a1, a2,
             android.graphics.Shader.TileMode.CLAMP
         )
-        val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        bg.shader = g
-        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 48f, 48f, bg)
+        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), 40f, 40f, ov)
+        // Kenar: accent
+        val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        stroke.style = android.graphics.Paint.Style.STROKE
+        stroke.strokeWidth = 4f
+        stroke.color = acc
+        c.drawRoundRect(5f, 5f, size - 5f, size - 5f, 36f, 36f, stroke)
+        // "MP3" — tema yazı rengi
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        p.color = android.graphics.Color.WHITE
+        p.color = textColor
         p.textAlign = android.graphics.Paint.Align.CENTER
-        p.textSize = 140f
-        p.typeface = android.graphics.Typeface.DEFAULT_BOLD
-        val note = "♪"
+        p.typeface = android.graphics.Typeface.create(
+            android.graphics.Typeface.DEFAULT,
+            android.graphics.Typeface.BOLD
+        )
+        p.textSize = 72f
+        p.letterSpacing = 0.1f
         val fm = p.fontMetrics
-        c.drawText(note, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, p)
+        c.drawText("MP3", size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, p)
         return bmp
     }
 
     private fun loadDownloadThumb(title: String, path: String): android.graphics.Bitmap? {
+        val isAudEarly = title.endsWith(".mp3", true) || title.endsWith(".m4a", true) ||
+            title.endsWith(".aac", true) || title.endsWith(".opus", true) || title.endsWith(".ogg", true) ||
+            path.endsWith(".mp3", true) || path.endsWith(".m4a", true)
+        // Ses: kayıtlı video kapağını kullanma
+        if (isAudEarly) return makeMp3LabelThumb()
         try {
             val f = thumbFileForTitle(title)
             if (f.exists() && f.length() > 500) {
@@ -5983,11 +6184,11 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 }
             }
         } catch (_: Exception) { }
-        // MP3 / ses: güzel nota ikonu
+        // MP3 / ses: kapak yok — net "MP3" yazısı (videoyla karışmasın)
         val isAud = title.endsWith(".mp3", true) || title.endsWith(".m4a", true) ||
             title.endsWith(".aac", true) || title.endsWith(".opus", true) || title.endsWith(".ogg", true) ||
             path.endsWith(".mp3", true) || path.endsWith(".m4a", true)
-        if (isAud) return makeMusicNoteThumb()
+        if (isAud) return makeMp3LabelThumb()
         return null
     }
 
@@ -6214,7 +6415,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 val fallback = TextView(this)
                 fallback.text = when {
                     e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
-                    e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") || e.title.lowercase().endsWith(".m4a") -> "🎵"
+                    e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") || e.title.lowercase().endsWith(".m4a") -> "MP3"
                     e.mime.startsWith("image") -> "🖼️"
                     e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
                     else -> "📁"
@@ -6486,7 +6687,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             val icon = TextView(this)
             icon.text = when {
                 e.mime.startsWith("video") || e.title.lowercase().endsWith(".mp4") -> "🎬"
-                e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") -> "🎵"
+                e.mime.startsWith("audio") || e.title.lowercase().endsWith(".mp3") -> "MP3"
                 e.mime.startsWith("image") -> "🖼️"
                 e.mime.contains("pdf") || e.title.lowercase().endsWith(".pdf") -> "📄"
                 else -> "📁"
