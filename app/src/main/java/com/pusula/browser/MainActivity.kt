@@ -8431,7 +8431,7 @@ if(isYt){
                 "if(window.__userPause||window.__rotaFocusPaused)return;" +
                 "function clickNext(){try{" +
                 "var n=document.querySelector('ytmusic-player-bar #next-button,#next-button,.next-button,.ytp-next-button,'+" +
-                "'button[aria-label*="Next"],button[aria-label*="Sonraki"],button[aria-label*="next"]');" +
+                "'button[aria-label*='Next'],button[aria-label*='Sonraki'],button[aria-label*='next']');" +
                 "if(n){n.click();return true;}" +
                 "}catch(z){}return false;}" +
                 "var list=document.querySelectorAll('video,audio');" +
