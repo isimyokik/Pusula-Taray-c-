@@ -3700,7 +3700,7 @@ fun onMusicCatalog(raw: String?) {
                 } catch (_: Exception) { "Dosya" }
             } else shownUrl(url)
         } else t.title)
-            .replace(Regex("\s+"), " ")
+            .replace(Regex("\\s+"), " ")
             .trim()
             .ifBlank { "Rota" }
             .take(40)
