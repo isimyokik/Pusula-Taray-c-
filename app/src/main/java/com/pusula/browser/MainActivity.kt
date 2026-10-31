@@ -1303,7 +1303,14 @@ fun onMusicCatalog(raw: String?) {
 
         startUrl = intent?.dataString
         startAppMode = intent?.getBooleanExtra("pusula_app", false) == true
-        try { handleIncomingViewIntent(intent) } catch (_: Exception) { }
+        // content:// / file:// adresleri WebView'a doğrudan verilemez (ERR_ACCESS_DENIED): önce önbelleğe kopyalanıp açılır
+        if (isLocalUriString(startUrl)) {
+            startUrl = null
+            // Ekran döndürme/yeniden oluşturmada aynı dosya tekrar açılmasın
+            if (savedInstanceState == null) { try { handleIncomingViewIntent(intent) } catch (_: Exception) { } }
+        } else {
+            try { handleIncomingViewIntent(intent) } catch (_: Exception) { }
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { handleBack() }
@@ -1353,8 +1360,32 @@ fun onMusicCatalog(raw: String?) {
             return
         }
         val u = intent.dataString ?: return
+        if (isLocalUriString(u)) return
         val app = intent.getBooleanExtra("pusula_app", false)
         openTab(u, appMode = app)
+    }
+
+    private fun isLocalUriString(s: String?): Boolean {
+        val x = (s ?: "").trimStart().lowercase()
+        return x.startsWith("content:") || x.startsWith("file:")
+    }
+
+    /** Yine de bir content:// adresi WebView'a kaçarsa: dosyayı önbelleğe alıp oradan aç. */
+    private fun rescueContentUri(view: WebView, uri: Uri) {
+        Thread {
+            val mime = try { contentResolver.getType(uri) } catch (_: Exception) { null }
+            val f = materializeUriToCache(uri, mime) ?: materializeUriToCache(uri, mime)
+            handler.post {
+                if (f == null) { toast("Dosya okunamadı"); return@post }
+                val u = try { f.toURI().toString() } catch (_: Exception) { "file://${f.absolutePath}" }
+                if (isViewableDocument(u, mime, null)) {
+                    openDocumentViewer(u, mime, null)
+                } else {
+                    try { view.settings.allowFileAccess = true } catch (_: Exception) { }
+                    try { view.loadUrl(u) } catch (_: Exception) { }
+                }
+            }
+        }.start()
     }
 
     override fun onPause() {
@@ -2901,6 +2932,7 @@ fun onMusicCatalog(raw: String?) {
             val desc = error.description?.toString() ?: ""
             if (desc.contains("ERR_ABORTED") || desc.contains("ERR_BLOCKED_BY_ORB")) return
             val failing = request.url.toString()
+            if (failing.startsWith("content://")) { rescueContentUri(view, request.url); return }
             val code = try { error.errorCode } catch (_: Exception) { 0 }
             val transient = code == android.webkit.WebViewClient.ERROR_HOST_LOOKUP ||
                 code == android.webkit.WebViewClient.ERROR_CONNECT ||
@@ -3187,13 +3219,15 @@ fun onMusicCatalog(raw: String?) {
             pathLow.endsWith(".pptx") || pathLow.endsWith(".rtf") || pathLow.endsWith(".txt") ||
             pathLow.endsWith(".csv") || pathLow.endsWith(".json") || pathLow.endsWith(".xml") ||
             (mime.startsWith("text/") && !mime.contains("html"))) {
-            handler.post {
-                val local = if (isLocalFile) materializeUriToCache(uri, mime) else null
-                val openUrl = local?.let {
-                    try { it.toURI().toString() } catch (_: Exception) { "file://${it.absolutePath}" }
-                } ?: uri.toString()
-                openDocumentViewer(openUrl, mime.ifBlank { null }, null)
-            }
+            Thread {
+                val local = if (isLocalFile) (materializeUriToCache(uri, mime) ?: materializeUriToCache(uri, mime)) else null
+                handler.post {
+                    val openUrl = local?.let {
+                        try { it.toURI().toString() } catch (_: Exception) { "file://${it.absolutePath}" }
+                    } ?: uri.toString()
+                    openDocumentViewer(openUrl, mime.ifBlank { null }, null)
+                }
+            }.start()
             return true
         }
         // HTML / resim / diğer → WebView (content ise cache kopyası)
