@@ -1,75 +1,115 @@
-<!-- AndroidManifest.xml içine ekle.
-     DocumentViewerActivity satırını kendi activity bildirimine göre birleştir.
-     MainActivity zaten varsa sadece intent-filter bloklarını ilgili activity'lere yapıştır. -->
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-<!-- 1) PDF / Office / metin: DocumentViewerActivity -->
-<activity
-    android:name=".DocumentViewerActivity"
-    android:exported="true"
-    android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- content:// ve file:// -->
-    <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <data android:scheme="content" />
-        <data android:scheme="file" />
-        <data android:mimeType="application/pdf" />
-        <data android:mimeType="application/msword" />
-        <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-        <data android:mimeType="application/vnd.ms-excel" />
-        <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-        <data android:mimeType="application/vnd.ms-powerpoint" />
-        <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
-        <data android:mimeType="application/rtf" />
-        <data android:mimeType="text/plain" />
-        <data android:mimeType="text/csv" />
-        <data android:mimeType="text/markdown" />
-        <data android:mimeType="application/json" />
-        <data android:mimeType="text/xml" />
-        <data android:mimeType="application/xml" />
-    </intent-filter>
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true">
 
-    <!-- http(s) belge linkleri -->
-    <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="http" />
-        <data android:scheme="https" />
-        <data android:mimeType="application/pdf" />
-        <data android:mimeType="application/msword" />
-        <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-        <data android:mimeType="application/vnd.ms-excel" />
-        <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-    </intent-filter>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
-    <!-- Paylaş -->
-    <intent-filter>
-        <action android:name="android.intent.action.SEND" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <data android:mimeType="application/pdf" />
-        <data android:mimeType="application/msword" />
-        <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-        <data android:mimeType="application/vnd.ms-excel" />
-        <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-        <data android:mimeType="text/plain" />
-    </intent-filter>
-</activity>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
 
-<!-- 2) Resim: MainActivity (uygulama WebView ile gösterir) -->
-<!-- Mevcut <activity android:name=".MainActivity" ...> içine EKLE: -->
-<!--
-    <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <data android:scheme="content" />
-        <data android:scheme="file" />
-        <data android:mimeType="image/*" />
-    </intent-filter>
-    <intent-filter>
-        <action android:name="android.intent.action.SEND" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <data android:mimeType="image/*" />
-    </intent-filter>
--->
+            <!-- Tarayıcı http/https -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+
+            <!-- Resim: Birlikte aç / Paylaş -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".DocumentViewerActivity"
+            android:exported="true"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
+
+            <!-- PDF / Office / metin: Birlikte aç -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="application/vnd.ms-powerpoint" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/rtf" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="text/xml" />
+                <data android:mimeType="application/xml" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MediaPlayerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+
+        <service
+            android:name=".PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>
