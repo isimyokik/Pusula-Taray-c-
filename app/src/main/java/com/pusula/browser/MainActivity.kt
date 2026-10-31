@@ -4526,14 +4526,6 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                 !audioOnly -> {
                     val prog = bestProgressive()
                     when {
-                        // 1080p + ses: 720p ile aynı hızlı yol (paralel parça indirme + birleştirme).
-                        // Birleşmezse sırayla 720 → 480 → 360, en sonda sesli progressive.
-                        adaptiveAvc(1080) != null && audio != null -> {
-                            val progOk = prog?.takeIf { !isVideoOnly("", it) }
-                            val alts: List<String> = if (progOk != null && itagOf(progOk) == 22) emptyList<String>()
-                                else listOf(720, 480, 360).mapNotNull { adaptiveAvc(it) }
-                            downloadAndMerge(adaptiveAvc(1080)!!, audio, "$base.mp4", progOk, id, alts)
-                        }
                         // Sadece gerçekten sesli progressive — V:720 asla tek başına
                         prog != null && !isVideoOnly("", prog) -> {
                             toast("İndiriliyor…")
@@ -5199,6 +5191,12 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
             // Güncel istemci sürümleri (eski sürümler artık reddediliyor → "link bulunamadı").
             // ANDROID_VR PO token gerektirmeyen en güvenilir yol; diğerleri izinli olduğu kadar format verir.
             val clients = listOf(
+                // Eskiden çalışan istemciler aynen duruyor
+                YtCli("ANDROID", "19.28.35", "3", "com.google.android.youtube/19.28.35 (Linux; U; Android 13) gzip", sdk = 33),
+                YtCli("IOS", "19.28.1", "5", "com.google.ios.youtube/19.28.1 (iPhone16,2; U; CPU iOS 17_5 like Mac OS X;)"),
+                YtCli("TVHTML5", "7.20240723.15.00", "7", "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"),
+                YtCli("ANDROID", "18.48.37", "3", "com.google.android.youtube/18.48.37 (Linux; U; Android 13) gzip", sdk = 33),
+                // Yeni eklenenler (ek şans)
                 YtCli("ANDROID_VR", "1.65.10", "28",
                     "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
                     sdk = 32, deviceMake = "Oculus", deviceModel = "Quest 3", osName = "Android", osVersion = "12L"),
@@ -5315,9 +5313,7 @@ private fun pinShortcut(url: String, title: String, launch: Intent, icon: Bitmap
                     c.setRequestProperty("User-Agent", cli.ua)
                     c.setRequestProperty("X-YouTube-Client-Name", cli.clientId)
                     c.setRequestProperty("X-YouTube-Client-Version", cli.ver)
-                    if (cookie.isNotEmpty() && !cli.name.startsWith("ANDROID") && cli.name != "IOS") {
-                        c.setRequestProperty("Cookie", cookie)
-                    }
+                    if (cookie.isNotEmpty()) c.setRequestProperty("Cookie", cookie)
                     c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                     val code = c.responseCode
                     val stream = if (code in 200..299) c.inputStream else c.errorStream
