@@ -3133,7 +3133,8 @@ fun onMusicCatalog(raw: String?) {
             if (name.isNullOrBlank()) {
                 name = uri.lastPathSegment?.substringAfterLast('/') ?: "file_${System.currentTimeMillis()}"
             }
-            name = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            // Yalnızca dosya sistemi için geçersiz karakterleri değiştir; Türkçe harfler (ç ğ ı ö ş ü İ) ve boşluk korunur
+            name = name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().trimStart('.').ifBlank { "dosya" }.take(120)
             if (!name.contains('.')) {
                 val ext = when {
                     (mime ?: "").contains("pdf") -> ".pdf"
